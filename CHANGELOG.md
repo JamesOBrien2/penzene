@@ -9,10 +9,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - A .penz file with an unknown element or two bonds between the same atoms is refused, instead of closing Penzene.
 - After an erase or an undo, the selection no longer lands on other atoms (where Delete would remove them); opening a file starts with nothing selected.
 - The atom tool replaces an abbreviation: clicking Ph with N gives N, where before the Ph stayed.
-
-## Unreleased
-
 - A click on a selection that wobbles a pixel no longer nudges it (without an undo step).
+- Commands with nothing to do (Remove Explicit Hydrogens with none, Clean on a clean drawing) no longer add an undo step or mark the file unsaved.
 
 ## 1.1.0 (2026-09-26)
 

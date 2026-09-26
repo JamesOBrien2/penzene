@@ -2033,3 +2033,14 @@ TEST_CASE("a click that wobbles under the drag threshold moves nothing") {
     f.drag({0, 0}, {0.8, 0});  // 2 screen pixels at the default zoom: a click
     CHECK(f.doc() == d);
 }
+
+TEST_CASE("an edit that changes nothing is not an undo step") {
+    Fixture f;
+    Document d;
+    d.addAtom({0, 0}), d.addAtom({kBondLength, 0});
+    d.bonds = {{0, 1}};
+    f.canvas.setDocumentSilently(d);
+    f.canvas.commit(chem::removeHydrogens(d), "Remove hydrogens");  // there are none
+    CHECK(f.undo.count() == 0);
+    CHECK(f.undo.isClean());
+}

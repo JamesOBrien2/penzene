@@ -83,6 +83,7 @@ Canvas::Canvas(QUndoStack* undo, QWidget* parent) : QGraphicsView(parent), undo_
 }
 
 void Canvas::commit(const Document& next, const QString& text) {
+    if (next == doc_) return;  // nothing changed: no undo step, and the file stays clean
     undo_->push(new Snapshot(this, doc_, next, text));
 }
 
