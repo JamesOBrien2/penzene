@@ -2636,3 +2636,25 @@ TEST_CASE("d makes deuterium; Delete takes an isotope off before the atom") {
     REQUIRE(f.doc().atoms.size() == 2);
     CHECK(f.doc().atoms[1].isotope == 0);
 }
+
+TEST_CASE("text: a formula's charge is a superscript, its counts stay subscripts") {
+    App app;
+    const DrawingStyle& st = drawingStyle("");
+    auto box = [&](const char* s) { return textPath({{0, 0}, s}, st).boundingRect(); };
+    const double cap = QFontMetricsF(labelFont(st)).capHeight();
+    auto raised = [&](const char* s, const char* plain) { return box(s).top() < box(plain).top() - 0.2 * cap; };
+    auto lowered = [&](const char* s, const char* plain) { return box(s).bottom() > box(plain).bottom() + 0.2 * cap; };
+    CHECK(raised("Cu2+", "Cu"));  // one element: the 2 is the charge
+    CHECK_FALSE(lowered("Cu2+", "Cu"));
+    CHECK(raised("NH4+", "NH"));  // the 4 counts hydrogens
+    CHECK(lowered("NH4+", "NH"));
+    CHECK(raised("SO4^2-", "SO"));
+    CHECK(box("SO4^2-").width() < box("SO4^^2-").width());  // the ^ isn't drawn
+    CHECK(raised("[Fe(CN)6]3-", "[Fe(CN)]"));
+    CHECK(raised("Na+, Cl-", "Na, Cl"));
+    CHECK(lowered("H2O", "HO"));
+    CHECK_FALSE(raised("H2O", "HO"));
+    CHECK_FALSE(raised("cis- and trans-", "cis and trans"));  // words, not formulas
+    CHECK_FALSE(raised("THF, -78 °C", "THF, 78 °C"));
+    CHECK_FALSE(raised("CH2Cl2-MeOH", "CH2Cl2 MeOH"));
+}
