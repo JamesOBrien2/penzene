@@ -11,6 +11,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - The atom tool replaces an abbreviation: clicking Ph with N gives N, where before the Ph stayed.
 - A click on a selection that wobbles a pixel no longer nudges it (without an undo step).
 - Commands with nothing to do (Remove Explicit Hydrogens with none, Clean on a clean drawing) no longer add an undo step or mark the file unsaved.
+- Saving writes a complete copy before replacing the file, so a save that fails part way (a full disk) no longer leaves it cut short; the same goes for autosave.
 
 ## 1.1.0 (2026-09-26)
 

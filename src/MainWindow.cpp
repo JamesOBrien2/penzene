@@ -23,6 +23,7 @@
 #include <QCloseEvent>
 #include <QColorDialog>
 #include <QFile>
+#include <QSaveFile>
 #include <QComboBox>
 #include <QFileDialog>
 #include <QSpinBox>
@@ -374,8 +375,8 @@ QString MainWindow::autosavePath() {
 void MainWindow::autosave() {
     if (undo_->isClean()) return QFile::remove(autosavePath()), void();
     QDir().mkpath(QFileInfo(autosavePath()).path());
-    QFile f(autosavePath());
-    if (f.open(QIODevice::WriteOnly)) f.write(canvas_->document().toJson());
+    QSaveFile f(autosavePath());  // a crash mid-write keeps the previous autosave
+    if (f.open(QIODevice::WriteOnly)) f.write(canvas_->document().toJson()), f.commit();
 }
 
 void MainWindow::offerRecovery() {
@@ -413,8 +414,10 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
     } else {
         data = QByteArray::fromStdString(chem::toMolBlock(doc, v3000));
     }
-    QFile f(path);
-    if (!f.open(QIODevice::WriteOnly) || f.write(data) != data.size()) {
+    // Written aside and swapped in, so a failed save never truncates the file already there.
+    QSaveFile f(path);
+    f.setDirectWriteFallback(true);  // a writable file in a read-only folder (sandbox portals)
+    if (!f.open(QIODevice::WriteOnly) || f.write(data) != data.size() || !f.commit()) {
         QMessageBox::warning(this, tr("Save"), tr("Cannot write %1").arg(path));
         return false;
     }
