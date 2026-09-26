@@ -1976,3 +1976,35 @@ TEST_CASE("the selection's rotate handle turns it; Shift snaps to 15° steps, Ct
     CHECK(std::abs(turn(40, Qt::ControlModifier) - 45) < 0.01);
     CHECK(f.canvas.document().bonds.size() == 1);  // turned, not redrawn
 }
+
+TEST_CASE("a selection never points at other atoms after an erase or undo renumbers them") {
+    Fixture f;
+    Document d;
+    for (int i = 0; i < 5; ++i) d.addAtom({i * 40.0, 0});
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Erase);
+    f.click({0, 0});  // atom 0 goes: the rest move down one
+    REQUIRE(f.doc().atoms.size() == 4);
+    f.canvas.setSelection({2, 3});
+    f.undo.undo();  // atom 0 is back: {2, 3} would now be the wrong atoms
+    REQUIRE(f.doc().atoms.size() == 5);
+    CHECK(f.canvas.selection().isEmpty());
+}
+
+TEST_CASE("opening a file drops the previous drawing's selection") {
+    App app;
+    QTemporaryDir dir;
+    Document d;
+    for (int i = 0; i < 3; ++i) d.addAtom({i * 40.0, 0});
+    const QString path = dir.filePath("three.penz");
+    QFile out(path);
+    REQUIRE(out.open(QIODevice::WriteOnly));
+    out.write(d.toJson());
+    out.close();
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(d);
+    canvas->setSelection({0, 1});
+    REQUIRE(w.openFile(path));  // same atom count: nothing else would clear it
+    CHECK(canvas->selection().isEmpty());
+}
