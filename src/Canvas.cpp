@@ -200,9 +200,13 @@ void Canvas::zoomBy(double factor) {
     if (s > 0.2 && s < 40) scale(factor, factor);
 }
 
-void Canvas::fitToDocument() {
-    if (doc_.empty()) return;
-    fitInView(documentBounds(doc_).adjusted(-20, -20, 20, 20), Qt::KeepAspectRatio);
+void Canvas::fitToDocument() { fit(doc_); }
+void Canvas::fitToSelection() { fit(selectedSubset()); }
+
+void Canvas::fit(const Document& part) {
+    if (part.empty()) return;
+    fitInView(documentBounds(part).adjusted(-20, -20, 20, 20), Qt::KeepAspectRatio);
+    if (const double s = transform().m11(); s > 10) scale(10 / s, 10 / s);  // one atom: close up, not window-filling
 }
 
 // Cache the drawing as a QPicture; hover/selection repaints just replay it.

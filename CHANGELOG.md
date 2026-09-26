@@ -18,6 +18,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Radicals survive export and copying to ChemDraw.
 - Saving a drawing opened from an SDF or SMILES library asks where to save it instead of overwriting the library, and Save refuses image names rather than writing MOL text into them.
 - Each running Penzene keeps its own crash-recovery copy, so opening a second one (as Windows does for each double-clicked file) no longer deletes the first one's.
+- View → Fit to Window (Ctrl+0) zooms to the selection when there is one.
 - `penzene --render` with one output file draws every structure in an SDF or SMILES file, laid out as Open does, not just the last.
 - MOL export writes aromatic rings as the drawn single and double bonds; bond type 4 is only for queries, and some programs rejected it.
 - Clean keeps aromatic rings' double bonds where they were drawn, and keeps bond colours.

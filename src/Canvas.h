@@ -64,6 +64,7 @@ public:
     QPointF viewCenter() const;
     void zoomBy(double factor);
     void fitToDocument();
+    void fitToSelection();  // everything when nothing is selected
 
     void setTool(Tool t) { tool_ = t; }
     void setElement(int z) { element_ = z; }
@@ -109,6 +110,7 @@ private:
     void addDraggedRing(Document& doc) const;
     void refresh();
     void drawRulers(QPainter* p);
+    void fit(const Document& part);
     std::vector<QPointF> dragPath() const;
 
     Document doc_;

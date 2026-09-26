@@ -2010,6 +2010,25 @@ TEST_CASE("the selection's rotate handle turns it; Shift snaps to 15° steps, Ct
     CHECK(f.canvas.document().bonds.size() == 1);  // turned, not redrawn
 }
 
+TEST_CASE("Fit to Window zooms to the selection") {
+    Fixture f;
+    Document d = *chem::fromSmiles("c1ccccc1");
+    Document far = *chem::fromSmiles("CCO");
+    d.append(far, {600, 400});
+    f.canvas.setDocumentSilently(d);
+    f.canvas.fitToDocument();
+    const double all = f.canvas.transform().m11();
+    f.canvas.setSelection({0, 1, 2, 3, 4, 5});  // the benzene
+    f.canvas.fitToSelection();
+    CHECK(f.canvas.transform().m11() > 2 * all);
+    const QPoint centre = f.canvas.mapFromScene(documentBounds(f.canvas.selectedSubset()).center());
+    CHECK((centre - f.canvas.viewport()->rect().center()).manhattanLength() < 4);
+    CHECK_FALSE(f.canvas.viewport()->rect().contains(f.canvas.mapFromScene(d.atoms.back().pos)));  // the ethanol is off screen
+    f.canvas.setSelection({0});
+    f.canvas.fitToSelection();
+    CHECK(f.canvas.transform().m11() <= 10.001);  // one atom: close up, not window-filling
+}
+
 TEST_CASE("a selection never points at other atoms after an erase or undo renumbers them") {
     Fixture f;
     Document d;
