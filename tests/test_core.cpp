@@ -816,3 +816,7 @@ TEST_CASE(".penz rejects what would abort the app later: unknown elements, dupli
     CHECK_FALSE(doc(two, R"([{"a":0,"b":1},{"a":1,"b":0,"order":2}])"));
     for (int z : {1, 118}) CHECK_FALSE(chem::symbol(z).empty());  // the whole accepted range is looked up safely
 }
+
+TEST_CASE("formula charges come after the counts") {
+    CHECK(chem::properties(*chem::fromSmiles("[O-]S(=O)(=O)[O-]"))->formula == "O4S-2");
+}
