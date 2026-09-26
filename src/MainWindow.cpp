@@ -349,6 +349,7 @@ bool MainWindow::openFile(const QString& path) {
         return false;
     }
     undo_->clear();
+    canvas_->setSelection({});  // the old drawing's indices mean nothing in this one
     canvas_->setDocumentSilently(*doc);
     canvas_->fitToDocument();
     path_ = ext == "cdxml" || ext == "cdx" ? QString() : path;  // never save over a ChemDraw file
