@@ -1546,6 +1546,7 @@ void MainWindow::buildMenus() {
         connect(act, &QAction::triggered, this, [this, name = st.name] {
             Document next = canvas_->document();
             next.style = name == drawingStyles()[0].name ? QString() : name;
+            next.labelRatio = 0;  // the style's own label size, not an imported file's (#203)
             if (!(next == canvas_->document())) canvas_->commit(next, tr("Drawing style"));
         });
     }
