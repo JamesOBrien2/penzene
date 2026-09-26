@@ -1240,7 +1240,7 @@ void Canvas::editText(int i, QPointF pos) {
     // The editor uses the canvas font and tab stops, so spacing looks the same on both.
     QInputDialog dialog(this);
     dialog.setWindowTitle(tr("Text"));
-    dialog.setLabelText(tr("Text (digits after letters become subscripts):"));
+    dialog.setLabelText(tr("Text (H2O becomes H₂O, Cu2+ Cu²⁺; ^ marks a charge: SO4^2-):"));
     dialog.setOption(QInputDialog::UsePlainTextEditForTextInput);
     dialog.setTextValue(i >= 0 ? doc_.texts[i].text : QString());
     if (auto* edit = dialog.findChild<QPlainTextEdit*>()) {

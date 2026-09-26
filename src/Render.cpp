@@ -11,6 +11,7 @@
 #include <QPicture>
 #include <QSet>
 #include <QPainterPath>
+#include <QRegularExpression>
 #include <QPdfWriter>
 #include <QSaveFile>
 #include <QSvgGenerator>
@@ -498,42 +499,81 @@ static void drawArrow(QPainter& p, const Arrow& a) {
     if (a.kind == ArrowKind::Resonance) drawHead(p, a.from, startDir);
 }
 
-static bool subscripted(const QString& s, int i, bool prevSub) {
-    if (!s[i].isDigit() || i == 0) return false;
-    QChar c = s[i - 1];
-    return prevSub || c.isLetter() || c == ')' || c == ']';
+enum class Script : char { Base, Sub, Super, Hidden };
+
+// Formula-style text, as chemists type it (and mhchem reads it): digits after a letter or
+// bracket are counts (H2O); a + or - ending a formula is its charge (NH4+, OH-), with the
+// digits before it too for one element or a bracket (Cu2+, [Fe(CN)6]3-). ^ marks a charge
+// outright where it would be ambiguous (SO4^2-); the ^ isn't drawn.
+static std::vector<Script> scripts(const QString& s) {
+    const int n = int(s.size());
+    std::vector<Script> out(n, Script::Base);
+    for (int i = 1; i < n; ++i)
+        if (s[i].isDigit() && (s[i - 1].isLetter() || s[i - 1] == ')' || s[i - 1] == ']' || out[i - 1] == Script::Sub))
+            out[i] = Script::Sub;
+    auto sign = [&](int i) { return s[i] == '+' || s[i] == '-' || s[i] == QChar(0x2212); };
+    for (int i = 0; i < n; ++i) {
+        if (s[i] == '^') {
+            int j = i + 1;
+            while (j < n && s[j].isDigit()) ++j;
+            while (j < n && sign(j)) ++j;
+            if (j == i + 1) continue;
+            out[i] = Script::Hidden;
+            std::fill(out.begin() + i + 1, out.begin() + j, Script::Super);
+            i = j - 1;
+            continue;
+        }
+        static const QString after(" \t,;:/)"), before(" \t,;:/(");
+        if (!sign(i) || i == 0 || (i + 1 < n && !after.contains(s[i + 1]))) continue;
+        if (!(s[i - 1].isLetterOrNumber() || s[i - 1] == ')' || s[i - 1] == ']')) continue;
+        int w = i;  // the formula's first character
+        while (w > 0 && !before.contains(s[w - 1])) --w;
+        if (!(s[w].isUpper() || s[w] == '[')) continue;  // "cis-", "-78", "2e-": not formulas
+        out[i] = Script::Super;
+        int d = i;
+        while (d > w && s[d - 1].isDigit()) --d;
+        static const QRegularExpression element("^[A-Z][a-z]?$");
+        if (d < i && (element.match(s.mid(w, d - w)).hasMatch() || (d > w && s[d - 1] == ']')))
+            std::fill(out.begin() + d, out.begin() + i, Script::Super);
+    }
+    return out;
 }
 
-// Text as outlines, formula-style subscripts, one line per '\n'. Laid out in
-// runs (not per letter) so kerning and spaces match ordinary text.
+// Text as outlines, formula-style subscripts and charges, one line per '\n'. Laid out
+// in runs (not per letter) so kerning and spaces match ordinary text.
 QPainterPath textPath(const Text& t, const DrawingStyle& st) {
-    QFont f = labelFont(st, t.scale), sub = labelFont(st, 0.7 * t.scale);
-    QFontMetricsF fm(f), sm(sub);
+    QFont f = labelFont(st, t.scale), small = labelFont(st, 0.7 * t.scale);
+    QFontMetricsF fm(f), sm(small);
     const double tab = kTabSpaces * fm.horizontalAdvance(' ');
     QPainterPath path;
     const auto lines = t.text.split('\n');
     for (int li = 0; li < lines.size(); ++li) {
         const QString& s = lines[li];
+        const auto sc = scripts(s);
         double x = 0, y = t.pos.y() + li * fm.lineSpacing();
-        bool sub_ = false;
         for (int i = 0; i < s.size();) {
             if (s[i] == '\t') {
                 x = (std::floor(x / tab + 1e-6) + 1) * tab;
-                ++i, sub_ = false;
+                ++i;
                 continue;
             }
             if (s[i] == ' ') {  // by hand: some platforms drop leading spaces from a shaped run
                 x += fm.horizontalAdvance(' ');
-                ++i, sub_ = false;
+                ++i;
                 continue;
             }
-            const bool runSub = subscripted(s, i, sub_);
+            if (sc[i] == Script::Hidden) {
+                ++i;
+                continue;
+            }
             int j = i + 1;
-            while (j < s.size() && s[j] != '\t' && s[j] != ' ' && subscripted(s, j, runSub) == runSub) ++j;
-            sub_ = runSub;
-            const QString run = s.mid(i, j - i);
-            path.addText(t.pos.x() + x, runSub ? y + fm.capHeight() * 0.35 : y, runSub ? sub : f, run);
-            x += (runSub ? sm : fm).horizontalAdvance(run);
+            while (j < s.size() && s[j] != '\t' && s[j] != ' ' && sc[j] == sc[i]) ++j;
+            QString run = s.mid(i, j - i);
+            if (sc[i] == Script::Super) run.replace('-', QChar(0x2212));  // a charge's minus, not a hyphen
+            const bool base = sc[i] == Script::Base;
+            const double dy = sc[i] == Script::Sub ? fm.capHeight() * 0.35 : sc[i] == Script::Super ? -fm.capHeight() * 0.7 : 0;
+            path.addText(t.pos.x() + x, y + dy, base ? f : small, run);
+            x += (base ? fm : sm).horizontalAdvance(run);
             i = j;
         }
     }

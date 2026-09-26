@@ -37,6 +37,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - MOL and ChemDraw files open with aromatic rings' double bonds where the file drew them.
 - Drag a structure file onto the window to open it.
 - Typing a charged label such as NH3+, O- or Fe3+ sets the element and its charge, not an unknown group.
+- Charges in text: NH4+, Cu2+ and [Fe(CN)6]3- are set with the charge as a superscript; ^ marks one outright (SO4^2-).
 
 ## 1.1.1 (2026-09-27)
 
