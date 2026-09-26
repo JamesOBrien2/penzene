@@ -2008,3 +2008,16 @@ TEST_CASE("opening a file drops the previous drawing's selection") {
     REQUIRE(w.openFile(path));  // same atom count: nothing else would clear it
     CHECK(canvas->selection().isEmpty());
 }
+
+TEST_CASE("the atom tool relabels an abbreviation") {
+    Fixture f;
+    Document d;
+    d.addAtom({0, 0});
+    d.atoms[0].label = "Ph";
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Atom);
+    f.canvas.setElement(7);
+    f.click({0, 0});
+    CHECK(f.doc().atoms[0].z == 7);
+    CHECK(f.doc().atoms[0].label.isEmpty());
+}

@@ -668,7 +668,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
     } else if (click) {
         switch (tool_) {
         case Tool::Atom:
-            if (pressAtom_ >= 0) next.atoms[pressAtom_].z = element_;
+            if (pressAtom_ >= 0) next.atoms[pressAtom_].z = element_, next.atoms[pressAtom_].label.clear();  // "Ph" -> N
             else if (bond < 0) next.addAtom(pressPos_, element_);
             what = tr("Set atom");
             break;
