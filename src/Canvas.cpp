@@ -581,6 +581,9 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
     const bool wedge = stereo == BondStereo::Wedge || stereo == BondStereo::Hash;
     const int order = wedge ? 1 : bondOrder_;
 
+    // A click that wobbled under the drag threshold moved things live; put them back.
+    if (click && (drag == Drag::Move || drag == Drag::Rotate || drag == Drag::Rotate3D || drag == Drag::Scale))
+        doc_ = beforeDrag_, refresh();
     if (drag == Drag::Rotate3D) {
         pose_.reset();
         if (!click) {
