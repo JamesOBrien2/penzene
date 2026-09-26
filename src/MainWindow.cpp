@@ -66,6 +66,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QDropEvent>
 #include <QStatusBar>
 #include <QStackedWidget>
 #include <QToolBar>
@@ -196,6 +197,8 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
         menu.addAction(tr("&Delete"), this, [=, this] { deletePage(i); })->setEnabled(pages_.size() > 1);
         menu.exec(pageTabs_->mapToGlobal(at));
     });
+    setAcceptDrops(true);
+    canvas_->viewport()->setAcceptDrops(false);  // so a dropped file reaches the window
     setWindowTitle("Penzene " PENZENE_BUILD);
     resize(1100, 750);
     // Template library (built before the menus too); filled the first time it's shown.
@@ -695,6 +698,23 @@ bool MainWindow::maybeSave() {
     auto r = QMessageBox::question(this, tr("Unsaved changes"), tr("Save changes to this document?"),
                                    QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
     return r == QMessageBox::Discard || (r == QMessageBox::Save && save());
+}
+
+static QString droppedFile(const QMimeData* mime) {
+    for (const QUrl& url : mime->urls())
+        if (url.isLocalFile()) return url.toLocalFile();
+    return {};
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent* e) {
+    if (!droppedFile(e->mimeData()).isEmpty()) e->acceptProposedAction();
+}
+
+void MainWindow::dropEvent(QDropEvent* e) {
+    const QString path = droppedFile(e->mimeData());
+    if (path.isEmpty()) return;
+    e->acceptProposedAction();
+    if (maybeSave()) openFile(path);
 }
 
 void MainWindow::closeEvent(QCloseEvent* e) {
