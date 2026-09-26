@@ -10,6 +10,10 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - After an erase or an undo, the selection no longer lands on other atoms (where Delete would remove them); opening a file starts with nothing selected.
 - The atom tool replaces an abbreviation: clicking Ph with N gives N, where before the Ph stayed.
 
+## Unreleased
+
+- A click on a selection that wobbles a pixel no longer nudges it (without an undo step).
+
 ## 1.1.0 (2026-09-26)
 
 - **Descriptor tables**: File → Export Descriptors… and penzene --descriptors write a CSV with one row per molecule (SMILES, InChIKey, mass, cLogP, TPSA, H-bond donors and acceptors, and more), keeping unreadable structures as rows that say why. <!-- icon: table -->

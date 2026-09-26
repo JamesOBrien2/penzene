@@ -2021,3 +2021,15 @@ TEST_CASE("the atom tool relabels an abbreviation") {
     CHECK(f.doc().atoms[0].z == 7);
     CHECK(f.doc().atoms[0].label.isEmpty());
 }
+
+TEST_CASE("a click that wobbles under the drag threshold moves nothing") {
+    Fixture f;
+    Document d;
+    d.addAtom({0, 0}), d.addAtom({kBondLength, 0});
+    d.bonds = {{0, 1}};
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Select);
+    f.canvas.selectAll();
+    f.drag({0, 0}, {0.8, 0});  // 2 screen pixels at the default zoom: a click
+    CHECK(f.doc() == d);
+}
