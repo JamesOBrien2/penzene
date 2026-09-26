@@ -28,7 +28,7 @@ drawing, a single bond:
 
 Coordinates are points, x to the right and y down, with bonds 14.4 points long. Atoms are
 referred to by their index in `atoms`. A field left out takes its default: carbon, no charge,
-a single bond and so on.
+a single bond and so on. Two atoms share at most one bond.
 
 ### Versions
 

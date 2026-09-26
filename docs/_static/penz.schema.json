@@ -41,7 +41,7 @@
       "properties": {
         "x": {"type": "number"},
         "y": {"type": "number"},
-        "z": {"type": "integer", "minimum": 0, "default": 6, "description": "Atomic number; 0 for a generic or R-group label."},
+        "z": {"type": "integer", "minimum": 0, "maximum": 118, "default": 6, "description": "Atomic number; 0 for a generic or R-group label."},
         "charge": {"type": "integer", "default": 0},
         "label": {"type": "string", "description": "Shown instead of the element: an abbreviation (OMe, Boc) or generic label."},
         "color": {"$ref": "#/$defs/color"},

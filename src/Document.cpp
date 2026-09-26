@@ -146,13 +146,16 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
                              QColor(o["color"].toString()), std::max(0, o["map"].toInt()),
                              std::clamp(o["lonePairs"].toInt(), 0, 4), std::clamp(o["radicals"].toInt(), 0, 2),
                              std::clamp(o["partial"].toInt(), -1, 1)});
+        // An element RDKit doesn't know aborts the app wherever the atom is looked up.
+        const Atom& a = doc.atoms.back();
+        if (a.z < 0 || a.z > 118 || !std::isfinite(a.pos.x()) || !std::isfinite(a.pos.y())) return std::nullopt;
     }
     const int n = int(doc.atoms.size());
     for (const auto& v : root["bonds"].toArray()) {
         auto o = v.toObject();
         Bond b{o["a"].toInt(-1), o["b"].toInt(-1), o["order"].toInt(1)};
-        // Untrusted file: reject dangling or self bonds rather than crash later.
-        if (b.a < 0 || b.a >= n || b.b < 0 || b.b >= n || b.a == b.b) return std::nullopt;
+        // Untrusted file: reject dangling, self or duplicate bonds rather than crash later.
+        if (b.a < 0 || b.a >= n || b.b < 0 || b.b >= n || b.a == b.b || doc.bondBetween(b.a, b.b) >= 0) return std::nullopt;
         b.order = std::clamp(b.order, 1, 3);
         auto index = [](const auto& names, const QString& s) {
             auto it = std::find(std::begin(names), std::end(names), s);
