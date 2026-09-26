@@ -1806,7 +1806,8 @@ void MainWindow::buildMenus() {
     auto* view = menuBar()->addMenu(tr("&View"));
     view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { canvas_->zoomBy(1.25); });
     view->addAction(tr("Zoom &Out"), QKeySequence::ZoomOut, this, [this] { canvas_->zoomBy(0.8); });
-    view->addAction(tr("&Fit to Window"), QKeySequence(tr("Ctrl+0")), canvas_, &Canvas::fitToDocument);
+    view->addAction(tr("&Fit to Window"), QKeySequence(tr("Ctrl+0")), canvas_, &Canvas::fitToSelection)
+        ->setStatusTip(tr("Zoom to the selection, or to the whole drawing"));
     view->addAction(tr("&Next Page"), QKeySequence(tr("Ctrl+PgDown")), this,
                     [this] { showPage((page_ + 1) % int(pages_.size())); });
     view->addAction(tr("&Previous Page"), QKeySequence(tr("Ctrl+PgUp")), this,
@@ -2013,6 +2014,7 @@ moves off, so you can keep typing.</p>
 <tr><td><b>Drag onto an atom</b></td><td>merge (Select tool) &nbsp;•&nbsp; <b>Shift+drag</b> move straight; draw a bond at any angle</td></tr>
 <tr><td><b>Ctrl+←↑→↓</b></td><td>duplicate across the next arrow that way (or alongside)</td></tr>
 <tr><td><b>Alt+← →</b></td><td>rotate 15° &nbsp;•&nbsp; <b>Alt+drag</b> rotate freely • <b>double-click</b> select fragment, or edit text</td></tr>
+<tr><td><b>Ctrl+0</b></td><td>zoom to the selection (to everything with none)</td></tr>
 <tr><td><b>Shift+Alt+←↑→↓</b></td><td>rotate 15° out of the page (3D), keeping stereo &nbsp;•&nbsp; <b>Shift+Alt+drag</b> freely</td></tr>
 </table>)"));
         box.exec();
