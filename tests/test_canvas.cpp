@@ -2176,6 +2176,30 @@ TEST_CASE("Save replaces the file whole, and still saves where only the file is 
     CHECK(saved->atoms.size() == 2);
 }
 
+TEST_CASE("a file dropped on the window opens") {
+    App app;
+    QTemporaryDir dir;
+    const QString path = dir.filePath("ethane.penz");
+    QFile out(path);
+    REQUIRE(out.open(QIODevice::WriteOnly));
+    out.write(chem::fromSmiles("CC")->toJson());
+    out.close();
+    MainWindow w;
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    CHECK_FALSE(canvas->viewport()->acceptDrops());  // the canvas lets it through to the window
+    QMimeData mime;
+    mime.setUrls({QUrl::fromLocalFile(path)});
+    const QPointF at = w.rect().center();
+    QDragEnterEvent enter(at.toPoint(), Qt::CopyAction, &mime, Qt::LeftButton, {});
+    QApplication::sendEvent(&w, &enter);
+    REQUIRE(enter.isAccepted());
+    QDropEvent drop(at, Qt::CopyAction, &mime, Qt::LeftButton, {});
+    QApplication::sendEvent(&w, &drop);
+    CHECK(canvas->document().atoms.size() == 2);
+    CHECK(w.windowTitle().startsWith("ethane.penz"));
+}
+
 TEST_CASE("formula HTML: counts subscripted, charge superscripted") {
     CHECK(formulaHtml("O4S-2") == "O<sub>4</sub>S<sup>2−</sup>");
     CHECK(formulaHtml("C2H3O2-") == "C<sub>2</sub>H<sub>3</sub>O<sub>2</sub><sup>−</sup>");

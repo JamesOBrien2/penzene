@@ -28,6 +28,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Large drawings and pages can be scrolled to in full; the canvas no longer stops 5000 points from the origin.
 - Clean keeps aromatic rings' double bonds where they were drawn, and keeps bond colours.
 - MOL and ChemDraw files open with aromatic rings' double bonds where the file drew them.
+- Drag a structure file onto the window to open it.
 - Typing a charged label such as NH3+, O- or Fe3+ sets the element and its charge, not an unknown group.
 
 ## 1.1.1 (2026-09-27)
