@@ -2044,3 +2044,34 @@ TEST_CASE("an edit that changes nothing is not an undo step") {
     CHECK(f.undo.count() == 0);
     CHECK(f.undo.isClean());
 }
+
+TEST_CASE("Save replaces the file whole, and still saves where only the file is writable") {
+    App app;
+    QTemporaryDir dir;
+    const QString path = dir.filePath("mol.penz");
+    Document d;
+    d.addAtom({0, 0});
+    QFile out(path);
+    REQUIRE(out.open(QIODevice::WriteOnly));
+    out.write(d.toJson());
+    out.close();
+    MainWindow w;
+    REQUIRE(w.openFile(path));
+    auto* canvas = w.findChild<Canvas*>();
+    Document two = d;
+    two.addAtom({kBondLength, 0});
+    canvas->commit(two, "Add");
+    // A folder that can't take the temporary file (as behind a sandbox's document portal).
+    QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner);
+    QTimer::singleShot(0, [] {  // a failed save warns: dismiss it rather than hang
+        if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->reject();
+    });
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "&Save") a->trigger();
+    QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    QFile in(path);
+    REQUIRE(in.open(QIODevice::ReadOnly));
+    const auto saved = Document::fromJson(in.readAll());
+    REQUIRE(saved);
+    CHECK(saved->atoms.size() == 2);
+}
