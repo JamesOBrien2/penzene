@@ -4,6 +4,10 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
+## Unreleased
+
+- **Tool rail**: all the tools in one rail on the left, grouped as Select, Bonds, Rings, Atoms, Arrows and Shapes; a group's tools open beside it, and can be pinned open. The Draw, Chemistry and Figure switch is gone. <!-- icon: layout-sidebar -->
+
 ## 1.1.1 (2026-09-27)
 
 - A .penz file with an unknown element or two bonds between the same atoms is refused, instead of closing Penzene.
