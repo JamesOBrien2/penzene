@@ -801,3 +801,18 @@ TEST_CASE(".penz files from every release still open, and save back the same (#1
         CHECK(again->toJson() == doc->toJson());
     }
 }
+
+TEST_CASE(".penz rejects what would abort the app later: unknown elements, duplicate bonds, non-finite atoms") {
+    auto doc = [](const char* atoms, const char* bonds = "[]") {
+        return Document::fromJson(QString(R"({"format":"penzene","version":1,"atoms":%1,"bonds":%2})").arg(atoms, bonds).toUtf8());
+    };
+    CHECK(doc(R"([{"x":0,"y":0,"z":118}])"));
+    CHECK(doc(R"([{"x":0,"y":0,"z":0,"label":"R"}])"));
+    CHECK_FALSE(doc(R"([{"x":0,"y":0,"z":119}])"));
+    CHECK_FALSE(doc(R"([{"x":0,"y":0,"z":-3}])"));
+    CHECK_FALSE(doc(R"([{"x":1e999,"y":0}])"));
+    const char* two = R"([{"x":0,"y":0},{"x":14,"y":0,"z":8}])";
+    CHECK(doc(two, R"([{"a":0,"b":1,"order":2}])"));
+    CHECK_FALSE(doc(two, R"([{"a":0,"b":1},{"a":1,"b":0,"order":2}])"));
+    for (int z : {1, 118}) CHECK_FALSE(chem::symbol(z).empty());  // the whole accepted range is looked up safely
+}
