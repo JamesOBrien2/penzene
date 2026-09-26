@@ -17,6 +17,7 @@
 
 #include <QLabel>
 #include <QDockWidget>
+#include <QPushButton>
 #include <QFrame>
 #include <QStackedWidget>
 #include <QElapsedTimer>
@@ -2074,4 +2075,22 @@ TEST_CASE("Save replaces the file whole, and still saves where only the file is 
     const auto saved = Document::fromJson(in.readAll());
     REQUIRE(saved);
     CHECK(saved->atoms.size() == 2);
+}
+
+TEST_CASE("formula HTML: counts subscripted, charge superscripted") {
+    CHECK(formulaHtml("O4S-2") == "O<sub>4</sub>S<sup>2−</sup>");
+    CHECK(formulaHtml("C2H3O2-") == "C<sub>2</sub>H<sub>3</sub>O<sub>2</sub><sup>−</sup>");
+    CHECK(formulaHtml("C6H6") == "C<sub>6</sub>H<sub>6</sub>");
+}
+
+TEST_CASE("Properties → Copy as Text keeps the formula's charge unambiguous") {
+    App app;
+    MainWindow w;
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("[O-]S(=O)(=O)[O-]"));
+    w.findChild<QDockWidget*>("properties")->show();
+    for (auto* b : w.findChildren<QPushButton*>())
+        if (b->text() == "Copy as Text") b->click();
+    CHECK(QApplication::clipboard()->text().startsWith("Formula\tO4S-2\n"));
 }

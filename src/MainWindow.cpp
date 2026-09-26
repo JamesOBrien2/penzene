@@ -280,6 +280,16 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* e) {
     return QMainWindow::eventFilter(watched, e);
 }
 
+QString formulaHtml(const std::string& formula) {
+    static const QRegularExpression charge("([+-])(\\d*)$");
+    QString f = QString::fromStdString(formula);
+    const auto m = charge.match(f);
+    QString sup;
+    if (m.hasMatch()) sup = m.captured(2) + (m.captured(1) == "+" ? "+" : "−"), f.chop(m.capturedLength());
+    f = f.toHtmlEscaped().replace(QRegularExpression("(\\d+)"), "<sub>\\1</sub>");
+    return sup.isEmpty() ? f : f + "<sup>" + sup + "</sup>";
+}
+
 void MainWindow::updateProfile() {
     if (!profileDock_->isVisible()) return;
     const auto p = chem::profile(canvas_->selectedSubset());
@@ -288,8 +298,7 @@ void MainWindow::updateProfile() {
         profileText_.clear();
         return;
     }
-    QString formula = QString::fromStdString(p->basic.formula).toHtmlEscaped();
-    formula.replace(QRegularExpression("(\\d+)"), "<sub>\\1</sub>");
+    const QString formula = formulaHtml(p->basic.formula);
     QStringList analysis, plain;
     for (const auto& [el, pct] : p->elemental) {
         analysis << QString("%1 %2").arg(QString::fromStdString(el)).arg(pct, 0, 'f', 2);
@@ -311,7 +320,8 @@ void MainWindow::updateProfile() {
     QString html = "<table cellspacing='4'>";
     for (const auto& [k, v] : rows) {
         html += QString("<tr><td><b>%1</b></td><td>%2</td></tr>").arg(k, v);
-        plain << k + "\t" + QString(v).remove(QRegularExpression("<[^>]*>"));
+        // The formula as RDKit writes it: stripped of tags, "O4S2−" would read as two sulfurs.
+        plain << k + "\t" + (k == tr("Formula") ? QString::fromStdString(p->basic.formula) : QString(v).remove(QRegularExpression("<[^>]*>")));
     }
     profile_->setText(html + "</table>");
     profileText_ = plain.join("\n");
@@ -321,8 +331,7 @@ void MainWindow::updateProfile() {
 void MainWindow::updateInfo() {
     auto p = chem::properties(canvas_->selectedSubset());
     if (!p) return info_->clear();
-    QString f = QString::fromStdString(p->formula).toHtmlEscaped();
-    f.replace(QRegularExpression("(\\d+)"), "<sub>\\1</sub>").replace(QRegularExpression("([+-])$"), "<sup>\\1</sup>");
+    const QString f = formulaHtml(p->formula);
     info_->setText(tr("%1 &nbsp;·&nbsp; MW %2 &nbsp;·&nbsp; exact mass %3")
                        .arg(f)
                        .arg(p->mw, 0, 'f', 2)

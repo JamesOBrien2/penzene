@@ -1,6 +1,7 @@
 #pragma once
 #include <QMainWindow>
 #include <functional>
+#include <string>
 #include <vector>
 
 #ifdef Q_OS_MACOS
@@ -23,6 +24,8 @@ class QUndoStack;
 
 // The drawing at its export size, centred on the page; shrunk to fit if it's bigger.
 bool printDocument(QPrinter& printer, const Document& doc);
+// RDKit's formula as HTML: counts subscripted, a trailing charge ("-2") superscripted as "2−".
+QString formulaHtml(const std::string& formula);
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
