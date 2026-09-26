@@ -2094,3 +2094,14 @@ TEST_CASE("Properties → Copy as Text keeps the formula's charge unambiguous") 
         if (b->text() == "Copy as Text") b->click();
     CHECK(QApplication::clipboard()->text().startsWith("Formula\tO4S-2\n"));
 }
+
+TEST_CASE("Delete removes an attachment point outright, not turning it into a carbon") {
+    Fixture f;
+    Document d;
+    d.addAtom({0, 0}), d.addAtom({kBondLength, 0}, 0);
+    d.bonds = {{0, 1, 1, BondStereo::Wavy}};
+    f.canvas.setDocumentSilently(d);
+    f.hover({kBondLength, 0});
+    QTest::keyClick(f.canvas.viewport(), Qt::Key_Delete);
+    CHECK(f.doc().atoms.size() == 1);
+}

@@ -1222,8 +1222,9 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
         Document next = doc_;
         if (hoverAtom_ >= 0) {
             Atom& a = next.atoms[hoverAtom_];
-            // ChemDraw: removes a label first; a plain carbon is deleted.
-            if (a.z != 6 || a.charge || !a.label.isEmpty()) a.z = 6, a.charge = 0, a.label.clear();
+            // ChemDraw: removes a label first; a plain carbon (or a bare attachment point) is deleted.
+            const bool bare = a.z == 0 && a.label.isEmpty();
+            if (!bare && (a.z != 6 || a.charge || !a.label.isEmpty())) a.z = 6, a.charge = 0, a.label.clear();
             else next.removeAtoms({hoverAtom_}), hoverAtom_ = -1;
         } else if (hoverBond_ >= 0) {
             next.removeBond(hoverBond_);
