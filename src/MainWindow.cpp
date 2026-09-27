@@ -549,7 +549,9 @@ bool MainWindow::openFile(const QString& path) {
     }
     setPages(sheets);
     canvas_->fitToDocument();
-    path_ = ext == "cdxml" || ext == "cdx" ? QString() : path;  // never save over a ChemDraw file
+    // Save goes back only to a file that holds everything saved: never over a
+    // ChemDraw file, or a library (SDF, SMILES) with one MOL block (#315).
+    path_ = ext == "penz" || ext == "mol" ? path : QString();
     remember(path);
     updateTitle();
     return true;
@@ -619,8 +621,14 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
             return false;
         }
         data = QByteArray::fromStdString(chem::toRxn(*r));
-    } else {
+    } else if (const QString ext = QFileInfo(path).suffix().toLower(); ext.isEmpty() || ext == "mol") {
         data = QByteArray::fromStdString(chem::toMolBlock(doc, v3000));
+    } else {  // an image or library path would get MOL text (#315)
+        QMessageBox::warning(this, tr("Save"),
+                             tr("Penzene can't save a drawing as .%1. Save as .penz, .mol, .rxn, .cdxml or .cdx, "
+                                "or use File → Export… for images.")
+                                 .arg(ext));
+        return false;
     }
     // Written aside and swapped in, so a failed save never truncates the file already there.
     QSaveFile f(path);
