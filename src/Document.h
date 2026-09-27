@@ -29,6 +29,7 @@ struct Atom {
     // show; radical electrons are chemistry (one fewer H each).
     int lonePairs = 0, radicals = 0;
     int partial = 0;  // +1 δ+, −1 δ−
+    int isotope = 0;  // mass number (13 for ¹³C, 2 for D); 0 = natural abundance
 };
 
 struct Bond {
@@ -148,7 +149,8 @@ std::vector<Sheet> sheetsFromJson(const QByteArray& data);  // empty if it isn't
 
 inline bool operator==(const Atom& x, const Atom& y) {
     return x.pos == y.pos && x.z == y.z && x.charge == y.charge && x.label == y.label && x.color == y.color &&
-           x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial;
+           x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial &&
+           x.isotope == y.isotope;
 }
 inline bool operator==(const Bond& x, const Bond& y) {
     return x.a == y.a && x.b == y.b && x.order == y.order && x.stereo == y.stereo &&

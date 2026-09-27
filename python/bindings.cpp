@@ -70,6 +70,7 @@ NB_MODULE(_penzene, m) {
         .def_prop_ro("x", [](const Atom& a) { return a.pos.x(); }, "Points, x right")
         .def_prop_ro("y", [](const Atom& a) { return a.pos.y(); }, "Points, y down")
         .def_ro("charge", &Atom::charge, "Formal charge")
+        .def_ro("isotope", &Atom::isotope, "Mass number (13 for carbon-13, 2 for deuterium); 0 for natural abundance")
         .def("__repr__", [](const Atom& a) { return "<Atom " + symbol(a) + ">"; });
 
     nb::class_<Bond>(m, "Bond", "A bond of a Document (read-only).")

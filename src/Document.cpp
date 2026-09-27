@@ -29,6 +29,7 @@ QByteArray Document::toJson() const {
         if (a.lonePairs) o["lonePairs"] = a.lonePairs;
         if (a.radicals) o["radicals"] = a.radicals;
         if (a.partial) o["partial"] = a.partial;
+        if (a.isotope) o["isotope"] = a.isotope;
         as.append(o);
     }
     for (const auto& b : bonds) {
@@ -152,7 +153,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
                              o["z"].toInt(6), o["charge"].toInt(), o["label"].toString(),
                              QColor(o["color"].toString()), std::max(0, o["map"].toInt()),
                              std::clamp(o["lonePairs"].toInt(), 0, 4), std::clamp(o["radicals"].toInt(), 0, 2),
-                             std::clamp(o["partial"].toInt(), -1, 1)});
+                             std::clamp(o["partial"].toInt(), -1, 1), std::clamp(o["isotope"].toInt(), 0, 300)});
         // An element RDKit doesn't know aborts the app wherever the atom is looked up.
         const Atom& a = doc.atoms.back();
         if (a.z < 0 || a.z > 118 || !std::isfinite(a.pos.x()) || !std::isfinite(a.pos.y())) return std::nullopt;

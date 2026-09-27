@@ -22,6 +22,9 @@ Space select.
 - Press **Enter**, `=` or `t` on an atom (or click it with the Text tool) to type a label: an element
   (`Br`, `NH2`), an abbreviation (`OMe`, `Boc`, `TBS`, `CO2Me`, …), a SMILES fragment (drawn out), or
   any text (`R1`, `X`, `MgEt`). Text that isn't chemistry is drawn as written and counts as a generic atom.
+- Isotopes: type the mass number before the element (`13C`, `18OH`, `15NH2`), or `D` / `T` for
+  deuterium and tritium (`d` on an atom makes it D). They're drawn ¹³C, carried through SMILES
+  (`[13CH4]`), MOL and ChemDraw files, and counted in the masses.
 - `x` and `r` on an atom label it X and R. `R1`, `R2`… export as MDL R-groups.
 - **Structure → Expand Abbreviations** draws them out in full.
 - Atom Properties (`/` on an atom) sets the charge, map number, lone pairs, radical electrons and δ±.

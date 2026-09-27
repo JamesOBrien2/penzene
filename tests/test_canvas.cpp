@@ -2574,3 +2574,59 @@ TEST_CASE("the Shapes flyout has every orbital in every look; one clicked on an 
         w.grab().save(QString::fromUtf8(shot));
     }
 }
+
+
+
+TEST_CASE("isotopes: typed, drawn, and kept through .penz, SMILES, MOL and CDXML") {
+    App app;
+    Document d = *chem::fromSmiles("CO");
+    REQUIRE(edit::applyLabel(d, 0, "13C"));
+    CHECK(d.atoms[0].z == 6);
+    CHECK(d.atoms[0].isotope == 13);
+    CHECK(edit::atomText(d.atoms[0]) == "13C");
+    REQUIRE(edit::applyLabel(d, 1, "18OH"));
+    CHECK(d.atoms[1].z == 8);
+    CHECK(d.atoms[1].isotope == 18);
+    CHECK_FALSE(edit::applyLabel(d, 1, "1C"));  // fewer nucleons than protons
+    Document plain = d;
+    REQUIRE(edit::applyLabel(plain, 0, "C"));  // typing the plain element clears it
+    CHECK(plain.atoms[0].isotope == 0);
+
+    CHECK(chem::toSmiles(d) == "[13CH3][18OH]");
+    for (const Document& back : {*Document::fromJson(d.toJson()), *chem::fromSmiles(chem::toSmiles(d)),
+                                 *chem::fromMolBlock(chem::toMolBlock(d)), *chem::fromChemDraw(chem::toCdxml(d))}) {
+        REQUIRE(back.atoms.size() == 2);
+        CHECK(back.atoms[0].isotope + back.atoms[1].isotope == 31);
+    }
+    CHECK(chem::properties(d)->mw > chem::properties(*chem::fromSmiles("CO"))->mw + 2.9);  // ¹³C and ¹⁸O: about 3 heavier
+
+    Document cd4 = *chem::fromSmiles("[2H]C([2H])([2H])[2H]");
+    CHECK(edit::atomText(cd4.atoms[0]) == "D");
+    CHECK(std::abs(chem::properties(cd4)->mw - 20.07) < 0.02);
+    CHECK(chem::removeHydrogens(cd4).atoms.size() == 5);  // deuterium isn't an explicit H to tidy away
+    Document odd = *chem::fromSmiles("C");
+    REQUIRE(edit::applyLabel(odd, 0, "999C"));  // an isotope RDKit has no mass for
+    CHECK(chem::properties(odd));
+
+    Document ethane = *chem::fromSmiles("CC"), labelled = ethane;  // a chain carbon isn't labelled, ¹³C is
+    labelled.atoms[0].isotope = 13;
+    CHECK(documentBounds(labelled).width() > documentBounds(ethane).width());  // room for H₃¹³C
+    CHECK(renderImage(labelled, {300}) != renderImage(ethane, {300}));
+}
+
+TEST_CASE("d makes deuterium; Delete takes an isotope off before the atom") {
+    Fixture f;
+    Document d;
+    d.addAtom({0, 0}), d.addAtom({kBondLength, 0});
+    d.bonds = {{0, 1}};
+    d.atoms[1].isotope = 13;
+    f.canvas.setDocumentSilently(d);
+    f.hover({0, 0});
+    f.key("d");
+    CHECK(f.doc().atoms[0].z == 1);
+    CHECK(f.doc().atoms[0].isotope == 2);
+    f.hover({kBondLength, 0});
+    QTest::keyClick(f.canvas.viewport(), Qt::Key_Delete);
+    REQUIRE(f.doc().atoms.size() == 2);
+    CHECK(f.doc().atoms[1].isotope == 0);
+}

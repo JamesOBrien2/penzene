@@ -118,6 +118,10 @@ An atom of a Document (read-only; edit through Document).
 
 Formal charge
 
+### `Atom.isotope`
+
+Mass number (13 for carbon-13, 2 for deuterium); 0 for natural abundance
+
 ### `Atom.symbol`
 
 Element symbol, or the abbreviation (Boc, OMe…) if it has one

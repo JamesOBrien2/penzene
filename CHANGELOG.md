@@ -36,6 +36,10 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Drag a structure file onto the window to open it.
 - Typing a charged label such as NH3+, O- or Fe3+ sets the element and its charge, not an unknown group.
 
+## Unreleased
+
+- **Isotopes**: Type 13C, 18OH or D on an atom (d makes deuterium); drawn ¹³C and kept through SMILES, MOL and ChemDraw files, with the masses to match. <!-- icon: atom -->
+
 ## 1.1.1 (2026-09-27)
 
 - A .penz file with an unknown element or two bonds between the same atoms is refused, instead of closing Penzene.

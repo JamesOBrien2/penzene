@@ -1149,9 +1149,7 @@ void Canvas::editLabel(int at) {
     bool ok = false;
     QString label = QInputDialog::getText(this, tr("Atom label"),
                                           tr("Element, group (OMe, CF3, Ph, Boc…), SMILES or any text (R, X, MgEt):"), QLineEdit::Normal,
-                                          doc_.atoms[at].label.isEmpty()
-                                              ? QString::fromStdString(chem::symbol(doc_.atoms[at].z))
-                                              : doc_.atoms[at].label,
+                                          atomText(doc_.atoms[at]),
                                           &ok)
                         .trimmed();
     Document next = doc_;
@@ -1163,7 +1161,7 @@ void Canvas::editAtomProperties(int at) {
     QDialog dialog(this);
     dialog.setWindowTitle(tr("Atom Properties"));
     auto* form = new QFormLayout(&dialog);
-    auto* label = new QLineEdit(a.label.isEmpty() ? QString::fromStdString(chem::symbol(a.z)) : a.label);
+    auto* label = new QLineEdit(atomText(a));  // 13C, D: the isotope is part of the label
     auto spin = [&](int lo, int hi, int value) {
         auto* s = new QSpinBox;
         s->setRange(lo, hi), s->setValue(value);
@@ -1188,7 +1186,7 @@ void Canvas::editAtomProperties(int at) {
     connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
     if (dialog.exec() != QDialog::Accepted) return;
     Document next = doc_;
-    const QString was = a.label.isEmpty() ? QString::fromStdString(chem::symbol(a.z)) : a.label;
+    const QString was = atomText(a);
     if (label->text().trimmed() != was && !applyLabel(next, at, label->text().trimmed(), true)) return;
     Atom& out = next.atoms[at];
     out.charge = charge->value(), out.map = map->value(), out.lonePairs = pairs->value(), out.radicals = radicals->value();
@@ -1295,7 +1293,8 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
             Atom& a = next.atoms[hoverAtom_];
             // ChemDraw: removes a label first; a plain carbon (or a bare attachment point) is deleted.
             const bool bare = a.z == 0 && a.label.isEmpty();
-            if (!bare && (a.z != 6 || a.charge || !a.label.isEmpty())) a.z = 6, a.charge = 0, a.label.clear();
+            if (!bare && (a.z != 6 || a.charge || !a.label.isEmpty() || a.isotope))
+                a.z = 6, a.charge = 0, a.label.clear(), a.isotope = 0;
             else next.removeAtom(hoverAtom_), hoverAtom_ = -1;
         } else if (hoverBond_ >= 0) {
             next.removeBond(hoverBond_);

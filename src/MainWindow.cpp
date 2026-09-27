@@ -2026,7 +2026,7 @@ moves off, so you can keep typing.</p>
 <tr><td><b>k K</b></td><td>sulfonyl, t-Bu</td></tr>
 <tr><td><b>.</b> / <b>j</b> / <b>J</b></td><td>attachment point / η⁵-cyclopentadienyl / η⁶-benzene</td></tr>
 <tr><th colspan="2" align="left">Atom: label and marks</th></tr>
-<tr><td><b>c n/w o/q s p f l b i h</b></td><td>C N O S P F Cl Br I H</td></tr>
+<tr><td><b>c n/w o/q s p f l b i h d</b></td><td>C N O S P F Cl Br I H D (deuterium)</td></tr>
 <tr><td><b>B S L</b></td><td>B, Si, Li</td></tr>
 <tr><td><b>m e P A</b></td><td>Me, Et, Ph, Ac</td></tr>
 <tr><td><b>O N F E Z</b></td><td>OMe, NO<sub>2</sub>, CF<sub>3</sub>, CO<sub>2</sub>Me, N<sub>3</sub></td></tr>

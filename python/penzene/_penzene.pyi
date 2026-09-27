@@ -22,6 +22,12 @@ class Atom:
     def charge(self) -> int:
         """Formal charge"""
 
+    @property
+    def isotope(self) -> int:
+        """
+        Mass number (13 for carbon-13, 2 for deuterium); 0 for natural abundance
+        """
+
     def __repr__(self) -> str: ...
 
 class Bond:

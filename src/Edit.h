@@ -30,6 +30,8 @@ void mergeAtoms(Document& doc, const std::vector<std::pair<int, int>>& keepDrop)
 
 // Element symbol, abbreviation (drawn as its label) or SMILES (drawn out).
 bool applyLabel(Document& doc, int atom, const QString& label, bool anyText = false);
+// What applyLabel reads back to the same atom: "C", "13C", "D", "Boc".
+QString atomText(const Atom& a);
 
 // ChemDraw's hotkeys, typed with `h` as the hotspot. Returns the new hotspot,
 // or an empty one ({-1, -1}) if the key means nothing there.
