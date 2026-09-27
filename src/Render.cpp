@@ -10,6 +10,7 @@
 #include <QSet>
 #include <QPainterPath>
 #include <QPdfWriter>
+#include <QSaveFile>
 #include <QSvgGenerator>
 #include <algorithm>
 #include <limits>
@@ -769,16 +770,22 @@ QByteArray renderPdf(const Document& doc, const ExportOptions& o) {
 bool exportDocument(const Document& doc, const QString& path, const ExportOptions& o) {
     if (doc.empty()) return false;
     const QString ext = QFileInfo(path).suffix().toLower();
-    if (ext == "png") return renderImage(doc, o).save(path);
-    if (ext == "svg") {
-        QFile f(path);
-        return f.open(QIODevice::WriteOnly) && f.write(renderSvg(doc, o)) > 0;
+    QByteArray data;
+    if (ext == "png") {
+        QBuffer buf(&data);
+        if (!buf.open(QIODevice::WriteOnly) || !renderImage(doc, o).save(&buf, "PNG")) return false;
+    } else if (ext == "svg") {
+        data = renderSvg(doc, o);
+    } else if (ext == "pdf") {
+        data = renderPdf(doc, o);
     }
-    if (ext == "pdf") {
-        QFile f(path);
-        return f.open(QIODevice::WriteOnly) && f.write(renderPdf(doc, o)) > 0;
-    }
-    return false;
+    return !data.isEmpty() && writeWhole(path, data);
+}
+
+bool writeWhole(const QString& path, const QByteArray& data) {
+    QSaveFile f(path);  // written aside and swapped in, so a failed write never truncates the old file
+    f.setDirectWriteFallback(true);  // a writable file in a read-only folder (sandbox portals)
+    return f.open(QIODevice::WriteOnly) && f.write(data) == data.size() && f.commit();
 }
 
 const std::vector<Theme>& themes() {

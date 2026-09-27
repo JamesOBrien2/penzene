@@ -71,6 +71,8 @@ struct ExportOptions {
 };
 // Writes .svg, .png or .pdf (by extension), cropped to the drawing plus the margin.
 bool exportDocument(const Document& doc, const QString& path, const ExportOptions& options = {});
+// Replaces the file at `path` only once all of `data` is written.
+bool writeWhole(const QString& path, const QByteArray& data);
 QImage renderImage(const Document& doc, const ExportOptions& options = {});
 QByteArray renderSvg(const Document& doc, const ExportOptions& options = {});
 QByteArray renderPdf(const Document& doc, const ExportOptions& options = {});  // vector, drawing attached

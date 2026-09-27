@@ -742,9 +742,8 @@ void MainWindow::exportDescriptors() {
     std::vector<chem::Record> records;
     for (auto& m : chem::molecules(canvas_->selectedSubset()))
         records.push_back({QString("%1-%2").arg(base).arg(records.size() + 1), std::move(m)});
-    QFile f(path);
     const QByteArray csv = QByteArray::fromStdString(chem::descriptorsCsv(records));
-    if (records.empty() || !f.open(QIODevice::WriteOnly) || f.write(csv) != csv.size())
+    if (records.empty() || !writeWhole(path, csv))
         QMessageBox::warning(this, tr("Export Descriptors"), tr("Nothing to export, or cannot write %1").arg(path));
 }
 

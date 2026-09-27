@@ -5,7 +5,6 @@
 #include <QApplication>
 #include <QCommandLineParser>
 #include <QDir>
-#include <QFile>
 #include <QFileInfo>
 #include <QIcon>
 #include <QRegularExpression>
@@ -99,8 +98,7 @@ int descriptors(const QStringList& args) {
         for (auto& r : records(in)) all.push_back(std::move(r));
     const std::string csv = chem::descriptorsCsv(all, columns);
     if (!p.isSet("out")) return std::fwrite(csv.data(), 1, csv.size(), stdout) == csv.size() ? 0 : 1;
-    QFile f(p.value("out"));
-    if (!f.open(QIODevice::WriteOnly) || f.write(csv.data(), qint64(csv.size())) != qint64(csv.size())) {
+    if (!writeWhole(p.value("out"), QByteArray::fromStdString(csv))) {
         std::fprintf(stderr, "penzene: could not write %s\n", qPrintable(p.value("out")));
         return 1;
     }
