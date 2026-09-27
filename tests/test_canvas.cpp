@@ -2511,3 +2511,66 @@ TEST_CASE("a crashed Penzene's autosave is offered even when this process has it
     CHECK(offered == 1);
     QFile::remove(crashed);
 }
+
+TEST_CASE("orbitals stack over the molecule, or behind it once sent to the back (#204)") {
+    App app;
+    Document doc;
+    doc.addAtom({0, 0});
+    doc.addAtom({28.8, 0});
+    doc.bonds = {{0, 1}};
+    Arrow lobe{{5, 0}, {25, 0}, ArrowKind::Lobe};  // along the bond
+    lobe.look = OrbitalLook::Shaded;
+    lobe.color = QColor(220, 20, 20);
+    doc.arrows = {lobe};
+    auto colourOnBond = [](const Document& d) {
+        QImage img(400, 200, QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter painter(&img);
+        painter.translate(100, 100);
+        painter.scale(4, 4);
+        paintDocument(painter, d);
+        painter.end();
+        return img.pixelColor(100 + 4 * 15, 100);
+    };
+    CHECK(colourOnBond(doc).red() > 180);  // new orbitals go on top, as in ChemDraw
+    CHECK(edit::restack(doc, {0}, edit::Restack::Back) == std::vector<int>{0});
+    CHECK(doc.arrows[0].behind);
+    CHECK(colourOnBond(doc).red() < 80);  // the bond shows through
+}
+
+TEST_CASE("the Shapes flyout has every orbital in every look; one clicked on an atom is centred there (#204)") {
+    App app;
+    MainWindow w;
+    w.resize(1000, 700);
+    w.show();
+    QFrame* shapes = nullptr;
+    for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
+        if (f->findChild<QLabel*>("flyoutTitle")->text() == "SHAPES") shapes = f;
+    REQUIRE(shapes);
+    int orbitals = 0;
+    QToolButton* shadedP = nullptr;
+    for (auto* b : shapes->findChildren<QToolButton*>()) {
+        const QString tip = b->defaultAction() ? b->defaultAction()->toolTip() : QString();
+        orbitals += tip.contains("orbital,") || tip.startsWith("Lobe,");
+        if (tip.startsWith("p orbital, shaded")) shadedP = b;
+    }
+    CHECK(orbitals == 12);  // s, p, lobe and hybrid, each outline, shaded and gradient
+    REQUIRE(shadedP);
+    shadedP->click();
+    auto* canvas = w.findChild<Canvas*>();
+    Document d;
+    d.addAtom({0, 0}, 7);
+    canvas->setDocumentSilently(d);
+    QTest::mouseClick(canvas->viewport(), Qt::LeftButton, {}, canvas->mapFromScene(QPointF(0, 0)));
+    REQUIRE(canvas->document().arrows.size() == 1);
+    const Arrow& p = canvas->document().arrows[0];
+    CHECK(p.kind == ArrowKind::POrbital);
+    CHECK(p.look == OrbitalLook::Shaded);
+    CHECK(QLineF(p.from, QPointF(0, 0)).length() < 0.5);  // centred on the nitrogen
+    if (auto shot = qgetenv("PENZENE_ORBITAL_TOOLS_SHOT"); !shot.isEmpty()) {
+        for (auto* b : w.findChildren<QToolButton*>("railButton"))
+            if (b->text() == "Shapes") b->click();
+        QApplication::processEvents();
+        w.grab().save(QString::fromUtf8(shot));
+    }
+}

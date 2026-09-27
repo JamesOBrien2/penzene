@@ -487,4 +487,38 @@ Hotspot hotkey(Document& doc, Hotspot h, const QString& t) {
     return h;
 }
 
+
+std::vector<int> restack(Document& doc, const std::vector<int>& arrows, Restack how) {
+    constexpr int kMolecule = -1;
+    std::vector<int> order;  // bottom to top
+    for (int i = 0; i < int(doc.arrows.size()); ++i)
+        if (doc.arrows[i].behind) order.push_back(i);
+    order.push_back(kMolecule);
+    for (int i = 0; i < int(doc.arrows.size()); ++i)
+        if (!doc.arrows[i].behind) order.push_back(i);
+    auto moving = [&](int t) { return t != kMolecule && std::find(arrows.begin(), arrows.end(), t) != arrows.end(); };
+    if (how == Restack::Front || how == Restack::Back) {
+        std::stable_partition(order.begin(), order.end(), [&](int t) { return moving(t) == (how == Restack::Back); });
+    } else if (how == Restack::Forward) {  // each one up past the next unselected layer
+        for (int k = int(order.size()) - 2; k >= 0; --k)
+            if (moving(order[k]) && !moving(order[k + 1])) std::swap(order[k], order[k + 1]);
+    } else {
+        for (int k = 1; k < int(order.size()); ++k)
+            if (moving(order[k]) && !moving(order[k - 1])) std::swap(order[k], order[k - 1]);
+    }
+    std::vector<Arrow> stacked;
+    std::vector<int> moved;
+    bool behind = true;
+    for (int t : order) {
+        if (t == kMolecule) {
+            behind = false;
+            continue;
+        }
+        if (moving(t)) moved.push_back(int(stacked.size()));
+        stacked.push_back(doc.arrows[t]);
+        stacked.back().behind = behind;
+    }
+    doc.arrows = std::move(stacked);
+    return moved;
+}
 }  // namespace edit

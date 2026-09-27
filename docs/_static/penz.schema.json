@@ -76,10 +76,12 @@
         "y1": {"type": "number"},
         "x2": {"type": "number"},
         "y2": {"type": "number"},
-        "kind": {"enum": ["reaction", "equilibrium", "resonance", "retro", "fishhook", "line", "box", "roundedbox", "ellipse"], "default": "reaction"},
+        "kind": {"enum": ["reaction", "equilibrium", "resonance", "retro", "fishhook", "line", "box", "roundedbox", "ellipse", "s-orbital", "p-orbital", "lobe", "hybrid-orbital"], "default": "reaction", "description": "Orbitals run from their centre (x1, y1) to the tip of their main lobe (x2, y2)."},
         "bend": {"type": "number", "description": "Curvature: how far the middle bows out, in points."},
         "color": {"$ref": "#/$defs/color"},
-        "dashed": {"type": "boolean"}
+        "dashed": {"type": "boolean"},
+        "look": {"enum": ["outline", "shaded", "gradient"], "default": "outline", "description": "Orbitals: lines only, the main phase filled, or both phases in a soft gradient."},
+        "behind": {"type": "boolean", "description": "Drawn under the molecule rather than over it."}
       }
     },
     "text": {

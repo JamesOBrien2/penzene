@@ -84,6 +84,11 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
 - Text: formulas get subscripts automatically (H2O → H₂O).
 - Lines (solid or dashed), boxes, rounded boxes and ellipses for grouping; Shift draws a square or
   circle.
+- Orbitals, in **Shapes**: s, p, lobe and hybrid, each outlined, shaded or with a gradient. Click
+  an atom to centre one on it (drag to point it), or click an orbital to restyle it; the colour
+  tool colours it. New orbitals sit over the drawing: right-click for **Bring to Front**, **Bring
+  Forward**, **Send Backward** and **Send to Back** (behind the bonds). ChemDraw files keep them,
+  and their order.
 - The colour tool paints atoms, bonds, arrows and text; the fill tool shades a ring.
 
 ## Pages, grid and rulers

@@ -430,7 +430,8 @@ void Canvas::addDraggedRing(Document& doc) const {
 Arrow Canvas::draggedArrow() const {
     Arrow a{pressPos_, curPos_, arrowKind_};
     a.dashed = arrowDashed_;
-    if (isShape(arrowKind_) && arrowKind_ != ArrowKind::Line) {  // boxes and ellipses: any corner, no snapping
+    a.look = arrowLook_;
+    if (isShape(arrowKind_) && !isOrbital(arrowKind_) && arrowKind_ != ArrowKind::Line) {  // boxes and ellipses: any corner, no snapping
         if (shift_) {  // Shift: a square or circle
             const QPointF v = curPos_ - pressPos_;
             const double side = std::max(std::abs(v.x()), std::abs(v.y()));
@@ -531,6 +532,7 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
         break;
     case Tool::Arrow:
         drag_ = Drag::Arrow;
+        if (isOrbital(arrowKind_) && pressAtom_ >= 0) pressPos_ = curPos_ = doc_.atoms[pressAtom_].pos;  // centred on the atom
         break;
     case Tool::Ring:  // a click adds the chosen ring; a drag sizes one
         drag_ = Drag::Ring;
@@ -688,12 +690,18 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
         for (int i = 0; i < int(doc_.texts.size()); ++i)
             if (r.intersects(textPath(doc_.texts[i], documentStyle(doc_)).boundingRect())) selectedTexts_.insert(i);
     } else if (drag == Drag::Arrow) {
-        if (int hit = arrowAt(pressPos_); click && hit >= 0) {  // click an arrow: restyle, or flip a curve
+        const int hit = arrowAt(pressPos_);
+        if (click && hit >= 0 && isOrbital(next.arrows[hit].kind) == isOrbital(arrowKind_)) {
+            // click an arrow: restyle, or flip a curve; click an orbital: its kind and look, same place
             Arrow& a = next.arrows[hit];
-            if (arrowCurved_ && a.bend && a.kind == arrowKind_) a.bend = -a.bend;
+            if (isOrbital(a.kind)) a.kind = arrowKind_, a.look = arrowLook_;
+            else if (arrowCurved_ && a.bend && a.kind == arrowKind_) a.bend = -a.bend;
             else a.kind = arrowKind_, a.bend = arrowCurved_ ? 0.3 * len(a.to - a.from) : 0, a.dashed = arrowDashed_;
         } else {
-            if (click)  // default size: an arrow's length, or a box 3 × 2 bonds
+            // default size: an arrow's length, a box 3 × 2 bonds, or an upright orbital
+            if (click && isOrbital(arrowKind_))
+                curPos_ = pressPos_ + QPointF(0, -(arrowKind_ == ArrowKind::SOrbital ? 0.35 : 1.0) * kBondLength);
+            else if (click)
                 curPos_ = pressPos_ + QPointF(3 * kBondLength, isShape(arrowKind_) && arrowKind_ != ArrowKind::Line ? 2 * kBondLength : 0);
             next.arrows.push_back(draggedArrow());
         }
@@ -1441,6 +1449,26 @@ QMenu* Canvas::contextMenuAt(QPointF at) {
     } else {
         menu->addAction(tr("Select All"), this, &Canvas::selectAll);
         menu->addAction(tr("Fit to Window"), this, &Canvas::fitToDocument);
+    }
+    // Layers: the arrow, shape or orbital under the cursor, else the selected ones.
+    const int arrow = atom < 0 && bond < 0 ? arrowAt(at) : -1;
+    std::vector<int> layered;
+    if (arrow >= 0 && !selectedArrows_.contains(arrow)) layered = {arrow};
+    else if (arrow >= 0 || onSelection || (atom < 0 && bond < 0)) layered.assign(selectedArrows_.begin(), selectedArrows_.end());
+    if (!layered.empty()) {
+        menu->addSeparator();
+        const std::pair<QString, Restack> moves[] = {{tr("Bring to Front"), Restack::Front},
+                                                     {tr("Bring Forward"), Restack::Forward},
+                                                     {tr("Send Backward"), Restack::Backward},
+                                                     {tr("Send to Back"), Restack::Back}};
+        for (const auto& [text, how] : moves)
+            menu->addAction(text, this, [this, layered, how] {
+                Document next = doc_;
+                const auto moved = restack(next, layered, how);
+                commit(next, tr("Arrange"));
+                selectedArrows_ = QSet<int>(moved.begin(), moved.end());
+                viewport()->update();
+            });
     }
     return menu;
 }
