@@ -50,9 +50,12 @@ std::string toSmiles(const Document& doc);  // "" if the structure isn't valid
 struct Reaction {
     std::vector<Document> reactants, agents, products;
 };
-std::optional<Reaction> reactionOf(const Document& doc);  // nullopt without a reaction arrow
+std::vector<Reaction> reactionsOf(const Document& doc);    // one per reaction arrow, in reading order
+std::optional<Reaction> reactionOf(const Document& doc);  // the first; nullopt without a reaction arrow
 std::string toReactionSmiles(const Reaction& r);           // reactants>agents>products
+std::string toReactionSmiles(const std::vector<Reaction>& steps);  // one line per step
 std::string toRxn(const Reaction& r);                      // MDL Rxnfile (V2000)
+std::string toRdf(const std::vector<Reaction>& steps);     // MDL RD file: one Rxnfile per step
 Document layoutReaction(const Reaction& r);
 std::optional<Document> fromReactionSmiles(const std::string& smiles);
 std::optional<Document> fromRxn(const std::string& text);

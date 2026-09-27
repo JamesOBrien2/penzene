@@ -5,7 +5,8 @@
 | Penzene `.penz` | ✓ | ✓ | everything: molecules, arrows, text, shapes, styles |
 | MDL MOL / SDF | ✓ | ✓ | V2000 and V3000; a multi-record SDF opens as a grid, and Save As `.sdf` writes one record per molecule |
 | SMILES `.smi`, InChI `.inchi` | ✓ | | one per line, as a grid; paste either as text too |
-| MDL Rxnfile `.rxn` | ✓ | ✓ | and reaction SMILES by copy and paste |
+| MDL Rxnfile `.rxn` | ✓ | ✓ | and reaction SMILES by copy and paste, a line per step |
+| MDL RD file `.rdf` | | ✓ | a multi-step scheme, one Rxnfile per arrow |
 | ChemDraw XML `.cdxml` | ✓ | ✓ | molecules, abbreviations (as ChemDraw nicknames), arrows (curved too), text, lines, boxes, ovals, lone pairs |
 | ChemDraw `.cdx` | ✓ | ✓ | as CDXML, on every platform |
 | SVG, PNG, PDF | Penzene's own | export | the drawing rides along, so they reopen editable |

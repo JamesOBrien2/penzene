@@ -656,13 +656,21 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
             QMessageBox::warning(this, tr("Save"), tr("This build can't write binary CDX; save as ChemDraw XML (.cdxml)."));
             return false;
         }
-    } else if (path.endsWith(".rxn", Qt::CaseInsensitive)) {
-        const auto r = chem::reactionOf(doc);
-        if (!r) {
-            QMessageBox::warning(this, tr("Save"), tr("An Rxnfile needs a reaction arrow in the drawing."));
+    } else if (path.endsWith(".rxn", Qt::CaseInsensitive) || path.endsWith(".rdf", Qt::CaseInsensitive)) {
+        const auto steps = chem::reactionsOf(doc);
+        if (steps.empty()) {
+            QMessageBox::warning(this, tr("Save"), tr("A reaction file needs a reaction arrow in the drawing."));
             return false;
         }
-        data = QByteArray::fromStdString(chem::toRxn(*r));
+        if (path.endsWith(".rdf", Qt::CaseInsensitive)) {
+            data = QByteArray::fromStdString(chem::toRdf(steps));
+        } else if (steps.size() > 1) {  // #334
+            QMessageBox::warning(this, tr("Save"),
+                                 tr("An Rxnfile holds one step. Save as an RD file (.rdf) to keep all %1.").arg(steps.size()));
+            return false;
+        } else {
+            data = QByteArray::fromStdString(chem::toRxn(steps[0]));
+        }
     } else if (path.endsWith(".sdf", Qt::CaseInsensitive)) {  // one record per molecule (#330)
         data = QByteArray::fromStdString(chem::toSdf(doc, v3000));
         if (data.isEmpty()) {
@@ -673,7 +681,7 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
         data = QByteArray::fromStdString(chem::toMolBlock(doc, v3000));
     } else {  // an image or library path would get MOL text (#315)
         QMessageBox::warning(this, tr("Save"),
-                             tr("Penzene can't save a drawing as .%1. Save as .penz, .mol, .sdf, .rxn, .cdxml or .cdx, "
+                             tr("Penzene can't save a drawing as .%1. Save as .penz, .mol, .sdf, .rxn, .rdf, .cdxml or .cdx, "
                                 "or use File → Export… for images.")
                                  .arg(ext));
         return false;
@@ -704,7 +712,7 @@ bool MainWindow::saveAs() {
     QString filter;
     QString path = QFileDialog::getSaveFileName(this, tr("Save As"), path_,
                                                 tr("Penzene document (*.penz);;MDL Molfile (*.mol);;") + v3000 +
-                                                    tr(";;MDL SD file, one record per molecule (*.sdf);;MDL Rxnfile (*.rxn);;ChemDraw XML (*.cdxml);;"
+                                                    tr(";;MDL SD file, one record per molecule (*.sdf);;MDL Rxnfile (*.rxn);;MDL RD file, every reaction step (*.rdf);;ChemDraw XML (*.cdxml);;"
                                                        "ChemDraw, molecules only (*.cdx)"),
                                                 &filter);
     return !path.isEmpty() && saveTo(path, filter == v3000);
@@ -1742,8 +1750,8 @@ void MainWindow::buildMenus() {
         QApplication::clipboard()->setText(QString::fromStdString(chem::toInchiKey(canvas_->selectedSubset())));
     });
     edit->addAction(tr("Copy as &Reaction SMILES"), this, [this] {
-        if (auto r = chem::reactionOf(canvas_->selectedSubset()))
-            QApplication::clipboard()->setText(QString::fromStdString(chem::toReactionSmiles(*r)));
+        if (const auto steps = chem::reactionsOf(canvas_->selectedSubset()); !steps.empty())
+            QApplication::clipboard()->setText(QString::fromStdString(chem::toReactionSmiles(steps)));  // a line a step
         else
             statusBar()->showMessage(tr("No reaction arrow in the drawing"), 4000);
     });
