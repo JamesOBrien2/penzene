@@ -304,6 +304,22 @@ TEST_CASE("CDXML label nodes: reagent labels become text, R groups stay labelled
     CHECK(*back == *doc);
 }
 
+TEST_CASE("a ChemDraw label node without an id leaves the molecules alone (#372)") {
+    // tests/data/labels.cdxml, with the reagent label's fragment and node left without ids.
+    const QByteArray cdxml = R"(<?xml version="1.0"?><CDXML BondLength="14.40"><page id="1">
+        <fragment id="10"><n id="11" p="100 100"/>
+        <n id="12" p="112.47 107.20" NodeType="GenericNickname" GenericNickname="R"><t p="109 111"><s size="10">R</s></t></n>
+        <b id="13" B="11" E="12"/></fragment>
+        <fragment><n p="160 80" NodeType="Unspecified"><t p="150 83" BoundingBox="150 76 190 83"><s size="7">LiBr, acetone</s></t></n></fragment>
+        </page></CDXML>)";
+    auto doc = chem::fromChemDraw(cdxml);
+    REQUIRE(doc);
+    CHECK(doc->atoms.size() == 2);  // CH3-R
+    CHECK(doc->bonds.size() == 1);
+    REQUIRE(doc->texts.size() == 1);
+    CHECK(doc->texts[0].text == "LiBr, acetone");
+}
+
 TEST_CASE("CDXML export keeps abbreviations as ChemDraw nicknames (#333)") {
     Document d = *chem::fromSmiles("c1ccccc1");
     const int boc = d.addAtom({d.atoms[0].pos.x() + kBondLength, d.atoms[0].pos.y()});
