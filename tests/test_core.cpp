@@ -820,3 +820,15 @@ TEST_CASE(".penz rejects what would abort the app later: unknown elements, dupli
 TEST_CASE("formula charges come after the counts") {
     CHECK(chem::properties(*chem::fromSmiles("[O-]S(=O)(=O)[O-]"))->formula == "O4S-2");
 }
+
+TEST_CASE("merging atoms keeps the dropped atom's brackets and ring overrides (#303)") {
+    Document doc;
+    for (int i = 0; i < 4; ++i) doc.addAtom({i * kBondLength, 0});
+    doc.bonds = {{0, 1}, {2, 3}};
+    doc.brackets = {{{2, 3}}};
+    doc.aromaticCircleOverrides = {{1, 3}};
+    edit::mergeAtoms(doc, {{0, 3}});  // atom 3 fuses onto atom 0
+    REQUIRE(doc.atoms.size() == 3);
+    CHECK(doc.brackets.at(0).atoms == std::vector<int>{0, 2});
+    CHECK(doc.aromaticCircleOverrides == std::vector<std::vector<int>>{{0, 1}});
+}
