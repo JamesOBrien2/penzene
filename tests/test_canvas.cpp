@@ -11,6 +11,7 @@
 #include <QSettings>
 #include <QStatusBar>
 #include <QFileDialog>
+#include <QFileOpenEvent>
 
 #include <QLockFile>
 #include <QMessageBox>
@@ -950,6 +951,14 @@ TEST_CASE("recent files, autosave and crash recovery (#91)") {
     after.findChild<QUndoStack*>()->setClean();
     after.autosave();
     CHECK_FALSE(QFile::exists(MainWindow::autosavePath()));
+}
+
+TEST_CASE("a file handed over by the system (Finder's Open) opens in the window (#332)") {
+    App app;
+    MainWindow w;
+    QFileOpenEvent open(QString(PENZENE_TEST_DATA) + "/aspirin.mol");
+    QApplication::sendEvent(qApp, &open);
+    CHECK(chem::toSmiles(w.findChild<Canvas*>()->document()) == chem::toSmiles(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O")));
 }
 
 TEST_CASE("preferences: default style for new documents, export resolution and background (#90)") {

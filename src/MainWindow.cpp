@@ -23,6 +23,7 @@
 #include <QCloseEvent>
 #include <QColorDialog>
 #include <QFile>
+#include <QFileOpenEvent>
 #include <QLockFile>
 #include <QSaveFile>
 #include <QTabBar>
@@ -310,6 +311,7 @@ void MainWindow::buildWelcome() {
     auto* centre = new QGridLayout(canvas_->viewport());
     centre->addWidget(welcome_, 0, 0, Qt::AlignCenter);
     canvas_->viewport()->installEventFilter(this);
+    qApp->installEventFilter(this);  // macOS hands over files opened from Finder as QFileOpenEvents (#332)
     connect(canvas_, &Canvas::documentChanged, welcome_, [this] {
         if (!canvas_->document().empty()) welcome_->hide();
     });
@@ -342,6 +344,10 @@ void MainWindow::paintExamples() {
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* e) {
+    if (watched == qApp && e->type() == QEvent::FileOpen) {
+        if (maybeSave()) openFile(static_cast<QFileOpenEvent*>(e)->file());
+        return true;
+    }
     if (watched == canvas_->viewport() && e->type() == QEvent::MouseButtonPress) {
         for (auto* f : flyouts_)  // drawing closes a tool flyout unless it's pinned
             if (!f->findChild<QToolButton*>("pin")->isChecked()) f->hide();
