@@ -1053,7 +1053,8 @@ QByteArray toCdxml(const Document& doc) {
             group.atoms.push_back(a);
             for (int nb : doc.neighbors(int(i))) group.atoms.push_back(doc.atoms[nb]), group.bonds.push_back({0, int(group.atoms.size()) - 1});
             const int atomsBefore = int(group.atoms.size()), bondsBefore = int(group.bonds.size());
-            if (abbreviationHead(a.label) && attach(group, 0, a.label.toStdString())) {
+            if (const auto head = abbreviationHead(a.label); head && attach(group, 0, a.label.toStdString())) {
+                group.atoms[0].charge += a.charge - head->charge;  // a charged group: N3- (#382)
                 w.writeAttribute("NodeType", "Nickname");
                 w.writeStartElement("fragment");
                 w.writeAttribute("id", QString::number(id++));
