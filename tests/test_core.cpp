@@ -875,3 +875,22 @@ TEST_CASE("a .penz file keeps its pages, and older versions still open the first
     root["pages"] = pages;
     CHECK(sheetsFromJson(QJsonDocument(root).toJson()).empty());
 }
+
+TEST_CASE("a ChemDraw text of size 0 saves a .penz that opens again (#316)") {
+    const QByteArray cdxml = R"(<?xml version="1.0"?><CDXML><page>
+        <t p="100 100"><s size="0">heat</s></t></page></CDXML>)";
+    auto doc = chem::fromChemDraw(cdxml);
+    REQUIRE(doc);
+    REQUIRE(doc->texts.size() == 1);
+    CHECK(doc->texts[0].scale > 0);
+    CHECK(Document::fromJson(doc->toJson()));
+    // A file saved before the fix opens, at the normal size.
+    Document old;
+    old.texts = {{{0, 0}, "heat"}};
+    QByteArray json = old.toJson();
+    json.replace("\"text\": \"heat\"", "\"scale\": 0, \"text\": \"heat\"");
+    REQUIRE(json.contains("\"scale\": 0"));
+    auto reopened = Document::fromJson(json);
+    REQUIRE(reopened);
+    CHECK(reopened->texts[0].scale == 1);
+}

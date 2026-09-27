@@ -188,7 +188,8 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         auto o = v.toObject();
         Text t{{o["x"].toDouble(), o["y"].toDouble()}, o["text"].toString(), o["scale"].toDouble(1),
                QColor(o["color"].toString())};
-        if (!finite({t.pos.x(), t.pos.y(), t.scale}) || t.scale <= 0) return std::nullopt;
+        if (!(t.scale > 0)) t.scale = 1;  // files saved before #316 could hold 0
+        if (!finite({t.pos.x(), t.pos.y(), t.scale})) return std::nullopt;
         doc.texts.push_back(t);
     }
     for (const auto& v : root["fills"].toArray()) {

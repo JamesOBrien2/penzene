@@ -11,6 +11,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - **Pages**: A drawing can hold several pages, as tabs along the bottom of the window, each with its own undo history; Edit → Move to Page moves a selection between them. View → Grid and View → Rulers measure the drawing at its final size. <!-- icon: layout-bottombar -->
 - ChemDraw files keep their label size relative to their bonds, so crowded drawings with small labels don't overlap.
 - An arrow with a huge bend, as a damaged file can hold, no longer exhausts memory when drawn.
+- A ChemDraw text of size 0 no longer saves a drawing Penzene can't reopen, and drawings saved that way open again.
 
 ## 1.1.1 (2026-09-27)
 
