@@ -211,6 +211,9 @@ void Canvas::refresh() {
     QPainter p(&picture_);
     paintDocument(p, doc_, {theme_.ink, theme_.error});
     p.end();
+    // The scene grows to hold the drawing and its page with room to spare, never shrinking under the view (#326).
+    const QRectF drawn = documentBounds(doc_).united(pageRect(doc_)).adjusted(-2000, -2000, 2000, 2000);
+    if (!scene()->sceneRect().contains(drawn)) scene()->setSceneRect(scene()->sceneRect().united(drawn));
     viewport()->update();
 }
 
