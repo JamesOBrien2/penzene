@@ -951,5 +951,21 @@ TEST_CASE("MOL export writes Kekulé bonds, not query bond type 4 (#321)") {
         auto back = chem::fromMolBlock(mol);
         REQUIRE(back);
         CHECK(chem::toSmiles(*back) == "c1ccccc1");
+}
+}
+
+TEST_CASE("Clean keeps bond colours and the drawn Kekulé structure (#322)") {
+    auto orders = [](const Document& d) {
+        std::vector<std::tuple<int, int, int>> out;
+        for (const auto& b : d.bonds) out.push_back({std::min(b.a, b.b), std::max(b.a, b.b), b.order});
+        std::sort(out.begin(), out.end());
+        return out;
+    };
+    for (bool flip : {false, true}) {  // either Kekulé form stays as drawn
+        Document d = *chem::fromSmiles("c1ccccc1");
+        for (auto& b : d.bonds) b.order = flip ? 3 - b.order : b.order, b.color = QColor("#ff0000");
+        const Document c = chem::clean2D(d);
+        CHECK(orders(c) == orders(d));
+        for (const auto& b : c.bonds) CHECK(b.color == QColor("#ff0000"));
     }
 }

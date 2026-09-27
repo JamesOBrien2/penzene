@@ -1043,7 +1043,7 @@ static Document cleanFragment(const Document& doc) {
     // Abbreviations stay single nodes, as in ChemDraw: expanding a ring onto a
     // crowded atom squeezes the depictor's layout (#85).
     auto mol = toRDKit(doc, false);
-    perceive(*mol);
+    perceive(*mol, false);  // keeps the drawn Kekulé form (#322)
     layout(*mol);
     RDKit::Chirality::wedgeMolBonds(*mol, &mol->getConformer());
     Document out = fromRDKit(*mol);
@@ -1105,6 +1105,7 @@ Document clean2D(const Document& doc, const std::vector<int>& only) {
                                     was.stereo == BondStereo::Partial;
                 if (styled && b.stereo == BondStereo::None) b.stereo = was.stereo;
                 if (b.order == 2 && was.order == 2) b.position = was.position;
+                b.color = was.color;
             }
             out.bonds.push_back(b);
         }
