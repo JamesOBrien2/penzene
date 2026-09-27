@@ -942,3 +942,14 @@ TEST_CASE("SDF export writes one record per molecule (#330)") {
     CHECK(smiles == std::set<std::string>{"CCO", "N"});
     CHECK(chem::toSdf(Document{}).empty());
 }
+
+TEST_CASE("MOL export writes Kekulé bonds, not query bond type 4 (#321)") {
+    for (bool v3000 : {false, true}) {
+        const std::string mol = chem::toMolBlock(*chem::fromSmiles("c1ccccc1"), v3000);
+        INFO(mol);
+        CHECK(mol.find(v3000 ? "M  V30 1 4 " : "  1  2  4  0") == std::string::npos);
+        auto back = chem::fromMolBlock(mol);
+        REQUIRE(back);
+        CHECK(chem::toSmiles(*back) == "c1ccccc1");
+    }
+}
