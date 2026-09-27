@@ -913,6 +913,19 @@ TEST_CASE("an SDF whose first record has no title keeps that record (#317)") {
     CHECK(chem::toSmiles(*records[1].doc) == "N");
 }
 
+TEST_CASE("a .smi header row is not read as a structure (#329)") {
+    QTemporaryDir dir;
+    const QString path = dir.filePath("lib.smi");
+    QFile f(path);
+    REQUIRE(f.open(QIODevice::WriteOnly));
+    f.write("SMILES Name\nCCO ethanol\nN ammonia\n");
+    f.close();
+    const auto records = chem::readRecords(path);
+    REQUIRE(records.size() == 2);
+    CHECK(records[0].name == "ethanol");
+    CHECK(records[0].doc);
+}
+
 TEST_CASE("ChemDraw export keeps radicals (#319)") {
     for (const char* smiles : {"[CH2]C", "[CH]C"}) {  // doublet and triplet
         auto doc = chem::fromSmiles(smiles);

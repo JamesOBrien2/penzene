@@ -653,6 +653,7 @@ std::vector<Record> readRecords(const QString& path) {
             out.push_back({title.isEmpty() ? n : title, fromMolBlock(block.toStdString())});
         } else {
             const QStringList cols = part.split(QRegularExpression("\\s+"));
+            if (out.empty() && cols[0].compare("SMILES", Qt::CaseInsensitive) == 0) continue;  // a header row (#329)
             const std::string first = cols[0].toStdString();
             out.push_back({cols.size() > 1 ? cols[1] : n, ext == "inchi" ? fromInchi(first) : fromSmiles(first)});
         }
