@@ -4,7 +4,7 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
-## Unreleased
+## 1.4.0 (2026-09-28)
 
 - ChemDraw text opens with a ^ only where it keeps a charge raised: Cu²⁺ comes in as Cu2+, not Cu^2+.
 - Typing a charged abbreviation such as N3- keeps the group and adds the charge (the azide anion), and the charge is drawn with the label.
