@@ -911,3 +911,13 @@ TEST_CASE("an SDF whose first record has no title keeps that record (#317)") {
     REQUIRE(records[1].doc);
     CHECK(chem::toSmiles(*records[1].doc) == "N");
 }
+
+TEST_CASE("ChemDraw export keeps radicals (#319)") {
+    for (const char* smiles : {"[CH2]C", "[CH]C"}) {  // doublet and triplet
+        auto doc = chem::fromSmiles(smiles);
+        REQUIRE(doc);
+        auto back = chem::fromChemDraw(chem::toCdxml(*doc));
+        REQUIRE(back);
+        CHECK(chem::toSmiles(*back) == chem::toSmiles(*doc));
+    }
+}

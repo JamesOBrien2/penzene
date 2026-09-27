@@ -816,6 +816,7 @@ QByteArray toCdxml(const Document& in) {
                 w.writeAttribute("Element", QString::number(a.z));
             }
             if (a.charge) w.writeAttribute("Charge", QString::number(a.charge));
+            if (a.radicals) w.writeAttribute("Radical", a.radicals == 1 ? "Doublet" : "Triplet");
             w.writeEndElement();
         }
         static const char* display[] = {nullptr, "WedgeBegin", "WedgedHashBegin", "Bold", "Dash", "Wavy", nullptr, "Dash"};
