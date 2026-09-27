@@ -274,7 +274,8 @@ static std::vector<QPointF> arrowPoints(const Arrow& a) {
     const double half = wrap(through - from);
     if (half > 0 && sweep < 0) sweep += 2 * M_PI;
     if (half < 0 && sweep > 0) sweep -= 2 * M_PI;
-    const int n = std::max(8, int(std::abs(sweep) * radius / 1.5));  // about 1.5 pt per segment
+    // About 1.5 pt per segment, capped so a huge bend from a file can't exhaust memory (#314).
+    const int n = std::clamp(int(std::min(std::abs(sweep) * radius / 1.5, 720.0)), 8, 720);
     std::vector<QPointF> pts;
     for (int k = 0; k <= n; ++k) {
         double t = from + sweep * k / n;

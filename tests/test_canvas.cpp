@@ -659,6 +659,12 @@ TEST_CASE("curved arrows are circular arcs, exact past 180 degrees (#86)") {
     CHECK(std::abs(mid.y() + 8) < 0.2);
 }
 
+TEST_CASE("a huge arrow bend is drawn with a bounded number of points (#314)") {
+    Arrow a{{0, 0}, {10, 0}};
+    a.bend = 1e7;  // from a file: this took 2.9 GB to draw
+    CHECK(arrowPath(a).elementCount() <= 1000);
+}
+
 TEST_CASE("flip mirrors (enantiomer with wedges kept), align and distribute (#87)") {
     Fixture f;
     auto ala = chem::fromSmiles("C[C@H](N)C(=O)O");
