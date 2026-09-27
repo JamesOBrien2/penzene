@@ -10,6 +10,9 @@
 | ChemDraw `.cdx` | ✓ | ✓ | as CDXML, on every platform |
 | SVG, PNG, PDF | Penzene's own | export | the drawing rides along, so they reopen editable |
 
+On macOS and Linux, installing Penzene makes it the app for `.penz` files and offers it under Open
+With for the structure formats above.
+
 ## The .penz format
 
 A `.penz` file is JSON: `{"format": "penzene", "version": 1, "atoms": [...], "bonds": [...], ...}`,

@@ -127,13 +127,15 @@ set_target_properties(penzene PROPERTIES
     MACOSX_BUNDLE_BUNDLE_NAME "Penzene"
     MACOSX_BUNDLE_ICON_FILE penzene.icns
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
-    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION})
+    MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+    MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/cmake/Info.plist.in)  # the files it opens from Finder
 if(UNIX AND NOT APPLE)  # Linux desktop integration: Flatpak and distribution packages
     include(GNUInstallDirs)
     set(app_id io.github.jamesobrien2.penzene)
     install(TARGETS penzene RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES packaging/linux/${app_id}.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
     install(FILES packaging/linux/${app_id}.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
+    install(FILES packaging/linux/${app_id}.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages)  # .penz
     install(FILES resources/logo.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps RENAME ${app_id}.svg)
 endif()
 if(PENZENE_TESTS)
@@ -164,6 +166,10 @@ add_test(NAME render-grid-check COMMAND penzene --descriptors ${CMAKE_BINARY_DIR
 set_tests_properties(render-grid PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen FIXTURES_SETUP grid)
 set_tests_properties(render-grid-check PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen FIXTURES_REQUIRED grid
                      PASS_REGULAR_EXPRESSION "two,C2H9NO")  # ethanol and ammonia, not ammonia alone
+if(APPLE)  # Finder offers Penzene for .penz and the structure formats (#332)
+    add_test(NAME bundle-document-types COMMAND plutil -extract CFBundleDocumentTypes xml1 -o - $<TARGET_BUNDLE_CONTENT_DIR:penzene>/Info.plist)
+    set_tests_properties(bundle-document-types PROPERTIES PASS_REGULAR_EXPRESSION "io\\.github\\.jamesobrien2\\.penzene\\.document.*cdxml")
+endif()
 # Descriptors CLI: a SMILES and a MOL file, chosen columns, to standard output.
 add_test(NAME descriptors COMMAND penzene --descriptors "CC(=O)Oc1ccccc1C(=O)O" ${CMAKE_SOURCE_DIR}/tests/data/aspirin.mol
          --columns name,formula,tpsa)

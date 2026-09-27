@@ -16,6 +16,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - An arrow with a huge bend, as a damaged file can hold, no longer exhausts memory when drawn.
 - Python: `Document.save` replaces a file whole, so a failed save leaves the old one intact, and it refuses image names (use `export()`) rather than writing MOL text into them.
 - A ChemDraw text of size 0 no longer saves a drawing Penzene can't reopen, and drawings saved that way open again.
+- **Open from Finder and the file manager**: On macOS and Linux, .penz files open in Penzene with a double-click, and MOL, SDF, SMILES, Rxnfile and ChemDraw files offer it under Open With. <!-- icon: file-import -->
 - An SDF file whose first structure has no title opens with that structure.
 - Radicals survive export and copying to ChemDraw.
 - Saving a drawing opened from an SDF or SMILES library asks where to save it instead of overwriting the library, and Save refuses image names rather than writing MOL text into them.
