@@ -14,7 +14,9 @@
 static const char* kStereo[] = {"none", "wedge", "hash", "bold", "dashed", "wavy", "interaction", "partial"};
 static const char* kPosition[] = {"auto", "left", "centre", "right"};
 static const char* kArrow[] = {"reaction", "equilibrium", "resonance", "retro", "fishhook",
-                               "line", "box", "roundedbox", "ellipse"};
+                               "line", "box", "roundedbox", "ellipse",
+                               "s-orbital", "p-orbital", "lobe", "hybrid-orbital"};
+static const char* kLook[] = {"outline", "shaded", "gradient"};
 
 QByteArray Document::toJson() const {
     QJsonArray as, bs;
@@ -44,6 +46,8 @@ QByteArray Document::toJson() const {
         if (a.bend) o["bend"] = a.bend;
         if (a.color.isValid()) o["color"] = a.color.name();
         if (a.dashed) o["dashed"] = true;
+        if (a.look != OrbitalLook::Outline) o["look"] = kLook[int(a.look)];
+        if (a.behind) o["behind"] = true;
         ar.append(o);
     }
     for (const auto& t : texts) {
@@ -182,6 +186,10 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         a.kind = ArrowKind(k - std::begin(kArrow));
         a.color = QColor(o["color"].toString());
         a.dashed = o["dashed"].toBool();
+        auto look = std::find(std::begin(kLook), std::end(kLook), o["look"].toString("outline"));
+        if (look == std::end(kLook)) return std::nullopt;
+        a.look = OrbitalLook(look - std::begin(kLook));
+        a.behind = o["behind"].toBool();
         doc.arrows.push_back(a);
     }
     for (const auto& v : root["texts"].toArray()) {

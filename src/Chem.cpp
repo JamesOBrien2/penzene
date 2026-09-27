@@ -409,6 +409,9 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     };
     static const QStringList labelTypes{"Fragment",    "Nickname",  "GenericNickname", "Unspecified", "Anonymous",
                                         "AnonymousAlternativeGroup", "NamedAlternativeGroup", "Variable"};
+    // Layers: a graphic whose Z is below every atom's is drawn behind the molecule.
+    double moleculeZ = std::numeric_limits<double>::infinity();
+    std::vector<double> arrowZ;
     while (!r.atEnd()) {
         auto tok = r.readNext();
         if (tok == QXmlStreamReader::EndElement) {
@@ -424,6 +427,10 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         if (tok != QXmlStreamReader::StartElement) continue;
         const QString tag = r.name().toString();
         const auto at = r.attributes();
+        auto pushArrow = [&](const Arrow& a) {
+            doc.arrows.push_back(a);
+            arrowZ.push_back(at.hasAttribute("Z") ? at.value("Z").toDouble() : std::numeric_limits<double>::quiet_NaN());
+        };
         const int parentLabel = stack.empty() ? -1 : stack.back().label;
         stack.push_back({tag});
         if (tag == "CDXML") {
@@ -434,6 +441,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         } else if (tag == "b") {
             ++bondCount[at.value("B").toInt()], ++bondCount[at.value("E").toInt()];
         } else if (tag == "n") {
+            if (at.hasAttribute("Z")) moleculeZ = std::min(moleculeZ, at.value("Z").toDouble());
             const int id = at.value("id").toInt();
             for (const Open& o : stack)  // an atom inside a label's fragment
                 if (o.label >= 0) labels[o.label].inner.push_back(point(at.value("p")));
@@ -457,9 +465,25 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             doc.texts.push_back({p, {}});
             text = &doc.texts.back();
         } else if (tag == "graphic") {
-            // Plain lines, boxes and ellipses (not filled ones or orbitals). A graphic ChemDraw
+            // Plain lines, boxes and ellipses (not filled ones), and orbitals. A graphic ChemDraw
             // marks SupersededBy is the old copy of an <arrow> read above: skip it.
             const auto type = at.value("GraphicType");
+            if (type == u"Orbital") {  // s, p, a single lobe or a hybrid; not ovals or d orbitals
+                // Centre, the main lobe's tip (an s orbital's rim), and a half-width we don't keep.
+                // ChemDraw's Filled is our solid Shaded; its Shaded is our Gradient.
+                const auto kind = at.value("OrbitalType");
+                Arrow a{point(at.value("Center3D")), point(at.value("MajorAxisEnd3D"))};
+                a.kind = kind.startsWith(u"s") ? ArrowKind::SOrbital
+                         : kind.startsWith(u"lobe") ? ArrowKind::Lobe
+                         : kind.startsWith(u"p") ? ArrowKind::POrbital
+                         : kind.startsWith(u"hybrid") ? ArrowKind::HybridOrbital
+                                                      : ArrowKind::Line;
+                a.look = kind.endsWith(u"Filled") ? OrbitalLook::Shaded
+                         : kind.endsWith(u"Shaded") ? OrbitalLook::Gradient
+                                                    : OrbitalLook::Outline;
+                if (isOrbital(a.kind) && len(a.to - a.from) > 1e-6) pushArrow(a);
+                continue;
+            }
             if (at.hasAttribute("SupersededBy") || !at.value("ArrowType").isEmpty() || at.value("OvalType").contains(u"Filled"))
                 continue;
             auto box = at.value("BoundingBox").split(' ');
@@ -483,14 +507,14 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             } else {
                 continue;
             }
-            doc.arrows.push_back(a);
+            pushArrow(a);
         } else if (tag == "arrow") {
             const auto head = at.value("ArrowheadHead"), tail = at.value("ArrowheadTail");
             Arrow a{point(at.value("Tail3D")), point(at.value("Head3D"))};
             if (head.isEmpty() && tail.isEmpty()) {  // a plain line
                 a.kind = ArrowKind::Line;
                 a.dashed = at.value("LineType").contains(u"Dash");
-                doc.arrows.push_back(a);
+                pushArrow(a);
                 continue;
             }
             if (!head.isEmpty() && !tail.isEmpty())
@@ -513,9 +537,10 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
                     a.bend = -QPointF::dotProduct(arcMid - mid, n);
                 }
             }
-            doc.arrows.push_back(a);
+            pushArrow(a);
         }
     }
+    for (size_t k = 0; k < arrowZ.size(); ++k) doc.arrows[k].behind = std::isfinite(moleculeZ) && arrowZ[k] < moleculeZ;
     std::erase_if(doc.texts, [](const Text& t) { return t.text.trimmed().isEmpty(); });
     for (auto& t : doc.texts) t.text = t.text.trimmed().replace('\r', '\n');
     for (auto& l : labels) l.text = l.text.trimmed().replace('\r', '\n');
@@ -848,6 +873,85 @@ QByteArray toCdxml(const Document& in) {
     w.writeAttribute("CreationProgram", "Penzene");
     w.writeStartElement("page");
     w.writeAttribute("id", QString::number(id++));
+    // Stacking (Z, and document order for readers without it): arrows sent behind the molecule first.
+    int z = 1;
+    auto writeArrow = [&](const Arrow& a) {
+        if (isShape(a.kind)) {  // ChemDraw graphics: Line, Rectangle, Oval
+            w.writeStartElement("graphic");
+            w.writeAttribute("id", QString::number(id++));
+        w.writeAttribute("Z", QString::number(z++));
+            w.writeAttribute("BoundingBox", pt(a.from) + " " + pt(a.to));
+            if (isOrbital(a.kind)) {
+                static const char* kType[] = {"s", "p", "lobe", "hybridPlus"};
+                static const char* kLook[] = {"", "Filled", "Shaded"};
+                const QPointF side = a.from + perp(a.to - a.from) * (a.kind == ArrowKind::SOrbital ? 1 : 0.5);
+                w.writeAttribute("GraphicType", "Orbital");
+                w.writeAttribute("OrbitalType", QString(kType[int(a.kind) - int(ArrowKind::SOrbital)]) +
+                                                    kLook[a.kind == ArrowKind::HybridOrbital && a.look == OrbitalLook::Gradient
+                                                              ? 1  // ChemDraw has no shaded hybrid
+                                                              : int(a.look)]);
+                w.writeAttribute("Center3D", pt3(a.from));
+                w.writeAttribute("MajorAxisEnd3D", pt3(a.to));
+                w.writeAttribute("MinorAxisEnd3D", pt3(side));
+            } else if (a.kind == ArrowKind::Line) {
+                w.writeAttribute("GraphicType", "Line");
+            } else if (a.kind == ArrowKind::Ellipse) {
+                const QRectF r = QRectF(a.from, a.to).normalized();
+                w.writeAttribute("GraphicType", "Oval");
+                w.writeAttribute("Center3D", pt3(r.center()));
+                w.writeAttribute("MajorAxisEnd3D", pt3({r.right(), r.center().y()}));
+                w.writeAttribute("MinorAxisEnd3D", pt3({r.center().x(), r.bottom()}));
+            } else {
+                w.writeAttribute("GraphicType", "Rectangle");
+                if (a.kind == ArrowKind::RoundedBox) w.writeAttribute("RectangleType", "RoundEdge");
+            }
+            if (a.dashed) w.writeAttribute("LineType", "Dashed");
+            w.writeEndElement();
+            return;
+        }
+        w.writeStartElement("arrow");
+        w.writeAttribute("id", QString::number(id++));
+        w.writeAttribute("Z", QString::number(z++));
+        w.writeAttribute("Head3D", pt3(a.to));
+        w.writeAttribute("Tail3D", pt3(a.from));
+        switch (a.kind) {
+        case ArrowKind::Reaction: w.writeAttribute("ArrowheadHead", "Full"); break;
+        case ArrowKind::Retro:
+            w.writeAttribute("ArrowheadHead", "Full");
+            w.writeAttribute("ArrowheadType", "Hollow");
+            break;
+        case ArrowKind::Resonance:
+            w.writeAttribute("ArrowheadHead", "Full");
+            w.writeAttribute("ArrowheadTail", "Full");
+            break;
+        case ArrowKind::Equilibrium:
+            w.writeAttribute("ArrowheadHead", "HalfLeft");
+            w.writeAttribute("ArrowheadTail", "HalfLeft");
+            w.writeAttribute("ArrowShaftSpacing", "4");
+            break;
+        case ArrowKind::Fishhook: w.writeAttribute("ArrowheadHead", "HalfLeft"); break;
+        }
+        if (a.kind != ArrowKind::Retro) w.writeAttribute("ArrowheadType", "Solid");
+        if (std::abs(a.bend) > 1e-6 && a.kind != ArrowKind::Equilibrium) {
+            // The circle through both ends and the arc's midpoint (bend off the chord, as read back).
+            const QPointF d = a.to - a.from, mid = (a.from + a.to) / 2;
+            const double c = std::hypot(d.x(), d.y()) / 2, s = std::abs(a.bend);
+            const QPointF n(-d.y() / (2 * c), d.x() / (2 * c)), arcMid = mid - a.bend * n;
+            const double r = (c * c + s * s) / (2 * s);
+            const QPointF centre = arcMid + (mid - arcMid) / s * r;
+            auto angle = [&](QPointF p) { return std::atan2(p.y() - centre.y(), p.x() - centre.x()) * 180 / std::numbers::pi; };
+            auto wrap = [](double x) { return std::fmod(std::fmod(x, 360) + 360, 360); };
+            double sweep = wrap(angle(a.to) - angle(a.from));
+            if (wrap(angle(arcMid) - angle(a.from)) > sweep) sweep -= 360;
+            w.writeAttribute("Center3D", pt3(centre));
+            w.writeAttribute("MajorAxisEnd3D", pt3(centre + QPointF(r, 0)));
+            w.writeAttribute("MinorAxisEnd3D", pt3(centre + QPointF(0, r)));
+            w.writeAttribute("AngularSize", QString::number(-sweep, 'f', 2));  // ChemDraw: head = tail turned by -AngularSize
+        }
+        w.writeEndElement();
+    };
+    for (const Arrow& a : doc.arrows)
+        if (a.behind) writeArrow(a);
     if (!doc.atoms.empty()) {
         w.writeStartElement("fragment");
         w.writeAttribute("id", QString::number(id++));
@@ -858,6 +962,7 @@ QByteArray toCdxml(const Document& in) {
             const QString label = i < in.atoms.size() && a.z == 0 ? in.atoms[i].label : QString();
             w.writeStartElement("n");
             w.writeAttribute("id", QString::number(id++));
+            w.writeAttribute("Z", QString::number(z));
             w.writeAttribute("p", pt(a.pos));
             if (!label.isEmpty()) {
                 w.writeAttribute("NodeType", "GenericNickname");
@@ -900,67 +1005,9 @@ QByteArray toCdxml(const Document& in) {
         w.writeEndElement();
         w.writeEndElement();
     }
-    for (const Arrow& a : doc.arrows) {
-        if (isShape(a.kind)) {  // ChemDraw graphics: Line, Rectangle, Oval
-            w.writeStartElement("graphic");
-            w.writeAttribute("id", QString::number(id++));
-            w.writeAttribute("BoundingBox", pt(a.from) + " " + pt(a.to));
-            if (a.kind == ArrowKind::Line) {
-                w.writeAttribute("GraphicType", "Line");
-            } else if (a.kind == ArrowKind::Ellipse) {
-                const QRectF r = QRectF(a.from, a.to).normalized();
-                w.writeAttribute("GraphicType", "Oval");
-                w.writeAttribute("Center3D", pt3(r.center()));
-                w.writeAttribute("MajorAxisEnd3D", pt3({r.right(), r.center().y()}));
-                w.writeAttribute("MinorAxisEnd3D", pt3({r.center().x(), r.bottom()}));
-            } else {
-                w.writeAttribute("GraphicType", "Rectangle");
-                if (a.kind == ArrowKind::RoundedBox) w.writeAttribute("RectangleType", "RoundEdge");
-            }
-            if (a.dashed) w.writeAttribute("LineType", "Dashed");
-            w.writeEndElement();
-            continue;
-        }
-        w.writeStartElement("arrow");
-        w.writeAttribute("id", QString::number(id++));
-        w.writeAttribute("Head3D", pt3(a.to));
-        w.writeAttribute("Tail3D", pt3(a.from));
-        switch (a.kind) {
-        case ArrowKind::Reaction: w.writeAttribute("ArrowheadHead", "Full"); break;
-        case ArrowKind::Retro:
-            w.writeAttribute("ArrowheadHead", "Full");
-            w.writeAttribute("ArrowheadType", "Hollow");
-            break;
-        case ArrowKind::Resonance:
-            w.writeAttribute("ArrowheadHead", "Full");
-            w.writeAttribute("ArrowheadTail", "Full");
-            break;
-        case ArrowKind::Equilibrium:
-            w.writeAttribute("ArrowheadHead", "HalfLeft");
-            w.writeAttribute("ArrowheadTail", "HalfLeft");
-            w.writeAttribute("ArrowShaftSpacing", "4");
-            break;
-        case ArrowKind::Fishhook: w.writeAttribute("ArrowheadHead", "HalfLeft"); break;
-        }
-        if (a.kind != ArrowKind::Retro) w.writeAttribute("ArrowheadType", "Solid");
-        if (std::abs(a.bend) > 1e-6 && a.kind != ArrowKind::Equilibrium) {
-            // The circle through both ends and the arc's midpoint (bend off the chord, as read back).
-            const QPointF d = a.to - a.from, mid = (a.from + a.to) / 2;
-            const double c = std::hypot(d.x(), d.y()) / 2, s = std::abs(a.bend);
-            const QPointF n(-d.y() / (2 * c), d.x() / (2 * c)), arcMid = mid - a.bend * n;
-            const double r = (c * c + s * s) / (2 * s);
-            const QPointF centre = arcMid + (mid - arcMid) / s * r;
-            auto angle = [&](QPointF p) { return std::atan2(p.y() - centre.y(), p.x() - centre.x()) * 180 / std::numbers::pi; };
-            auto wrap = [](double x) { return std::fmod(std::fmod(x, 360) + 360, 360); };
-            double sweep = wrap(angle(a.to) - angle(a.from));
-            if (wrap(angle(arcMid) - angle(a.from)) > sweep) sweep -= 360;
-            w.writeAttribute("Center3D", pt3(centre));
-            w.writeAttribute("MajorAxisEnd3D", pt3(centre + QPointF(r, 0)));
-            w.writeAttribute("MinorAxisEnd3D", pt3(centre + QPointF(0, r)));
-            w.writeAttribute("AngularSize", QString::number(-sweep, 'f', 2));  // ChemDraw: head = tail turned by -AngularSize
-        }
-        w.writeEndElement();
-    }
+    ++z;  // the molecule's layer
+    for (const Arrow& a : doc.arrows)
+        if (!a.behind) writeArrow(a);
     w.writeEndDocument();
     return out;
 }

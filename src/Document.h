@@ -47,9 +47,16 @@ inline int chemicalOrder(const Bond& b) {
 
 // Arrows, and the plain shapes that share their two-point geometry (so they
 // select, move, recolour and save the same way): a line from `from` to `to`, or
-// a box or ellipse with `from` and `to` as opposite corners.
-enum class ArrowKind { Reaction, Equilibrium, Resonance, Retro, Fishhook, Line, Box, RoundedBox, Ellipse };
+// a box or ellipse with `from` and `to` as opposite corners. Orbitals run from
+// their centre (`from`, the node) to the tip of their main lobe (`to`); an s
+// orbital's `to` is on its rim.
+enum class ArrowKind { Reaction, Equilibrium, Resonance, Retro, Fishhook, Line, Box, RoundedBox, Ellipse,
+                       SOrbital, POrbital, Lobe, HybridOrbital };
 inline bool isShape(ArrowKind k) { return k >= ArrowKind::Line; }
+inline bool isOrbital(ArrowKind k) { return k >= ArrowKind::SOrbital; }
+// How an orbital's phases are drawn: lines only, the main phase filled solid, or
+// both phases filled with a soft gradient (ChemDraw's "shaded").
+enum class OrbitalLook { Outline, Shaded, Gradient };
 
 // Straight when bend == 0; otherwise a curve whose midpoint sits `bend` points
 // to the left of from->to as seen on screen (electron pushing).
@@ -59,6 +66,8 @@ struct Arrow {
     double bend = 0;
     QColor color;
     bool dashed = false;
+    OrbitalLook look = OrbitalLook::Outline;  // orbitals only
+    bool behind = false;  // under the molecule (Send to Back), not over it
     bool operator==(const Arrow&) const = default;
 };
 

@@ -1154,6 +1154,15 @@ static Document arrowDoc(ArrowKind kind, double bend = 0, bool dashed = false) {
     return d;
 }
 
+// An orbital pointing up from the icon's centre.
+static Document orbitalDoc(ArrowKind kind, OrbitalLook look) {
+    Document d;
+    Arrow a{{0, 0}, {0, kind == ArrowKind::SOrbital ? -6.0 : -14.0}, kind};
+    a.look = look;
+    d.arrows.push_back(a);
+    return d;
+}
+
 static Document textDoc(const QString& s) {
     Document d;
     d.texts.push_back({{0, 0}, s});
@@ -1591,6 +1600,15 @@ void MainWindow::buildTools() {
     add(docIcon(arrowDoc(ArrowKind::Ellipse)), tr("Ellipse") + shape, arrow(ArrowKind::Ellipse, false));
     add(docIcon(arrowDoc(ArrowKind::Ellipse, 0, true)), tr("Dashed ellipse") + shape, arrow(ArrowKind::Ellipse, false, true));
     add(docIcon(arrowDoc(ArrowKind::Box)), tr("Box") + shape, arrow(ArrowKind::Box, false));
+    // Orbitals: s, p, lobe and hybrid across, a row for each look; the colour tool colours them.
+    section();
+    const QString orbital = tr(" (click an atom to centre one on it, drag to point it; click one to restyle it)");
+    using OL = OrbitalLook;
+    for (auto [look, lookName] : {std::pair{OL::Outline, tr("outline")}, {OL::Shaded, tr("shaded")}, {OL::Gradient, tr("gradient")}})
+        for (auto [kind, name] : {std::pair{ArrowKind::SOrbital, tr("s orbital")}, {ArrowKind::POrbital, tr("p orbital")},
+                                  {ArrowKind::Lobe, tr("Lobe")}, {ArrowKind::HybridOrbital, tr("Hybrid orbital")}})
+            add(docIcon(orbitalDoc(kind, look)), name + ", " + lookName + orbital,
+                [this, kind, look] { canvas_->setTool(T::Arrow), canvas_->setArrow(kind, false, false, look); });
     section();
     keys["t"] = add(docIcon(textDoc("T")), tr("Text (click to add or edit; H2O is set as H₂O) — t"), tool(T::Text));
     (*groups)[1].railButton->defaultAction()->setChecked(true);  // the single bond, chosen at start

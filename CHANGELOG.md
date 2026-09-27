@@ -4,6 +4,10 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
+## Unreleased
+
+- **Orbitals**: s, p, lobe and hybrid orbitals in Shapes, outlined, shaded or with a gradient, in any colour. Right-click to bring one to the front or send it behind the drawing; ChemDraw files keep them. <!-- icon: shapes -->
+
 ## 1.2.0 (2026-09-27)
 
 - **Tool rail**: All the tools in one rail on the left, grouped as Select, Bonds, Rings, Atoms, Arrows and Shapes; a group's tools open beside it, and can be pinned open. The Draw, Chemistry and Figure switch is gone. <!-- icon: layout-sidebar -->

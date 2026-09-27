@@ -38,4 +38,9 @@ struct Hotspot {
     bool valid() const { return atom >= 0 || bond >= 0; }
 };
 Hotspot hotkey(Document& doc, Hotspot h, const QString& key);
+
+// Layers, as in ChemDraw: arrows, shapes and orbitals stack behind or in front of the
+// molecule, which counts as one layer. Returns where the moved arrows ended up.
+enum class Restack { Front, Forward, Backward, Back };
+std::vector<int> restack(Document& doc, const std::vector<int>& arrows, Restack how);
 }  // namespace edit

@@ -1,4 +1,5 @@
 #include "Chem.h"
+#include "Geometry.h"
 #include "Edit.h"
 #include "Render.h"
 
@@ -1033,4 +1034,63 @@ TEST_CASE("CDXML import's Kekulé restore isn't fooled by overlapping atoms (#36
         for (const auto& bond : back->bonds) doubles += (bond.a == i || bond.b == i) && bond.order == 2;
         CHECK(doubles <= 1);
     }
+}
+
+TEST_CASE("orbitals: kind, look and colour survive .penz and CDXML (#204)") {
+    const QByteArray cdxml = R"(<?xml version="1.0" encoding="UTF-8" ?>
+<CDXML BondLength="14.4"><page id="1">
+<fragment id="2"><n id="3" p="0 0" Z="10"/><n id="4" p="14.4 0" Z="11"/><b id="5" B="3" E="4"/></fragment>
+<graphic id="6" Z="5" BoundingBox="6 0 0 0" GraphicType="Orbital" OvalType="Circle Shaded" OrbitalType="sShaded" Center3D="0 0 0" MajorAxisEnd3D="6 0 0" MinorAxisEnd3D="0 6 0"/>
+<graphic id="7" BoundingBox="14.4 -12 14.4 0" GraphicType="Orbital" OrbitalType="pFilled" Center3D="14.4 0 0" MajorAxisEnd3D="14.4 -12 0" MinorAxisEnd3D="20.4 0 0"/>
+<graphic id="8" BoundingBox="0 12 0 0" GraphicType="Orbital" OrbitalType="hybridPlus" Center3D="0 0 0" MajorAxisEnd3D="0 12 0" MinorAxisEnd3D="6 0 0"/>
+<graphic id="9" BoundingBox="0 12 0 0" GraphicType="Orbital" OrbitalType="dz2Plus" Center3D="0 0 0" MajorAxisEnd3D="0 12 0" MinorAxisEnd3D="6 0 0"/>
+</page></CDXML>)";
+    auto doc = chem::fromChemDraw(cdxml);
+    REQUIRE(doc);
+    REQUIRE(doc->arrows.size() == 3);  // no d orbitals
+    // ChemDraw's Shaded is our gradient, its Filled our solid shading.
+    CHECK(doc->arrows[0].kind == ArrowKind::SOrbital);
+    CHECK(doc->arrows[0].look == OrbitalLook::Gradient);
+    CHECK(doc->arrows[0].behind);  // below the atoms' Z
+    CHECK(!doc->arrows[1].behind);
+    CHECK(doc->arrows[1].kind == ArrowKind::POrbital);
+    CHECK(doc->arrows[1].look == OrbitalLook::Shaded);
+    CHECK(doc->arrows[1].from == doc->atoms[1].pos);
+    CHECK(doc->arrows[1].to.y() < doc->arrows[1].from.y());
+    CHECK(doc->arrows[2].kind == ArrowKind::HybridOrbital);
+    CHECK(doc->arrows[2].look == OrbitalLook::Outline);
+
+    doc->arrows[1].color = QColor(200, 30, 30);
+    auto again = Document::fromJson(doc->toJson());
+    REQUIRE(again);
+    CHECK(again->arrows == doc->arrows);
+
+    auto back = chem::fromChemDraw(chem::toCdxml(*doc));
+    REQUIRE(back);
+    REQUIRE(back->arrows.size() == 3);
+    for (int i = 0; i < 3; ++i) {
+        CHECK(back->arrows[i].kind == doc->arrows[i].kind);
+        CHECK(back->arrows[i].look == doc->arrows[i].look);
+        CHECK(back->arrows[i].behind == doc->arrows[i].behind);
+        CHECK(len(back->arrows[i].to - doc->arrows[i].to) < 0.05);
+    }
+}
+
+TEST_CASE("arrange: arrows and orbitals stack around the molecule's layer (#204)") {
+    Document doc;
+    for (int i = 0; i < 3; ++i) doc.arrows.push_back({{double(i), 0}, {double(i), 5}, ArrowKind::Line});
+    doc.arrows[0].behind = true;  // stack: 0 | molecule | 1 2
+    auto xs = [&] {
+        std::vector<std::pair<double, bool>> v;
+        for (const auto& a : doc.arrows) v.push_back({a.from.x(), a.behind});
+        return v;
+    };
+    CHECK(edit::restack(doc, {2}, edit::Restack::Back) == std::vector<int>{0});
+    CHECK(xs() == std::vector<std::pair<double, bool>>{{2, true}, {0, true}, {1, false}});
+    CHECK(edit::restack(doc, {1}, edit::Restack::Forward) == std::vector<int>{1});  // past the molecule
+    CHECK(xs() == std::vector<std::pair<double, bool>>{{2, true}, {0, false}, {1, false}});
+    CHECK(edit::restack(doc, {1}, edit::Restack::Backward) == std::vector<int>{1});  // back under it
+    CHECK(xs() == std::vector<std::pair<double, bool>>{{2, true}, {0, true}, {1, false}});
+    CHECK(edit::restack(doc, {0}, edit::Restack::Front) == std::vector<int>{2});
+    CHECK(xs() == std::vector<std::pair<double, bool>>{{0, true}, {1, false}, {2, false}});
 }

@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QPaintEngine>
 #include <QPainter>
 #include <QPicture>
 #include <QSet>
@@ -286,7 +287,37 @@ static std::vector<QPointF> arrowPoints(const Arrow& a) {
     return pts;
 }
 
+// An orbital's lobes, each with its phase (true: the main one). A lobe is a
+// slim teardrop from the node to a rounded tip.
+static std::vector<std::pair<QPainterPath, bool>> orbitalLobes(const Arrow& a) {
+    const double L = len(a.to - a.from);
+    if (a.kind == ArrowKind::SOrbital) {
+        QPainterPath s;
+        s.addEllipse(a.from, L, L);
+        return {{s, true}};
+    }
+    auto lobe = [&](double length, double width, bool back) {
+        QPainterPath l;
+        l.moveTo(0, 0);
+        l.cubicTo(0.35 * length, width, length, 0.85 * width, length, 0);
+        l.cubicTo(length, -0.85 * width, 0.35 * length, -width, 0, 0);
+        QTransform t;
+        t.translate(a.from.x(), a.from.y());
+        t.rotateRadians(std::atan2(a.to.y() - a.from.y(), a.to.x() - a.from.x()) + (back ? M_PI : 0));
+        return t.map(l);
+    };
+    std::vector<std::pair<QPainterPath, bool>> lobes{{lobe(L, 0.42 * L, false), true}};
+    if (a.kind == ArrowKind::POrbital) lobes.push_back({lobe(L, 0.42 * L, true), false});
+    if (a.kind == ArrowKind::HybridOrbital) lobes.push_back({lobe(0.4 * L, 0.2 * L, true), false});
+    return lobes;
+}
+
 QPainterPath arrowPath(const Arrow& a) {
+    if (isOrbital(a.kind)) {
+        QPainterPath path;
+        for (const auto& [lobe, main] : orbitalLobes(a)) path.addPath(lobe);
+        return path;
+    }
     if (isShape(a.kind) && a.kind != ArrowKind::Line) {
         const QRectF r = QRectF(a.from, a.to).normalized();
         QPainterPath path;
@@ -337,6 +368,50 @@ static void drawHead(QPainter& p, QPointF tip, QPointF dir, int sides = 0) {
     p.drawPolygon(head);
     p.setBrush(Qt::NoBrush);
     p.setPen(shaft);
+}
+
+static QColor mix(const QColor& c, double white) {
+    return QColor::fromRgbF(c.redF() + (1 - c.redF()) * white, c.greenF() + (1 - c.greenF()) * white,
+                            c.blueF() + (1 - c.blueF()) * white, c.alphaF());
+}
+
+// Each phase filled for its look, then outlined.
+static void drawOrbital(QPainter& p, const Arrow& a, const QColor& color, double lineWidth) {
+    QPainterPathStroker outline;
+    outline.setWidth(lineWidth);
+    outline.setJoinStyle(Qt::RoundJoin);
+    const QPointF light(-1, -1);  // highlights toward the top left
+    for (const auto& [lobe, main] : orbitalLobes(a)) {
+        const QRectF r = lobe.boundingRect();
+        const double radius = 0.5 * std::max(r.width(), r.height());
+        if (a.look == OrbitalLook::Shaded && main) {
+            p.fillPath(lobe, color);
+        } else if (a.look == OrbitalLook::Gradient) {
+            const QColor inner = main ? mix(color, 0.75) : QColor(Qt::white), outer = main ? color : mix(color, 0.7);
+            const QPointF focus = r.center() + light * 0.3 * radius;
+            if (p.paintEngine() && p.paintEngine()->type() == QPaintEngine::Pdf) {
+                // ponytail: Qt writes gradient fills with an uncoloured pattern colour space, which
+                // Apple's PDF renderer (Preview, Keynote, Word on macOS) skips; so PDFs get 16 vector
+                // bands instead. Drop this once Qt writes a plain /Pattern colour space.
+                constexpr int kBands = 16;
+                p.fillPath(lobe, outer);
+                for (int k = kBands - 1; k > 0; --k) {
+                    const double t = double(k) / kBands;
+                    QPainterPath band;
+                    band.addEllipse(focus + (r.center() - focus) * t, radius * t, radius * t);
+                    p.fillPath(lobe.intersected(band), QColor::fromRgbF(inner.redF() + (outer.redF() - inner.redF()) * t,
+                                                                         inner.greenF() + (outer.greenF() - inner.greenF()) * t,
+                                                                         inner.blueF() + (outer.blueF() - inner.blueF()) * t));
+                }
+            } else {
+                QRadialGradient g(r.center(), radius, focus);
+                g.setColorAt(0, inner);
+                g.setColorAt(1, outer);
+                p.fillPath(lobe, g);
+            }
+        }
+        p.fillPath(outline.createStroke(lobe), color);
+    }
 }
 
 static void drawArrow(QPainter& p, const Arrow& a) {
@@ -448,6 +523,19 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
     p.setBrush(Qt::NoBrush);
     // A colour the user gave an item wins; otherwise the ink (the theme's on screen, black in exports).
     auto ink = [&](const QColor& own) { return own.isValid() ? own : style.ink; };
+    // Arrows, shapes and orbitals sent behind the molecule, then (at the end) those over it.
+    auto drawArrows = [&](bool behind) {
+        for (const auto& a : doc.arrows) {
+            if (a.behind != behind) continue;
+            if (isOrbital(a.kind)) {
+                drawOrbital(p, a, ink(a.color), lineWidth);
+                continue;
+            }
+            p.setPen(QPen(ink(a.color), lineWidth, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin));
+            drawArrow(p, a);
+        }
+    };
+    drawArrows(true);
     // Aromatic circles: ring bonds drawn single, with a circle inside each ring.
     std::vector<std::vector<int>> circles;
     QSet<int> inCircle;  // bonds drawn single because of a circle
@@ -528,10 +616,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         }
         if (info[i].valenceError && !labeled[i]) p.drawEllipse(a.pos, 3, 3);
     }
-    for (const auto& a : doc.arrows) {
-        p.setPen(QPen(ink(a.color), lineWidth, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin));
-        drawArrow(p, a);
-    }
+    drawArrows(false);
     for (const auto& t : doc.texts) p.fillPath(textPath(t, st), ink(t.color));
     // Atom-map numbers (:n) and, when shown, indices from 1: small, in the atom's widest gap,
     // ties (a ring atom's equal gaps) going to the side facing out of the drawing.
