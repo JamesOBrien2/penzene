@@ -5,6 +5,9 @@
 #include <QDir>
 #include <QFile>
 #include <QImage>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPainter>
 #include <QTemporaryDir>
 
@@ -850,4 +853,25 @@ TEST_CASE("merging atoms keeps the dropped atom's brackets and ring overrides (#
     REQUIRE(doc.atoms.size() == 3);
     CHECK(doc.brackets.at(0).atoms == std::vector<int>{0, 2});
     CHECK(doc.aromaticCircleOverrides == std::vector<std::vector<int>>{{0, 1}});
+}
+
+TEST_CASE("a .penz file keeps its pages, and older versions still open the first (#219)") {
+    Document one, two;
+    one.addAtom({0, 0});
+    two.addAtom({0, 0}, 8), two.addAtom({kBondLength, 0}, 7);
+    two.bonds = {{0, 1}};
+    const std::vector<Sheet> sheets{{"Scheme", one}, {"Mechanism", two}};
+    const QByteArray json = sheetsToJson(sheets);
+    CHECK(sheetsFromJson(json) == sheets);
+    CHECK(Document::fromJson(json) == one);  // what a version without pages reads
+    const auto single = sheetsFromJson(one.toJson());
+    REQUIRE(single.size() == 1);
+    CHECK(single[0].name == "Page 1");
+    QJsonObject root = QJsonDocument::fromJson(json).object();
+    QJsonArray pages = root["pages"].toArray();
+    QJsonObject second = pages[0].toObject();
+    second["version"] = 9;  // a page this version can't read
+    pages[0] = second;
+    root["pages"] = pages;
+    CHECK(sheetsFromJson(QJsonDocument(root).toJson()).empty());
 }
