@@ -14,6 +14,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - A ChemDraw text of size 0 no longer saves a drawing Penzene can't reopen, and drawings saved that way open again.
 - An SDF file whose first structure has no title opens with that structure.
 - Radicals survive export and copying to ChemDraw.
+- Saving a drawing opened from an SDF or SMILES library asks where to save it instead of overwriting the library, and Save refuses image names rather than writing MOL text into them.
 
 ## 1.1.1 (2026-09-27)
 

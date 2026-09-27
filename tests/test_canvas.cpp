@@ -10,6 +10,7 @@
 #include <QApplication>
 #include <QSettings>
 #include <QStatusBar>
+#include <QFileDialog>
 #include <QMessageBox>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -2277,4 +2278,43 @@ TEST_CASE("pages: tabs along the bottom, each with its own drawing and undo hist
         QApplication::processEvents();
         other.grab().save(QString::fromUtf8(shot));
     }
+}
+
+TEST_CASE("Save after opening an SDF doesn't overwrite it, and never writes MOL into an image (#315)") {
+    App app;
+    QTemporaryDir dir;
+    const QString sdf = dir.filePath("library.sdf");
+    QFile f(sdf);
+    REQUIRE(f.open(QIODevice::WriteOnly));
+    const QByteArray library = QByteArray::fromStdString(chem::toMolBlock(*chem::fromSmiles("CCO")) + "$$$$\n" +
+                                                         chem::toMolBlock(*chem::fromSmiles("N")) + "$$$$\n");
+    f.write(library);
+    f.close();
+    MainWindow w;
+    REQUIRE(w.openFile(sdf));
+    w.findChild<Canvas*>()->commit(*chem::fromSmiles("CCC"), "edit");
+
+    // Save asks where to save instead; answer with an image path. The refusal is dismissed too.
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);  // a native dialog can't be answered from here
+    QString offered, image;
+    QTimer::singleShot(0, &w, [&] {
+        auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+        REQUIRE(dialog);
+        offered = dialog->selectedFiles().value(0);
+        QTimer::singleShot(0, &w, [] {
+            if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->reject();
+        });
+        image = dir.filePath("drawing.png");
+        dialog->selectFile(image);
+        static_cast<QDialog*>(dialog)->accept();
+    });
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "&Save") a->trigger();
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs, false);
+    CHECK_FALSE(offered.endsWith("library.sdf"));
+    QFile back(sdf);
+    REQUIRE(back.open(QIODevice::ReadOnly));
+    CHECK(back.readAll() == library);
+    REQUIRE_FALSE(image.isEmpty());
+    CHECK_FALSE(QFile::exists(image));
 }
