@@ -9,6 +9,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - ChemDraw text opens with a ^ only where it keeps a charge raised: Cu²⁺ comes in as Cu2+, not Cu^2+.
 - Typing a charged abbreviation such as N3- keeps the group and adds the charge (the azide anion), and the charge is drawn with the label.
 - A ChemDraw reagent label without an id no longer deletes the molecules on opening.
+- A lone abbreviation in a ChemDraw file (Boc on its own, say) opens as a labelled atom, not as text.
 
 ## 1.3.0 (2026-09-27)
 
