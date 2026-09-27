@@ -554,6 +554,31 @@ TEST_CASE("reactions: reaction SMILES and RXN, both ways (#101)") {
     CHECK_FALSE(chem::fromRxn("not an rxn"));
 }
 
+TEST_CASE("a multi-step scheme exports every step (#334)") {
+    // Ethanol -> acetaldehyde -> acetic acid, in a row.
+    Document doc = *chem::fromReactionSmiles("CCO>>CC=O");
+    double right = -1e9, mid = 0;
+    for (const auto& a : doc.atoms) right = std::max(right, a.pos.x());
+    for (const auto& a : doc.arrows) mid = a.from.y();
+    doc.arrows.push_back({{right + kBondLength, mid}, {right + 4 * kBondLength, mid}});
+    Document acid = *chem::fromSmiles("CC(=O)O");
+    double left = 1e9, y = 0;
+    for (const auto& a : acid.atoms) left = std::min(left, a.pos.x()), y += a.pos.y() / acid.atoms.size();
+    doc.append(acid, QPointF(right + 5 * kBondLength - left, mid - y));
+
+    const auto steps = chem::reactionsOf(doc);
+    REQUIRE(steps.size() == 2);
+    auto canon = [](const std::string& s) { return chem::toSmiles(*chem::fromSmiles(s)); };
+    CHECK(chem::toReactionSmiles(steps) ==
+          canon("CCO") + ">>" + canon("CC=O") + "\n" + canon("CC=O") + ">>" + canon("CC(=O)O"));  // the aldehyde is both
+    const std::string rdf = chem::toRdf(steps);
+    CHECK(rdf.starts_with("$RDFILE 1"));
+    size_t rxns = 0;
+    for (size_t at = rdf.find("$RFMT\n$RXN"); at != std::string::npos; at = rdf.find("$RFMT\n$RXN", at + 1)) ++rxns;
+    CHECK(rxns == 2);
+    CHECK(chem::reactionOf(doc)->products.size() == 1);  // the first step, as before
+}
+
 TEST_CASE("CDXML export reads back: molecules, wedges, arrows and text (#29)") {
     Document doc = *chem::fromSmiles("C[C@H](N)C(=O)O");  // L-alanine, wedged
     const std::string smiles = chem::toSmiles(doc);
@@ -1149,29 +1174,4 @@ TEST_CASE("more abbreviations: acids, alkyls, amines and protecting groups (#331
         REQUIRE(p);
         CHECK(p->formula == formula);
     }
-}
-
-TEST_CASE("a multi-step scheme exports every step (#334)") {
-    // Ethanol -> acetaldehyde -> acetic acid, in a row.
-    Document doc = *chem::fromReactionSmiles("CCO>>CC=O");
-    double right = -1e9, mid = 0;
-    for (const auto& a : doc.atoms) right = std::max(right, a.pos.x());
-    for (const auto& a : doc.arrows) mid = a.from.y();
-    doc.arrows.push_back({{right + kBondLength, mid}, {right + 4 * kBondLength, mid}});
-    Document acid = *chem::fromSmiles("CC(=O)O");
-    double left = 1e9, y = 0;
-    for (const auto& a : acid.atoms) left = std::min(left, a.pos.x()), y += a.pos.y() / acid.atoms.size();
-    doc.append(acid, QPointF(right + 5 * kBondLength - left, mid - y));
-
-    const auto steps = chem::reactionsOf(doc);
-    REQUIRE(steps.size() == 2);
-    auto canon = [](const std::string& s) { return chem::toSmiles(*chem::fromSmiles(s)); };
-    CHECK(chem::toReactionSmiles(steps) ==
-          canon("CCO") + ">>" + canon("CC=O") + "\n" + canon("CC=O") + ">>" + canon("CC(=O)O"));  // the aldehyde is both
-    const std::string rdf = chem::toRdf(steps);
-    CHECK(rdf.starts_with("$RDFILE 1"));
-    size_t rxns = 0;
-    for (size_t at = rdf.find("$RFMT\n$RXN"); at != std::string::npos; at = rdf.find("$RFMT\n$RXN", at + 1)) ++rxns;
-    CHECK(rxns == 2);
-    CHECK(chem::reactionOf(doc)->products.size() == 1);  // the first step, as before
 }
