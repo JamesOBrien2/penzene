@@ -916,7 +916,7 @@ QByteArray toCdx(const Document& doc) { return cdxmlToCdx(toCdxml(doc)); }
 
 std::string toMolBlock(const Document& doc, bool v3000) {
     auto mol = toRDKit(doc);
-    perceive(*mol);
+    perceive(*mol, false);  // the drawn Kekulé bonds, not aromatic type 4, a query-only type (#321)
     RDKit::Chirality::reapplyMolBlockWedging(*mol);  // keep the user's wedges
     return RDKit::MolToMolBlock(*mol, true, -1, false, v3000);
 }
