@@ -10,8 +10,9 @@ penzene --render library.sdf hits.smi --out figs --format png --drawing-style RS
 ```
 
 Inputs can be SMILES strings or `.smi`, `.sdf`, `.inchi`, `.mol`, `.penz`, `.rxn` and `.cdxml` files.
-Each record of a `.smi`, `.sdf` or `.inchi` becomes its own file, named after the record. The
-paths written are printed one per line.
+With `--out`, each record of a `.smi`, `.sdf` or `.inchi` becomes its own file, named after the
+record; into a single output file (`penzene --render library.sdf all.svg`), the records are laid out
+as a grid, as Open does. The paths written are printed one per line.
 
 | Option | |
 |---|---|
