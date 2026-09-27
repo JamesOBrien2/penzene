@@ -24,7 +24,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Exports and copies no longer cut off atom numbers, lone pairs, δ labels or stereo labels at the edge, and a stereo label sits clear of its atom's number.
 - Each running Penzene keeps its own crash-recovery copy, so opening a second one (as Windows does for each double-clicked file) no longer deletes the first one's, even when a later one reuses its process ID.
 - View → Fit to Window (Ctrl+0) zooms to the selection when there is one.
-- `penzene --render` with one output file draws every structure in an SDF or SMILES file, laid out as Open does, not just the last.
+- `penzene --render` with one output file draws every structure in an SDF or SMILES file, laid out as Open does, not just the last; a structure it can't read is reported, and the command fails.
 - MOL export writes aromatic rings as the drawn single and double bonds; bond type 4 is only for queries, and some programs rejected it.
 - Large drawings and pages can be scrolled to in full; the canvas no longer stops 5000 points from the origin.
 - Clean keeps aromatic rings' double bonds where they were drawn, and keeps bond colours.
