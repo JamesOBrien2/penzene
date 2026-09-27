@@ -434,9 +434,16 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             continue;
         }
         if (tok == QXmlStreamReader::Characters && !stack.empty() && stack.back().tag == "s") {
-            // A charge set as a superscript run comes back marked (SO4^2-), or it would read as a count.
+            // A superscript run comes back marked (SO4^2-) only where the plain text wouldn't
+            // raise it already (Cu2+ does), so the ^ appears only where it's needed (#371).
             static const QRegularExpression charge("^[0-9+\\-\u2212]+$");
-            if (text && superscript && !text->text.isEmpty() && charge.match(r.text()).hasMatch()) text->text += '^';
+            if (text && superscript && !text->text.isEmpty() && charge.match(r.text()).hasMatch()) {
+                const qsizetype from = std::max(text->text.lastIndexOf('\n'), text->text.lastIndexOf('\r')) + 1;
+                const QString line = text->text.mid(from) + r.text();
+                const auto sc = scripts(line);
+                if (!std::all_of(sc.end() - r.text().size(), sc.end(), [](Script s) { return s == Script::Super; }))
+                    text->text += '^';
+            }
             if (text) text->text += r.text();
             if (labelText >= 0) labels[labelText].text += r.text();
             continue;

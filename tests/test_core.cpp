@@ -916,7 +916,19 @@ TEST_CASE("text charges and counts reach ChemDraw as super- and subscripts, and 
     auto back = chem::fromChemDraw(cdxml);
     REQUIRE(back);
     REQUIRE(back->texts.size() == 1);
-    CHECK(back->texts[0].text == "SO4^2- and NH4^+\nH2O");  // the same drawing: + was a charge already
+    CHECK(back->texts[0].text == "SO4^2- and NH4+\nH2O");  // as typed: ^ only where it's needed (#371)
+}
+
+TEST_CASE("ChemDraw superscripts come in with a ^ only where it's needed (#371)") {
+    auto read = [](const char* runs) {
+        const QByteArray xml = QByteArray(R"(<?xml version="1.0"?><CDXML><page><t p="100 100">)") + runs +
+                               "</t></page></CDXML>";
+        auto doc = chem::fromChemDraw(xml);
+        return doc && !doc->texts.empty() ? doc->texts[0].text : QString();
+    };
+    CHECK(read(R"(<s>Cu</s><s face="64">2+</s>)") == "Cu2+");      // raised as typed
+    CHECK(read(R"(<s>SO</s><s face="32">4</s><s face="64">2-</s>)") == "SO4^2-");  // 42 would read as a count
+    CHECK(read(R"(<s>10</s><s face="64">5</s><s> M</s>)") == "10^5 M");  // plain, it wouldn't be raised
 }
 
 TEST_CASE("merging atoms keeps the dropped atom's brackets and ring overrides (#303)") {
