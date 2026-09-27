@@ -4,20 +4,20 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
-## Unreleased
+## 1.2.0 (2026-09-27)
 
 - **Tool rail**: All the tools in one rail on the left, grouped as Select, Bonds, Rings, Atoms, Arrows and Shapes; a group's tools open beside it, and can be pinned open. The Draw, Chemistry and Figure switch is gone. <!-- icon: layout-sidebar -->
-- A SMILES file's "SMILES Name" header row is skipped, not read as an unreadable structure.
 - **White and teal**: The page is white and the window a cool grey, in place of the pale yellow paper; the logo is the teal ring on a white tile, and dark mode is a deeper charcoal. <!-- icon: palette -->
 - **Pages**: A drawing can hold several pages, as tabs along the bottom of the window, each with its own undo history; Edit → Move to Page moves a selection between them. View → Grid and View → Rulers measure the drawing at its final size. <!-- icon: layout-bottombar -->
-- Erasing an atom also removes neighbours it leaves with no bonds, as erasing a bond already did, instead of leaving lone methanes behind.
 - **SDF export**: Save As an SD file writes each molecule on the page as its own record, ready for a compound library. <!-- icon: database -->
+- **Open from Finder and the file manager**: On macOS and Linux, .penz files open in Penzene with a double-click, and MOL, SDF, SMILES, Rxnfile and ChemDraw files offer it under Open With. <!-- icon: file-import -->
+- A SMILES file's "SMILES Name" header row is skipped, not read as an unreadable structure.
+- Erasing an atom also removes neighbours it leaves with no bonds, as erasing a bond already did, instead of leaving lone methanes behind.
 - ChemDraw files keep their label size relative to their bonds, so crowded drawings with small labels don't overlap.
 - An arrow with a huge bend, as a damaged file can hold, no longer exhausts memory when drawn.
 - Atom numbers no longer sit on the same atom's lone pairs, radicals or δ label.
 - Python: `Document.save` replaces a file whole, so a failed save leaves the old one intact, and it refuses image names (use `export()`) rather than writing MOL text into them.
 - A ChemDraw text of size 0 no longer saves a drawing Penzene can't reopen, and drawings saved that way open again.
-- **Open from Finder and the file manager**: On macOS and Linux, .penz files open in Penzene with a double-click, and MOL, SDF, SMILES, Rxnfile and ChemDraw files offer it under Open With. <!-- icon: file-import -->
 - An SDF file whose first structure has no title opens with that structure.
 - Radicals survive export and copying to ChemDraw.
 - Saving a drawing opened from an SDF or SMILES library asks where to save it instead of overwriting the library, and Save refuses image names rather than writing MOL text into them.
