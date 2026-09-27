@@ -1630,7 +1630,7 @@ void MainWindow::buildTools() {
     using OL = OrbitalLook;
     for (auto [look, lookName] : {std::pair{OL::Outline, tr("outline")}, {OL::Shaded, tr("shaded")}, {OL::Gradient, tr("gradient")}})
         for (auto [kind, name] : {std::pair{ArrowKind::SOrbital, tr("s orbital")}, {ArrowKind::POrbital, tr("p orbital")},
-                                  {ArrowKind::Lobe, tr("Lobe")}, {ArrowKind::HybridOrbital, tr("Hybrid orbital")}})
+                                  {ArrowKind::Lobe, tr("lobe")}, {ArrowKind::HybridOrbital, tr("hybrid orbital")}})
             add(docIcon(orbitalDoc(kind, look)), name + ", " + lookName + orbital,
                 [this, kind, look] { canvas_->setTool(T::Arrow), canvas_->setArrow(kind, false, false, look); });
     section();

@@ -188,7 +188,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Text (digits after letters become subscripts):</source>
+        <source>Text (H2O becomes H₂O, Cu2+ Cu²⁺; ^ marks a charge: SO4^2-):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -385,6 +385,26 @@
     </message>
     <message>
         <source>Fit to Window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bring to Front</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bring Forward</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Send Backward</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Send to Back</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Arrange</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -990,6 +1010,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>No reaction (crossed arrow)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Curved arrow, electron pair (click it again to flip the curve)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1031,6 +1055,38 @@
     </message>
     <message>
         <source>Box</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source> (click an atom to centre one on it, drag to point it; click one to restyle it)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>outline</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>shaded</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>gradient</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>s orbital</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>p orbital</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>lobe</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>hybrid orbital</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1400,6 +1456,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Zoom to the selection, or to the whole drawing</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&amp;Next Page</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1577,7 +1637,7 @@ moves off, so you can keep typing.&lt;/p&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;k K&lt;/b&gt;&lt;/td&gt;&lt;td&gt;sulfonyl, t-Bu&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;.&lt;/b&gt; / &lt;b&gt;j&lt;/b&gt; / &lt;b&gt;J&lt;/b&gt;&lt;/td&gt;&lt;td&gt;attachment point / η⁵-cyclopentadienyl / η⁶-benzene&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Atom: label and marks&lt;/th&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;c n/w o/q s p f l b i h&lt;/b&gt;&lt;/td&gt;&lt;td&gt;C N O S P F Cl Br I H&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;c n/w o/q s p f l b i h d&lt;/b&gt;&lt;/td&gt;&lt;td&gt;C N O S P F Cl Br I H D (deuterium)&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;B S L&lt;/b&gt;&lt;/td&gt;&lt;td&gt;B, Si, Li&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;m e P A&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Me, Et, Ph, Ac&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;O N F E Z&lt;/b&gt;&lt;/td&gt;&lt;td&gt;OMe, NO&lt;sub&gt;2&lt;/sub&gt;, CF&lt;sub&gt;3&lt;/sub&gt;, CO&lt;sub&gt;2&lt;/sub&gt;Me, N&lt;sub&gt;3&lt;/sub&gt;&lt;/td&gt;&lt;/tr&gt;
@@ -1609,6 +1669,7 @@ moves off, so you can keep typing.&lt;/p&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Drag onto an atom&lt;/b&gt;&lt;/td&gt;&lt;td&gt;merge (Select tool) &amp;nbsp;•&amp;nbsp; &lt;b&gt;Shift+drag&lt;/b&gt; move straight; draw a bond at any angle&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;duplicate across the next arrow that way (or alongside)&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+← →&lt;/b&gt;&lt;/td&gt;&lt;td&gt;rotate 15° &amp;nbsp;•&amp;nbsp; &lt;b&gt;Alt+drag&lt;/b&gt; rotate freely • &lt;b&gt;double-click&lt;/b&gt; select fragment, or edit text&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+0&lt;/b&gt;&lt;/td&gt;&lt;td&gt;zoom to the selection (to everything with none)&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+Alt+←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;rotate 15° out of the page (3D), keeping stereo &amp;nbsp;•&amp;nbsp; &lt;b&gt;Shift+Alt+drag&lt;/b&gt; freely&lt;/td&gt;&lt;/tr&gt;
 &lt;/table&gt;</source>
         <translation type="unfinished"></translation>
