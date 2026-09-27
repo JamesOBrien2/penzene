@@ -277,6 +277,13 @@ void Document::removeBond(int bond) {
     if (!drop.empty()) removeAtoms(drop);
 }
 
+void Document::removeAtom(int atom) {
+    std::vector<int> drop{atom};
+    for (int n : neighbors(atom))
+        if (neighbors(n).size() == 1) drop.push_back(n);
+    removeAtoms(drop);
+}
+
 void Document::removeAtoms(const std::vector<int>& drop) {
     std::vector<int> remap(atoms.size(), 0);
     for (int i : drop) remap[i] = -1;

@@ -737,7 +737,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
             what = tr("Charge");
             break;
         case Tool::Erase:
-            if (pressAtom_ >= 0) next.removeAtoms({pressAtom_});
+            if (pressAtom_ >= 0) next.removeAtom(pressAtom_);
             else if (bond >= 0) next.removeBond(bond);
             else if (int a = arrowAt(pressPos_); a >= 0) next.arrows.erase(next.arrows.begin() + a);
             else if (int t = textAt(pressPos_); t >= 0) next.texts.erase(next.texts.begin() + t);
@@ -1281,7 +1281,7 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
             // ChemDraw: removes a label first; a plain carbon (or a bare attachment point) is deleted.
             const bool bare = a.z == 0 && a.label.isEmpty();
             if (!bare && (a.z != 6 || a.charge || !a.label.isEmpty())) a.z = 6, a.charge = 0, a.label.clear();
-            else next.removeAtoms({hoverAtom_}), hoverAtom_ = -1;
+            else next.removeAtom(hoverAtom_), hoverAtom_ = -1;
         } else if (hoverBond_ >= 0) {
             next.removeBond(hoverBond_);
             hoverBond_ = -1;
@@ -1403,7 +1403,7 @@ QMenu* Canvas::contextMenuAt(QPointF at) {
         menu->addSeparator();
         menu->addAction(tr("Delete Atom"), this, [this, atom] {
             Document next = doc_;
-            next.removeAtoms({atom});
+            next.removeAtom(atom);
             hoverAtom_ = hoverBond_ = -1;
             commit(next, tr("Delete"));
         });

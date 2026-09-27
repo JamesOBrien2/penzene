@@ -138,6 +138,19 @@ TEST_CASE("bond click, drag, cycle, chain and erase") {
     CHECK(f.canvas.document().bonds.size() == 6);
 }
 
+TEST_CASE("erasing an atom drops neighbours left without bonds, as erasing a bond does (#335)") {
+    Fixture f;
+    f.canvas.setDocumentSilently(*chem::fromSmiles("CCC"));
+    f.canvas.setTool(Canvas::Tool::Erase);
+    f.click(f.doc().atoms[1].pos);  // the middle carbon
+    CHECK(f.doc().atoms.empty());  // not two lone methanes
+
+    f.canvas.setDocumentSilently(*chem::fromSmiles("CCO"));
+    f.click(f.doc().atoms[0].pos);  // an end: the rest stays bonded
+    CHECK(f.doc().atoms.size() == 2);
+    CHECK(f.doc().bonds.size() == 1);
+}
+
 TEST_CASE("select and delete, charges") {
     Fixture f;
     f.canvas.setTool(Canvas::Tool::Bond);
@@ -2130,12 +2143,12 @@ TEST_CASE("Properties → Copy as Text keeps the formula's charge unambiguous") 
 TEST_CASE("Delete removes an attachment point outright, not turning it into a carbon") {
     Fixture f;
     Document d;
-    d.addAtom({0, 0}), d.addAtom({kBondLength, 0}, 0);
-    d.bonds = {{0, 1, 1, BondStereo::Wavy}};
+    d.addAtom({-kBondLength, 0}), d.addAtom({0, 0}), d.addAtom({kBondLength, 0}, 0);
+    d.bonds = {{0, 1}, {1, 2, 1, BondStereo::Wavy}};
     f.canvas.setDocumentSilently(d);
     f.hover({kBondLength, 0});
     QTest::keyClick(f.canvas.viewport(), Qt::Key_Delete);
-    CHECK(f.doc().atoms.size() == 1);
+    CHECK(f.doc().atoms.size() == 2);  // the ethyl stays
 }
 
 TEST_CASE("a dashed arrow's head is solid") {
