@@ -1150,3 +1150,10 @@ TEST_CASE("more abbreviations: acids, alkyls, amines and protecting groups (#331
         CHECK(p->formula == formula);
     }
 }
+
+TEST_CASE(".penz reads an isotope lighter than its element as none (#368)") {
+    auto doc = Document::fromJson(R"({"format":"penzene","version":1,"atoms":[{"x":0,"y":0,"z":6,"isotope":1},{"x":0,"y":0,"z":6,"isotope":13}]})");
+    REQUIRE(doc);
+    CHECK(doc->atoms[0].isotope == 0);
+    CHECK(doc->atoms[1].isotope == 13);
+}

@@ -156,8 +156,9 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
                              std::clamp(o["lonePairs"].toInt(), 0, 4), std::clamp(o["radicals"].toInt(), 0, 2),
                              std::clamp(o["partial"].toInt(), -1, 1), std::clamp(o["isotope"].toInt(), 0, 300)});
         // An element RDKit doesn't know aborts the app wherever the atom is looked up.
-        const Atom& a = doc.atoms.back();
+        Atom& a = doc.atoms.back();
         if (a.z < 0 || a.z > 118 || !std::isfinite(a.pos.x()) || !std::isfinite(a.pos.y())) return std::nullopt;
+        if (a.isotope < a.z) a.isotope = 0;  // lighter than its protons: no such isotope, as a typed label (#368)
     }
     const int n = int(doc.atoms.size());
     for (const auto& v : root["bonds"].toArray()) {
