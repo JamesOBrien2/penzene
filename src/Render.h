@@ -54,6 +54,8 @@ DrawingStyle documentStyle(const Document& doc);  // its style, with labels size
 // Paints a document in its drawing style. Shared by the canvas and export.
 void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style = {});
 QRectF documentBounds(const Document& doc);
+// documentBounds plus everything painted (atom numbers, marks): for export and print.
+QRectF outputBounds(const Document& doc);
 // Pages for laying a figure out at final size: paper, or a journal's column
 // widths at its maximum figure height. Sizes and margins in points.
 struct PageSize {

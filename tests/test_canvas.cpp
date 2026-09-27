@@ -1209,6 +1209,23 @@ TEST_CASE("export scale and margin (#103)") {
     CHECK(svg.size() > 100);
 }
 
+TEST_CASE("exports hold atom numbers, lone pairs, δ and stereo labels whole (#325)") {
+    App app;
+    Document d = *chem::fromSmiles("C[C@H](N)C(=O)O");
+    d.showAtomNumbers = d.showStereo = true;
+    for (auto& a : d.atoms)
+        if (a.z == 8) a.lonePairs = 2, a.partial = -1;
+    QTemporaryDir dir;
+    const QString path = qEnvironmentVariable("PENZENE_BOUNDS_SHOT", dir.filePath("x.png"));
+    REQUIRE(exportDocument(d, path));
+    const QImage img = QImage(path).convertToFormat(QImage::Format_ARGB32);
+    REQUIRE(!img.isNull());
+    int edge = 0;  // anything painted on the image's border was cut off
+    for (int x = 0; x < img.width(); ++x) edge += qAlpha(img.pixel(x, 0)) + qAlpha(img.pixel(x, img.height() - 1));
+    for (int y = 0; y < img.height(); ++y) edge += qAlpha(img.pixel(0, y)) + qAlpha(img.pixel(img.width() - 1, y));
+    CHECK(edge == 0);
+}
+
 TEST_CASE("printing: to PDF, at export size, centred (#33)") {
     App app;
     QTemporaryDir dir;

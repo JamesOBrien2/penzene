@@ -7,6 +7,7 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QPainter>
+#include <QPicture>
 #include <QSet>
 #include <QPainterPath>
 #include <QPdfWriter>
@@ -642,7 +643,10 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         const double off = 0.55 * kBondLength;
         for (const auto& l : chem::stereoLabels(doc)) {
             QPointF at;
-            if (l.atom >= 0) {
+            if (l.atom >= 0 && (doc.showAtomNumbers || doc.atoms[l.atom].map)) {  // past the atom's number (#325)
+                const double number = (labeled[l.atom] ? 0.8 : 0.4) * kBondLength;
+                at = doc.atoms[l.atom].pos + numberDirection(l.atom) * (number + 0.6 * kBondLength);
+            } else if (l.atom >= 0) {
                 at = doc.atoms[l.atom].pos + doc.awayDirection(l.atom) * off;
             } else {
                 const Bond& b = doc.bonds[l.bond];
@@ -688,6 +692,18 @@ QRectF documentBounds(const Document& doc) {
     return QRectF(lo, hi);
 }
 
+QRectF outputBounds(const Document& doc) {
+    // Atom numbers, stereo labels and electron marks go where the painter finds
+    // room: measure what it paints (#325).
+    QPicture painted;
+    {
+        QPainter p(&painted);
+        paintDocument(p, doc);
+    }
+    const QRect r = painted.boundingRect();
+    return r.isEmpty() ? documentBounds(doc) : documentBounds(doc).united(QRectF(r).adjusted(-1, -1, 1, 1));
+}
+
 const std::vector<PageSize>& pageSizes() {
     static const std::vector<PageSize> p{
         {"A4", {595.3, 841.9}, 72},
@@ -712,7 +728,7 @@ double exportScale(const Document& doc) { return drawingStyle(doc.style).bondLen
 static std::pair<QRectF, double> exportFrame(const Document& doc, const ExportOptions& o) {
     const double s = exportScale(doc) * o.scale, m = o.margin / s;
     if (const QRectF page = pageRect(doc); !page.isEmpty()) return {page, s};  // the whole page, as laid out
-    return {documentBounds(doc).adjusted(-m, -m, m, m), s};
+    return {outputBounds(doc).adjusted(-m, -m, m, m), s};
 }
 
 // Paints the frame at `s` output units per point, background first.

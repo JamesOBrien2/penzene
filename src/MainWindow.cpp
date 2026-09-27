@@ -834,7 +834,7 @@ QWidget* MainWindow::checkStructure() {
 
 bool printDocument(QPrinter& printer, const Document& doc) {
     if (doc.empty()) return false;
-    const QRectF r = documentBounds(doc);
+    const QRectF r = outputBounds(doc);
     QPainter p;
     if (!p.begin(&printer)) return false;
     const QRectF page = printer.pageRect(QPrinter::DevicePixel);
