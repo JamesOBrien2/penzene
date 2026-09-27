@@ -187,6 +187,13 @@ void mergeAtoms(Document& doc, const std::vector<std::pair<int, int>>& keepDrop)
     doc.bonds = std::move(bonds);
     for (auto& f : doc.fills)
         for (int& i : f.atoms) i = target[i];
+    auto moveOnto = [&](std::vector<int>& ids) {  // the kept atom takes the dropped one's place
+        for (int& i : ids) i = target[i];
+        std::sort(ids.begin(), ids.end());
+        ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+    };
+    for (auto& b : doc.brackets) moveOnto(b.atoms);
+    for (auto& ring : doc.aromaticCircleOverrides) moveOnto(ring);
     std::vector<int> drops;
     for (auto [keep, drop] : keepDrop) drops.push_back(drop);
     doc.removeAtoms(drops);

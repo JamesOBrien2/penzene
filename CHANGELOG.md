@@ -15,6 +15,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - A charged formula shows its charge as a superscript (O₄S²⁻ for sulfate), in the status bar and the Properties panel.
 - Delete on an attachment point removes it, where before it became a methyl.
 - A dashed arrow's head is drawn solid, not with a broken outline.
+- Dragging an atom onto another keeps its brackets and its ring's circle setting, where before they lost it.
 
 ## 1.1.0 (2026-09-26)
 
