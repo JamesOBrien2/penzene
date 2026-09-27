@@ -922,7 +922,7 @@ TEST_CASE("recent files, autosave and crash recovery (#91)") {
 
     // A fresh window after a "crash" offers the autosave back; answer Yes.
     MainWindow after;
-    QTimer::singleShot(0, [] {
+    QTimer::singleShot(0, &after, [] {
         if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
             box->button(QMessageBox::Yes)->click();
     });
@@ -2081,7 +2081,7 @@ TEST_CASE("Save replaces the file whole, and still saves where only the file is 
     canvas->commit(two, "Add");
     // A folder that can't take the temporary file (as behind a sandbox's document portal).
     QFile::setPermissions(dir.path(), QFileDevice::ReadOwner | QFileDevice::ExeOwner);
-    QTimer::singleShot(0, [] {  // a failed save warns: dismiss it rather than hang
+    QTimer::singleShot(0, &w, [] {  // a failed save warns: dismiss it rather than hang
         if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->reject();
     });
     for (auto* a : w.findChildren<QAction*>())
