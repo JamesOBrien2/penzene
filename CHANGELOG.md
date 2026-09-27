@@ -7,6 +7,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 ## Unreleased
 
 - **Tool rail**: All the tools in one rail on the left, grouped as Select, Bonds, Rings, Atoms, Arrows and Shapes; a group's tools open beside it, and can be pinned open. The Draw, Chemistry and Figure switch is gone. <!-- icon: layout-sidebar -->
+- **White and teal**: The page is white and the window a cool grey, in place of the pale yellow paper; the logo is the teal ring on a white tile, and dark mode is a deeper charcoal. <!-- icon: palette -->
 - ChemDraw files keep their label size relative to their bonds, so crowded drawings with small labels don't overlap.
 
 ## 1.1.1 (2026-09-27)
