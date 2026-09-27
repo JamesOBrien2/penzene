@@ -1191,3 +1191,18 @@ TEST_CASE(".penz reads an isotope lighter than its element as none (#368)") {
     CHECK(doc->atoms[0].isotope == 0);
     CHECK(doc->atoms[1].isotope == 13);
 }
+
+TEST_CASE("a charged abbreviation keeps the group: N3- is azide, not nitride (#370)") {
+    Document d;
+    d.addAtom({0, 0});
+    REQUIRE(edit::applyLabel(d, 0, "N3-", true));
+    CHECK(d.atoms[0].label == "N3");
+    CHECK(d.atoms[0].charge == -1);
+    auto p = chem::properties(d);
+    REQUIRE(p);
+    CHECK(p->formula == "N3-");  // the azide anion
+    Document fe;
+    fe.addAtom({0, 0});
+    REQUIRE(edit::applyLabel(fe, 0, "Fe3+", true));  // an element's digits are still its charge
+    CHECK(fe.atoms[0].charge == 3);
+}
