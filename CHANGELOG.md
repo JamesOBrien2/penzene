@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Charges in text: NH4+, Cu2+ and [Fe(CN)6]3- are set with the charge as a superscript; ^ marks one outright (SO4^2-). ChemDraw files keep counts and charges as sub- and superscripts.
 - More abbreviations: COOH, Bu, iBu, OEt, NHBoc, NMe2, SO3H, TIPS, MOM and THP.
 - **Orbitals**: s, p, lobe and hybrid orbitals in Shapes, outlined, shaded or with a gradient, in any colour. Right-click to bring one to the front or send it behind the drawing; ChemDraw files keep them. <!-- icon: shapes -->
 - **Isotopes**: Type 13C, 18OH or D on an atom (d makes deuterium); drawn ¹³C and kept through SMILES, MOL and ChemDraw files, with the formula (C[13C]H6O, CDCl3) and masses to match. <!-- icon: atom -->
@@ -37,7 +38,6 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - MOL and ChemDraw files open with aromatic rings' double bonds where the file drew them.
 - Drag a structure file onto the window to open it.
 - Typing a charged label such as NH3+, O- or Fe3+ sets the element and its charge, not an unknown group.
-- Charges in text: NH4+, Cu2+ and [Fe(CN)6]3- are set with the charge as a superscript; ^ marks one outright (SO4^2-).
 
 ## 1.1.1 (2026-09-27)
 

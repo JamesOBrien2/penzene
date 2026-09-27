@@ -1,5 +1,6 @@
 #include "Chem.h"
 #include "Geometry.h"
+#include "Render.h"
 
 #include <GraphMol/CIPLabeler/CIPLabeler.h>
 #include <GraphMol/Chirality.h>
@@ -410,6 +411,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     // Where characters go: a free Text, or a label node's own text (not its inner fragment's).
     Text* text = nullptr;
     int labelText = -1;
+    bool superscript = false;  // the current style run is superscript (face 64)
     auto inside = [&](const char* tag) {
         return std::any_of(stack.begin(), stack.end(), [&](const Open& o) { return o.tag == tag; });
     };
@@ -426,6 +428,9 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             continue;
         }
         if (tok == QXmlStreamReader::Characters && !stack.empty() && stack.back().tag == "s") {
+            // A charge set as a superscript run comes back marked (SO4^2-), or it would read as a count.
+            static const QRegularExpression charge("^[0-9+\\-\u2212]+$");
+            if (text && superscript && !text->text.isEmpty() && charge.match(r.text()).hasMatch()) text->text += '^';
             if (text) text->text += r.text();
             if (labelText >= 0) labels[labelText].text += r.text();
             continue;
@@ -460,7 +465,9 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             auto box = at.value("BoundingBox").split(' ');
             if (box.size() == 4) labels[parentLabel].textPos.setX(std::min(box[0].toDouble(), box[2].toDouble()) * scale);
             labelText = parentLabel;
-        } else if (tag == "s" && (text || labelText >= 0) && at.hasAttribute("size")) {
+        }
+        if (tag == "s") superscript = at.value("face").toInt() & 64;
+        if (tag == "s" && (text || labelText >= 0) && at.hasAttribute("size")) {
             const double rel = at.value("size").toDouble() * scale / 10;  // 10 pt: the default (ACS) label size
             if (rel > 0) (text ? text->scale : labels[labelText].textScale) = rel;  // size="0" would save unopenable (#316)
         } else if (tag == "t" && !inside("n") && !inside("fragment")) {
@@ -1006,10 +1013,32 @@ QByteArray toCdxml(const Document& in) {
         w.writeStartElement("t");
         w.writeAttribute("id", QString::number(id++));
         w.writeAttribute("p", pt(t.pos));
-        w.writeStartElement("s");
-        w.writeAttribute("size", QString::number(10 * t.scale));  // 10 pt: the ACS label size
-        w.writeCharacters(QString(t.text).replace('\n', '\r'));
-        w.writeEndElement();
+        // One run per script, as ChemDraw styles them: subscript face 32, superscript 64.
+        auto run = [&](Script s, const QString& chars) {
+            w.writeStartElement("s");
+            w.writeAttribute("size", QString::number(10 * t.scale));  // 10 pt: the ACS label size
+            if (s != Script::Base) w.writeAttribute("face", s == Script::Sub ? "32" : "64");
+            w.writeCharacters(chars);
+            w.writeEndElement();
+        };
+        const QStringList lines = t.text.split('\n');
+        QString chars;
+        Script current = Script::Base;
+        for (int li = 0; li < lines.size(); ++li) {
+            const QString& line = lines[li];
+            const auto sc = scripts(line);
+            for (int i = 0; i < line.size(); ++i) {
+                if (sc[i] == Script::Hidden) continue;
+                if (sc[i] != current && !chars.isEmpty()) run(current, chars), chars.clear();
+                current = sc[i], chars += line[i];
+            }
+            if (li + 1 < lines.size()) {  // the line break, as plain text
+                if (current != Script::Base && !chars.isEmpty()) run(current, chars), chars.clear();
+                current = Script::Base, chars += '\r';
+                continue;  // the next line's plain text joins it
+            }
+            if (!chars.isEmpty()) run(current, chars);
+        }
         w.writeEndElement();
     }
     ++z;  // the molecule's layer
