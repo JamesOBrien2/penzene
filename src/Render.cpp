@@ -499,13 +499,11 @@ static void drawArrow(QPainter& p, const Arrow& a) {
     if (a.kind == ArrowKind::Resonance) drawHead(p, a.from, startDir);
 }
 
-enum class Script : char { Base, Sub, Super, Hidden };
-
 // Formula-style text, as chemists type it (and mhchem reads it): digits after a letter or
 // bracket are counts (H2O); a + or - ending a formula is its charge (NH4+, OH-), with the
 // digits before it too for one element or a bracket (Cu2+, [Fe(CN)6]3-). ^ marks a charge
 // outright where it would be ambiguous (SO4^2-); the ^ isn't drawn.
-static std::vector<Script> scripts(const QString& s) {
+std::vector<Script> scripts(const QString& s) {
     const int n = int(s.size());
     std::vector<Script> out(n, Script::Base);
     for (int i = 1; i < n; ++i)

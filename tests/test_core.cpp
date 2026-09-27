@@ -845,6 +845,21 @@ TEST_CASE("formula charges come after the counts") {
     CHECK(chem::properties(*chem::fromSmiles("[O-]S(=O)(=O)[O-]"))->formula == "O4S-2");
 }
 
+TEST_CASE("text charges and counts reach ChemDraw as super- and subscripts, and come back (#284)") {
+    Document doc;
+    doc.addAtom({0, 0});
+    doc.texts.push_back({{0, 30}, "SO4^2- and NH4+\nH2O"});
+    const QByteArray cdxml = chem::toCdxml(doc);
+    CHECK_FALSE(cdxml.contains('^'));
+    CHECK(cdxml.contains("face=\"32\">4<"));   // the count
+    CHECK(cdxml.contains("face=\"64\">2-<"));  // the charge
+    CHECK(cdxml.contains("face=\"64\">+<"));
+    auto back = chem::fromChemDraw(cdxml);
+    REQUIRE(back);
+    REQUIRE(back->texts.size() == 1);
+    CHECK(back->texts[0].text == "SO4^2- and NH4^+\nH2O");  // the same drawing: + was a charge already
+}
+
 TEST_CASE("merging atoms keeps the dropped atom's brackets and ring overrides (#303)") {
     Document doc;
     for (int i = 0; i < 4; ++i) doc.addAtom({i * kBondLength, 0});
