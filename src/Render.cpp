@@ -128,6 +128,13 @@ static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const D
     const double x = fromRight ? a.pos.x() + fm.horizontalAdvance(s.back()) / 2 - path.boundingRect().right()
                                : a.pos.x() - fm.horizontalAdvance(s.front()) / 2;
     p.fillPath(path.translated(x, 0), p.pen().color());
+    // A charge beyond the group's own, as typed (N3-, #370), raised after the label like an element's.
+    const auto head = chem::abbreviationHead(a.label);
+    if (const int extra = a.charge - (head ? head->charge : 0)) {
+        QString c = QString(extra > 0 ? "+" : "−");
+        if (std::abs(extra) > 1) c.prepend(QString::number(std::abs(extra)));
+        drawText(p, c, {x + path.boundingRect().right(), base - fm.capHeight() * 0.7}, labelFont(st, 0.7));
+    }
 }
 
 // Where a label's implicit H goes: after the symbol, before it, or stacked
