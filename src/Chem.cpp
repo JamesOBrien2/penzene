@@ -55,6 +55,9 @@ static const QHash<QString, QString>& groups() {
         {"OTf", "OS(=O)(=O)C(F)(F)F"}, {"OTs", "OS(=O)(=O)c1ccc(C)cc1"}, {"TMS", "[Si](C)(C)C"},
         {"TBS", "[Si](C)(C)C(C)(C)C"}, {"OTBS", "O[Si](C)(C)C(C)(C)C"}, {"PMB", "Cc1ccc(OC)cc1"},
         {"Bpin", "B1OC(C)(C)C(C)(C)O1"}, {"nBu", "CCCC"}, {"Pr", "CCC"}, {"Cy", "C1CCCCC1"},
+        {"COOH", "C(=O)O"}, {"Bu", "CCCC"}, {"iBu", "CC(C)C"}, {"OEt", "OCC"}, {"NHBoc", "NC(=O)OC(C)(C)C"},
+        {"NMe2", "N(C)C"}, {"SO3H", "S(=O)(=O)O"}, {"TIPS", "[Si](C(C)C)(C(C)C)C(C)C"}, {"MOM", "COC"},
+        {"THP", "C1CCCCO1"},
     };
     return g;
 }
