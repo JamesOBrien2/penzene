@@ -53,11 +53,14 @@ int render(const QStringList& args) {
     if (p.isSet("out")) QDir().mkpath(p.value("out"));
     int failed = 0;
     QSet<QString> used;
-    for (const QString& in : inputs)
-        // One output file: a multi-record file goes in as a grid, as Open lays it out (#320).
-        for (auto& [name, doc] : single.isEmpty() || !QFileInfo::exists(in)
-                                     ? records(in)
-                                     : std::vector<Record>{{QFileInfo(in).completeBaseName(), chem::readFile(in)}}) {
+    for (const QString& in : inputs) {
+        std::vector<Record> list = records(in);
+        if (!single.isEmpty() && QFileInfo::exists(in)) {  // one output file: every record in a grid, as Open lays it out (#320)
+            for (const auto& r : list)
+                if (!r.doc) std::fprintf(stderr, "penzene: could not read %s\n", qPrintable(r.name)), ++failed;  // #363
+            list = {{QFileInfo(in).completeBaseName(), chem::readFile(in)}};
+        }
+        for (auto& [name, doc] : list) {
             QString path = single;
             if (path.isEmpty()) {
                 const QString safe = QString(name).replace(QRegularExpression("[^A-Za-z0-9._-]+"), "_");
@@ -75,6 +78,7 @@ int render(const QStringList& args) {
                 std::printf("%s\n", qPrintable(path));  // one line per file, for scripts
             }
         }
+    }
     return failed ? 1 : 0;
 }
 

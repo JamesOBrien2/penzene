@@ -166,6 +166,9 @@ add_test(NAME render-grid-check COMMAND penzene --descriptors ${CMAKE_BINARY_DIR
 set_tests_properties(render-grid PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen FIXTURES_SETUP grid)
 set_tests_properties(render-grid-check PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen FIXTURES_REQUIRED grid
                      PASS_REGULAR_EXPRESSION "two,C2H9NO")  # ethanol and ammonia, not ammonia alone
+# ... and a record it can't read is reported, with a failing exit (#363).
+add_test(NAME render-grid-broken COMMAND penzene --render ${CMAKE_SOURCE_DIR}/tests/data/broken.smi ${CMAKE_BINARY_DIR}/broken.svg)
+set_tests_properties(render-grid-broken PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen WILL_FAIL ON)
 if(APPLE)  # Finder offers Penzene for .penz and the structure formats (#332)
     add_test(NAME bundle-document-types COMMAND plutil -extract CFBundleDocumentTypes xml1 -o - $<TARGET_BUNDLE_CONTENT_DIR:penzene>/Info.plist)
     set_tests_properties(bundle-document-types PROPERTIES PASS_REGULAR_EXPRESSION "io\\.github\\.jamesobrien2\\.penzene\\.document.*cdxml")
