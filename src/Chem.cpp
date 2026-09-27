@@ -769,10 +769,11 @@ std::vector<Reaction> reactionsOf(const Document& doc) {
     for (const Arrow& a : doc.arrows)
         if (a.bend == 0 && (a.kind == ArrowKind::Reaction || a.kind == ArrowKind::Equilibrium) && a.from != a.to)
             arrows.push_back(&a);
-    std::sort(arrows.begin(), arrows.end(), [](const Arrow* a, const Arrow* b) {  // rows, then left to right
-        const QPointF p = (a->from + a->to) / 2, q = (b->from + b->to) / 2;
-        return std::abs(p.y() - q.y()) > 2 * kBondLength ? p.y() < q.y() : p.x() < q.x();
-    });
+    auto place = [](const Arrow* a) {  // rows 4 bond lengths deep, then left to right (a strict order for sort)
+        const QPointF mid = (a->from + a->to) / 2;
+        return std::pair{std::floor(mid.y() / (4 * kBondLength)), mid.x()};
+    };
+    std::sort(arrows.begin(), arrows.end(), [&](const Arrow* a, const Arrow* b) { return place(a) < place(b); });
     std::vector<Reaction> out(arrows.size());
     for (auto& m : molecules(doc)) {
         const QPointF c = atomBox(m).center();
