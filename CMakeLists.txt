@@ -158,6 +158,12 @@ add_test(NAME render COMMAND penzene --render ${CMAKE_SOURCE_DIR}/tests/data/asp
          --out ${CMAKE_BINARY_DIR}/render-test --format png --drawing-style RSC --clean)
 set_tests_properties(render PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
                      PASS_REGULAR_EXPRESSION "aspirin\\.png.*structure\\.png")
+# One output file from a multi-record file holds every record, as a grid (#320).
+add_test(NAME render-grid COMMAND penzene --render ${CMAKE_SOURCE_DIR}/tests/data/two.smi ${CMAKE_BINARY_DIR}/two.svg)
+add_test(NAME render-grid-check COMMAND penzene --descriptors ${CMAKE_BINARY_DIR}/two.svg --columns name,formula)
+set_tests_properties(render-grid PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen FIXTURES_SETUP grid)
+set_tests_properties(render-grid-check PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen FIXTURES_REQUIRED grid
+                     PASS_REGULAR_EXPRESSION "two,C2H9NO")  # ethanol and ammonia, not ammonia alone
 # Descriptors CLI: a SMILES and a MOL file, chosen columns, to standard output.
 add_test(NAME descriptors COMMAND penzene --descriptors "CC(=O)Oc1ccccc1C(=O)O" ${CMAKE_SOURCE_DIR}/tests/data/aspirin.mol
          --columns name,formula,tpsa)

@@ -54,7 +54,10 @@ int render(const QStringList& args) {
     int failed = 0;
     QSet<QString> used;
     for (const QString& in : inputs)
-        for (auto& [name, doc] : records(in)) {
+        // One output file: a multi-record file goes in as a grid, as Open lays it out (#320).
+        for (auto& [name, doc] : single.isEmpty() || !QFileInfo::exists(in)
+                                     ? records(in)
+                                     : std::vector<Record>{{QFileInfo(in).completeBaseName(), chem::readFile(in)}}) {
             QString path = single;
             if (path.isEmpty()) {
                 const QString safe = QString(name).replace(QRegularExpression("[^A-Za-z0-9._-]+"), "_");
