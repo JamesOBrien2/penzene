@@ -7,6 +7,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 ## Unreleased
 
 - Typing a charged abbreviation such as N3- keeps the group and adds the charge (the azide anion), and the charge is drawn with the label.
+- A ChemDraw reagent label without an id no longer deletes the molecules on opening.
 
 ## 1.3.0 (2026-09-27)
 

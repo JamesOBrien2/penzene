@@ -576,9 +576,9 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
 //    abbreviation keeps its chemistry, an unknown one (SCoA) becomes an
 //    unknown group (*) rather than pretending to be its attachment atom;
 //  - a label RDKit kept as one atom (R, X) keeps its text as the atom's label.
-// RDKit tags only some atoms with their node id, but keeps every atom at its
-// CDXML position (even inside a nickname's own fragment), so match by position.
-static void placeLabels(Document& doc, const std::vector<int>& nodeOf, const std::vector<LabelNode>& labels,
+// RDKit keeps no node ids on the atoms it returns, but keeps every atom at its
+// CDXML position (even inside a nickname's own fragment), so match by position (#372).
+static void placeLabels(Document& doc, const std::vector<LabelNode>& labels,
                         const QHash<int, int>& bondCount) {
     std::vector<int> drop;
     auto at = [](QPointF a, QPointF b) { return std::abs(a.x() - b.x()) < 0.6 && std::abs(a.y() - b.y()) < 0.6; };
@@ -586,7 +586,7 @@ static void placeLabels(Document& doc, const std::vector<int>& nodeOf, const std
         std::vector<int> atoms;
         for (int i = 0; i < int(doc.atoms.size()); ++i) {
             const QPointF p = doc.atoms[i].pos;
-            if (nodeOf[i] == l.id || at(p, l.pos) ||
+            if (at(p, l.pos) ||
                 std::any_of(l.inner.begin(), l.inner.end(), [&](QPointF q) { return at(p, q); }))
                 atoms.push_back(i);
         }
@@ -597,7 +597,7 @@ static void placeLabels(Document& doc, const std::vector<int>& nodeOf, const std
         }
         if (atoms.empty()) continue;
         auto self = std::find_if(atoms.begin(), atoms.end(), [&](int i) {
-            return nodeOf[i] == l.id || (at(doc.atoms[i].pos, l.pos) && l.inner.empty());
+            return at(doc.atoms[i].pos, l.pos) && l.inner.empty();
         });
         if (self != atoms.end()) {  // kept as a single atom
             doc.atoms[*self].pos = l.pos;
@@ -644,24 +644,18 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
     } catch (...) {
     }
     Document doc;
-    std::vector<int> nodeOf;  // CDX node id of each atom, to match label nodes
     for (auto& mol : mols) {
         if (!mol->getNumConformers()) continue;
         if (!mol->getNumAtoms()) continue;
         keepDrawnKekule(*mol, drawn, at);
         RDKit::Chirality::wedgeMolBonds(*mol, &mol->getConformer());
-        for (const auto* a : mol->atoms()) {
-            unsigned id = 0;
-            a->getPropIfPresent("CDX_NODE_ID", id);
-            nodeOf.push_back(int(id));
-        }
         doc.append(fromRDKit(*mol, kScale));  // RDKit scales CDXML to 1.5 Å bonds, like MOL
     }
     if (data.trimmed().startsWith('<')) {
         Document graphics;
         QHash<int, int> bondCount;
         std::vector<QPointF> lonePairs;
-        placeLabels(doc, nodeOf, chemDrawGraphics(data, graphics, bondCount, lonePairs), bondCount);
+        placeLabels(doc, chemDrawGraphics(data, graphics, bondCount, lonePairs), bondCount);
         for (QPointF lp : lonePairs) {  // onto the nearest atom
             int best = -1;
             double bestDist = 1.4 * kBondLength;
