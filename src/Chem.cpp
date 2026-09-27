@@ -398,6 +398,7 @@ struct LabelNode {
     QString text;
     double textScale = 1;
     std::vector<QPointF> inner;  // positions of the atoms inside its fragment
+    int headCharge = 0;  // the charge on the fragment's atom under the label (RDKit drops it)
 };
 
 // Arrows, free text and label nodes from the CDXML itself; RDKit only reads the
@@ -468,8 +469,11 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             if (at.hasAttribute("Z")) moleculeZ = std::min(moleculeZ, at.value("Z").toDouble());
             const int id = at.value("id").toInt();
             for (const Open& o : stack)  // an atom inside a label's fragment (its link out isn't one)
-                if (o.label >= 0 && at.value("NodeType") != u"ExternalConnectionPoint")
-                    labels[o.label].inner.push_back(point(at.value("p")));
+                if (o.label >= 0 && at.value("NodeType") != u"ExternalConnectionPoint") {
+                    LabelNode& l = labels[o.label];
+                    l.inner.push_back(point(at.value("p")));
+                    if (len(l.inner.back() - l.pos) < 0.6) l.headCharge = at.value("Charge").toInt();
+                }
             if (labelTypes.contains(at.value("NodeType").toString())) {
                 labels.push_back({id, point(at.value("p"))});
                 stack.back().label = int(labels.size()) - 1;
@@ -602,7 +606,7 @@ static void placeLabels(Document& doc, const std::vector<LabelNode>& labels,
             auto at0 = std::find_if(atoms.begin(), atoms.end(), [&](int i) { return at(doc.atoms[i].pos, l.pos); });
             if (at0 == atoms.end()) continue;
             Atom& a = doc.atoms[*at0];
-            a.z = head->z, a.label = l.text, a.pos = l.pos;  // its charge, as the file has it, stays (N3-)
+            a.z = head->z, a.charge = l.headCharge, a.label = l.text, a.pos = l.pos;  // N3-: the file's charge
             for (int i : atoms)
                 if (i != *at0) drop.push_back(i);
             continue;
