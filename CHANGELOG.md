@@ -8,6 +8,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 - More abbreviations: COOH, Bu, iBu, OEt, NHBoc, NMe2, SO3H, TIPS, MOM and THP.
 - **Orbitals**: s, p, lobe and hybrid orbitals in Shapes, outlined, shaded or with a gradient, in any colour. Right-click to bring one to the front or send it behind the drawing; ChemDraw files keep them. <!-- icon: shapes -->
+- ChemDraw export keeps abbreviations such as Boc and OMe as ChemDraw nicknames, which ChemDraw shows as labels and still knows the chemistry of, instead of drawing them out. ChemDraw nicknames also open as labels.
 - **Isotopes**: Type 13C, 18OH or D on an atom (d makes deuterium); drawn ¹³C and kept through SMILES, MOL and ChemDraw files, with the formula (C[13C]H6O, CDCl3) and masses to match. <!-- icon: atom -->
 
 ## 1.2.0 (2026-09-27)
