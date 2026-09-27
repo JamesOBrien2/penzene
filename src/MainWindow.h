@@ -78,8 +78,28 @@ private:
     void applyTheme(const QString& name);
     void remember(const QString& path);  // most recent first, at most 10
 
-    QUndoStack* undo_;
+    QUndoStack* undo_;  // the page on the canvas's history
     Canvas* canvas_;
+    // The file's pages, tabs along the bottom. The canvas holds pages_[page_]'s drawing (its
+    // entry here is stale while it's shown); every page keeps its own undo history.
+    struct PageState {
+        QString name;
+        Document doc;
+        QUndoStack* undo;
+    };
+    std::vector<PageState> pages_;
+    int page_ = 0;
+    bool pagesEdited_ = false;  // pages added, deleted, renamed or moved since the last save
+    class QUndoGroup* undoGroup_;
+    class QTabBar* pageTabs_;
+    void setPages(const std::vector<Sheet>& sheets);  // New, Open: every page replaced, no history
+    std::vector<Sheet> sheets() const;
+    void showPage(int i);
+    void addPage();
+    void renamePage(int i);
+    void deletePage(int i);
+    void moveSelectionToPage(int i);
+    bool isClean() const;  // no unsaved change on any page
     QString path_;
     QLabel* info_;
     class QFrame* welcome_ = nullptr;

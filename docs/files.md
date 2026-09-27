@@ -30,6 +30,10 @@ Coordinates are points, x to the right and y down, with bonds 14.4 points long. 
 referred to by their index in `atoms`. A field left out takes its default: carbon, no charge,
 a single bond and so on. Two atoms share at most one bond.
 
+A file with several pages keeps the first page as the document itself, with its tab's `name`,
+and the others in order in `pages`: each one a `.penz` document of its own, with a `name`.
+Versions of Penzene from before pages open the first page.
+
 ### Versions
 
 Every Penzene release reads the files of every earlier one. Examples from each release live in

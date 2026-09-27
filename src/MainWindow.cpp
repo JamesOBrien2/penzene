@@ -24,6 +24,8 @@
 #include <QColorDialog>
 #include <QFile>
 #include <QSaveFile>
+#include <QTabBar>
+#include <QUndoGroup>
 #include <QComboBox>
 #include <QFileDialog>
 #include <QSpinBox>
@@ -109,6 +111,13 @@ static QString uiStyle(const Theme& t) {
         QLabel#welcomeHint { color: %5; }
         QToolButton#example { background: %1; color: %4; border: 1px solid %3; border-radius: 10px; padding: 8px; }
         QToolButton#example:hover { background: %7; border-color: %6; }
+        QTabBar#pageTabs { background: transparent; border: none; }
+        QTabBar#pageTabs::tab { color: %5; background: transparent; border: none; border-top: 2px solid transparent;
+                                padding: 5px 14px; margin-right: 2px; }
+        QTabBar#pageTabs::tab:hover { color: %4; background: %7; }
+        QTabBar#pageTabs::tab:selected { color: %6; background: %2; border-top-color: %6; font-weight: 600; }
+        QToolButton#addPage { color: %5; background: transparent; border: none; border-radius: 6px; padding: 2px 9px; font-size: 15px; }
+        QToolButton#addPage:hover { background: %7; color: %6; }
         QTreeWidget, QTextEdit, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
             background: %2; color: %4; border: 1px solid %3; border-radius: 7px; padding: 3px;
             selection-background-color: %7; selection-color: %6;
@@ -130,7 +139,61 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
 #ifdef Q_OS_MACOS
     static ChemDrawPasteboard chemDraw;  // registers itself with Qt, once
 #endif
-    setCentralWidget(canvas_);
+    undoGroup_ = new QUndoGroup(this);
+    undoGroup_->addStack(undo_);
+    undoGroup_->setActiveStack(undo_);
+    pages_ = {{tr("Page 1"), Document{}, undo_}};
+    // Pages as spreadsheet-style tabs under the canvas: + adds one, drag to reorder,
+    // double-click to rename, right-click to rename or delete.
+    auto* central = new QWidget;
+    auto* column = new QVBoxLayout(central);
+    column->setContentsMargins(0, 0, 0, 0);
+    column->setSpacing(0);
+    column->addWidget(canvas_, 1);
+    auto* strip = new QHBoxLayout;
+    strip->setContentsMargins(6, 0, 6, 0);
+    strip->setSpacing(2);
+    pageTabs_ = new QTabBar;
+    pageTabs_->setObjectName("pageTabs");
+    pageTabs_->setShape(QTabBar::RoundedSouth);
+    pageTabs_->setDocumentMode(true);
+    pageTabs_->setExpanding(false);
+    pageTabs_->setDrawBase(false);
+    pageTabs_->setMovable(true);
+    pageTabs_->setContextMenuPolicy(Qt::CustomContextMenu);
+    pageTabs_->addTab(pages_[0].name);
+    auto* addPageButton = new QToolButton;
+    addPageButton->setObjectName("addPage");
+    addPageButton->setText("+");
+    addPageButton->setAutoRaise(true);
+    addPageButton->setToolTip(tr("New Page"));
+    addPageButton->setAccessibleName(tr("New Page"));
+    strip->addWidget(pageTabs_);
+    strip->addWidget(addPageButton);
+    strip->addStretch();
+    column->addLayout(strip);
+    setCentralWidget(central);
+    connect(addPageButton, &QToolButton::clicked, this, &MainWindow::addPage);
+    connect(pageTabs_, &QTabBar::currentChanged, this, [this](int i) {
+        if (i >= 0 && i != page_) showPage(i);
+    });
+    connect(pageTabs_, &QTabBar::tabMoved, this, [this](int from, int to) {
+        PageState moved = pages_[from];
+        pages_.erase(pages_.begin() + from);
+        pages_.insert(pages_.begin() + to, moved);
+        page_ = pageTabs_->currentIndex();
+        pagesEdited_ = true;
+        updateTitle();
+    });
+    connect(pageTabs_, &QTabBar::tabBarDoubleClicked, this, &MainWindow::renamePage);
+    connect(pageTabs_, &QWidget::customContextMenuRequested, this, [this](QPoint at) {
+        const int i = pageTabs_->tabAt(at);
+        if (i < 0) return;
+        QMenu menu;
+        menu.addAction(tr("&Rename…"), this, [=, this] { renamePage(i); });
+        menu.addAction(tr("&Delete"), this, [=, this] { deletePage(i); })->setEnabled(pages_.size() > 1);
+        menu.exec(pageTabs_->mapToGlobal(at));
+    });
     setWindowTitle("Penzene " PENZENE_BUILD);
     resize(1100, 750);
     // Template library (built before the menus too); filled the first time it's shown.
@@ -187,7 +250,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::updateProfile);
     buildTools();
     buildMenus();
-    connect(undo_, &QUndoStack::cleanChanged, this, &MainWindow::updateTitle);
+    connect(undoGroup_, &QUndoGroup::cleanChanged, this, &MainWindow::updateTitle);
     updateTitle();
     info_ = new QLabel;
     info_->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -226,8 +289,7 @@ void MainWindow::buildWelcome() {
         welcomeExamples_.push_back({b, doc});
         connect(b, &QToolButton::clicked, this, [this, doc = doc] {
             if (!maybeSave()) return;
-            undo_->clear();
-            canvas_->setDocumentSilently(doc);
+            setPages({{tr("Page 1"), doc}});
             canvas_->fitToDocument();
             path_.clear();
             updateTitle();
@@ -356,19 +418,136 @@ MainWindow::~MainWindow() {
 void MainWindow::updateTitle() {
     QString name = path_.isEmpty() ? tr("Untitled") : QFileInfo(path_).fileName();
     setWindowTitle(name + "[*] — Penzene " PENZENE_BUILD);
-    setWindowModified(!undo_->isClean());
+    setWindowModified(!isClean());
+}
+
+bool MainWindow::isClean() const {
+    return !pagesEdited_ && std::all_of(pages_.begin(), pages_.end(), [](const PageState& p) { return p.undo->isClean(); });
+}
+
+std::vector<Sheet> MainWindow::sheets() const {
+    std::vector<Sheet> out;
+    for (int i = 0; i < int(pages_.size()); ++i)
+        out.push_back({pages_[i].name, i == page_ ? canvas_->document() : pages_[i].doc});
+    return out;
+}
+
+void MainWindow::setPages(const std::vector<Sheet>& sheets) {
+    QUndoStack* first = pages_[0].undo;
+    for (size_t i = 1; i < pages_.size(); ++i) delete pages_[i].undo;
+    first->clear();
+    pages_.clear();
+    for (const Sheet& s : sheets) {
+        QUndoStack* undo = pages_.empty() ? first : new QUndoStack(this);
+        undoGroup_->addStack(undo);
+        pages_.push_back({s.name, s.doc, undo});
+    }
+    page_ = 0;
+    pagesEdited_ = false;
+    undo_ = first;
+    canvas_->setUndoStack(undo_);
+    undoGroup_->setActiveStack(undo_);
+    {
+        QSignalBlocker quiet(pageTabs_);
+        while (pageTabs_->count()) pageTabs_->removeTab(0);
+        for (const auto& p : pages_) pageTabs_->addTab(p.name);
+        pageTabs_->setCurrentIndex(0);
+    }
+    canvas_->setSelection({});  // the old drawing's indices mean nothing in this one
+    canvas_->setDocumentSilently(pages_[0].doc);
+    updateTitle();
+}
+
+void MainWindow::showPage(int i) {
+    if (i < 0 || i >= int(pages_.size())) return;
+    pages_[page_].doc = canvas_->document();
+    page_ = i;
+    undo_ = pages_[i].undo;
+    canvas_->setUndoStack(undo_);
+    undoGroup_->setActiveStack(undo_);
+    canvas_->setSelection({});
+    canvas_->setDocumentSilently(pages_[i].doc);
+    QSignalBlocker quiet(pageTabs_);
+    pageTabs_->setCurrentIndex(i);
+}
+
+void MainWindow::addPage() {
+    int n = 1;
+    auto taken = [this](const QString& name) {
+        return std::any_of(pages_.begin(), pages_.end(), [&](const PageState& p) { return p.name == name; });
+    };
+    while (taken(tr("Page %1").arg(n))) ++n;
+    Document blank;
+    blank.style = QSettings().value("defaultStyle").toString();  // Edit > Preferences
+    auto* undo = new QUndoStack(this);
+    undoGroup_->addStack(undo);
+    pages_.push_back({tr("Page %1").arg(n), blank, undo});
+    {
+        QSignalBlocker quiet(pageTabs_);
+        pageTabs_->addTab(pages_.back().name);
+    }
+    pagesEdited_ = true;
+    showPage(int(pages_.size()) - 1);
+    updateTitle();
+}
+
+void MainWindow::renamePage(int i) {
+    if (i < 0 || i >= int(pages_.size())) return;
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("Rename Page"), tr("Name:"), QLineEdit::Normal,
+                                               pages_[i].name, &ok).trimmed();
+    if (!ok || name.isEmpty() || name == pages_[i].name) return;
+    pages_[i].name = name;
+    pageTabs_->setTabText(i, name);
+    pagesEdited_ = true;
+    updateTitle();
+}
+
+void MainWindow::deletePage(int i) {
+    if (pages_.size() < 2 || i < 0 || i >= int(pages_.size())) return;
+    const Document& doc = i == page_ ? canvas_->document() : pages_[i].doc;
+    if (!doc.empty() && QMessageBox::question(this, tr("Delete Page"),
+                                              tr("Delete %1 and its drawing? This can't be undone.").arg(pages_[i].name)) !=
+                            QMessageBox::Yes)
+        return;
+    if (i == page_) showPage(i == 0 ? 1 : i - 1);  // step off it first
+    delete pages_[i].undo;
+    pages_.erase(pages_.begin() + i);
+    if (page_ > i) --page_;
+    {
+        QSignalBlocker quiet(pageTabs_);
+        pageTabs_->removeTab(i);
+        pageTabs_->setCurrentIndex(page_);
+    }
+    pagesEdited_ = true;
+    updateTitle();
+}
+
+// Cut from this page, pasted on that one: an undo step on each.
+void MainWindow::moveSelectionToPage(int i) {
+    if (i == page_ || (canvas_->selection().isEmpty() && canvas_->selectedArrows().isEmpty() &&
+                       canvas_->selectedTexts().isEmpty()))
+        return;
+    const Document part = canvas_->selectedSubset();
+    canvas_->deleteSelection();
+    showPage(i);
+    canvas_->insert(part, tr("Move to %1").arg(pages_[i].name));
 }
 
 bool MainWindow::openFile(const QString& path) {
     const QString ext = QFileInfo(path).suffix().toLower();
-    std::optional<Document> doc = chem::readFile(path);
-    if (!doc) {
+    std::vector<Sheet> sheets;
+    if (ext == "penz") {
+        QFile f(path);
+        if (f.open(QIODevice::ReadOnly)) sheets = sheetsFromJson(f.readAll());
+    } else if (auto doc = chem::readFile(path)) {
+        sheets = {{tr("Page 1"), *doc}};
+    }
+    if (sheets.empty()) {
         QMessageBox::warning(this, tr("Open"), tr("%1 is not a structure file I can read.").arg(path));
         return false;
     }
-    undo_->clear();
-    canvas_->setSelection({});  // the old drawing's indices mean nothing in this one
-    canvas_->setDocumentSilently(*doc);
+    setPages(sheets);
     canvas_->fitToDocument();
     path_ = ext == "cdxml" || ext == "cdx" ? QString() : path;  // never save over a ChemDraw file
     remember(path);
@@ -390,21 +569,28 @@ QString MainWindow::autosavePath() {
 }
 
 void MainWindow::autosave() {
-    if (undo_->isClean()) return QFile::remove(autosavePath()), void();
+    if (isClean()) return QFile::remove(autosavePath()), void();
     QDir().mkpath(QFileInfo(autosavePath()).path());
     QSaveFile f(autosavePath());  // a crash mid-write keeps the previous autosave
-    if (f.open(QIODevice::WriteOnly)) f.write(canvas_->document().toJson()), f.commit();
+    if (f.open(QIODevice::WriteOnly)) f.write(sheetsToJson(sheets())), f.commit();
 }
 
 void MainWindow::offerRecovery() {
     QFile f(autosavePath());
     if (!f.open(QIODevice::ReadOnly)) return;
-    auto doc = Document::fromJson(f.readAll());
+    auto sheets = sheetsFromJson(f.readAll());
     f.close();
-    if (doc && !doc->empty() &&
+    const bool drawn = std::any_of(sheets.begin(), sheets.end(), [](const Sheet& s) { return !s.doc.empty(); });
+    if (drawn &&
         QMessageBox::question(this, tr("Recover"),
-                              tr("Penzene closed without saving your last drawing. Recover it?")) == QMessageBox::Yes)
-        canvas_->commit(*doc, tr("Recover"));  // unsaved, so Save asks where to put it
+                              tr("Penzene closed without saving your last drawing. Recover it?")) == QMessageBox::Yes) {
+        const Document first = sheets[0].doc;
+        sheets[0].doc = Document{};
+        setPages(sheets);
+        canvas_->commit(first, tr("Recover"));  // unsaved, so Save asks where to put it
+        pagesEdited_ = sheets.size() > 1;
+        updateTitle();
+    }
     QFile::remove(autosavePath());
 }
 
@@ -412,7 +598,12 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
     const auto& doc = canvas_->document();
     QByteArray data;
     if (path.endsWith(".penz", Qt::CaseInsensitive)) {
-        data = doc.toJson();
+        data = sheetsToJson(sheets());
+    } else if (pages_.size() > 1) {
+        QMessageBox::warning(this, tr("Save"),
+                             tr("%1 holds one page. Save as a Penzene document (.penz) to keep all %2 pages, or export this page.")
+                                 .arg(QFileInfo(path).suffix().toUpper()).arg(pages_.size()));
+        return false;
     } else if (path.endsWith(".cdxml", Qt::CaseInsensitive)) {
         data = chem::toCdxml(doc);
     } else if (path.endsWith(".cdx", Qt::CaseInsensitive)) {
@@ -439,7 +630,8 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
         return false;
     }
     path_ = path;
-    undo_->setClean();
+    for (auto& p : pages_) p.undo->setClean();
+    pagesEdited_ = false;
     QFile::remove(autosavePath());
     remember(path);
     updateTitle();
@@ -462,7 +654,7 @@ bool MainWindow::saveAs() {
 }
 
 bool MainWindow::maybeSave() {
-    if (undo_->isClean()) return true;
+    if (isClean()) return true;
     auto r = QMessageBox::question(this, tr("Unsaved changes"), tr("Save changes to this document?"),
                                    QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
     return r == QMessageBox::Discard || (r == QMessageBox::Save && save());
@@ -1384,14 +1576,17 @@ void MainWindow::buildMenus() {
     auto* file = menuBar()->addMenu(tr("&File"));
     file->addAction(tr("&New"), QKeySequence::New, this, [this] {
         if (!maybeSave()) return;
-        undo_->clear();
         Document blank;
         blank.style = QSettings().value("defaultStyle").toString();  // Edit > Preferences
-        canvas_->setDocumentSilently(blank);
+        setPages({{tr("Page 1"), blank}});
         path_.clear();
         updateTitle();
         welcome_->show();
     });
+    file->addAction(tr("New &Page"), this, &MainWindow::addPage);
+    file->addAction(tr("Rena&me Page…"), this, [this] { renamePage(page_); });
+    auto* deletePageAction = file->addAction(tr("&Delete Page"), this, [this] { deletePage(page_); });
+    connect(file, &QMenu::aboutToShow, this, [=, this] { deletePageAction->setEnabled(pages_.size() > 1); });
     file->addAction(tr("&Open…"), QKeySequence::Open, this, [this] {
         if (!maybeSave()) return;
         QString p = QFileDialog::getOpenFileName(this, tr("Open"), {},
@@ -1421,13 +1616,20 @@ void MainWindow::buildMenus() {
     file->addAction(tr("&Quit"), QKeySequence::Quit, this, &QWidget::close);
 
     auto* edit = menuBar()->addMenu(tr("&Edit"));
-    auto* u = undo_->createUndoAction(this);
+    auto* u = undoGroup_->createUndoAction(this);
     u->setShortcut(QKeySequence::Undo);
-    auto* r = undo_->createRedoAction(this);
+    auto* r = undoGroup_->createRedoAction(this);
     r->setShortcut(QKeySequence::Redo);
     edit->addAction(u);
     edit->addAction(r);
     edit->addSeparator();
+    auto* moveTo = edit->addMenu(tr("Mo&ve to Page"));
+    connect(moveTo, &QMenu::aboutToShow, this, [=, this] {
+        moveTo->clear();
+        for (int i = 0; i < int(pages_.size()); ++i)
+            if (i != page_) moveTo->addAction(pages_[i].name, this, [=, this] { moveSelectionToPage(i); });
+        if (moveTo->isEmpty()) moveTo->addAction(tr("(add a page first)"))->setEnabled(false);
+    });
     edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] {
         copy();
         canvas_->deleteSelection();
@@ -1568,6 +1770,10 @@ void MainWindow::buildMenus() {
     view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { canvas_->zoomBy(1.25); });
     view->addAction(tr("Zoom &Out"), QKeySequence::ZoomOut, this, [this] { canvas_->zoomBy(0.8); });
     view->addAction(tr("&Fit to Window"), QKeySequence(tr("Ctrl+0")), canvas_, &Canvas::fitToDocument);
+    view->addAction(tr("&Next Page"), QKeySequence(tr("Ctrl+PgDown")), this,
+                    [this] { showPage((page_ + 1) % int(pages_.size())); });
+    view->addAction(tr("&Previous Page"), QKeySequence(tr("Ctrl+PgUp")), this,
+                    [this] { showPage((page_ + int(pages_.size()) - 1) % int(pages_.size())); });
     // Guides are the user's own, not the document's: remembered, never saved or exported.
     auto* grid = view->addAction(tr("&Grid"));
     auto* rulers = view->addAction(tr("&Rulers"));
