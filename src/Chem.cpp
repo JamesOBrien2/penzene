@@ -769,11 +769,16 @@ std::vector<Reaction> reactionsOf(const Document& doc) {
     for (const Arrow& a : doc.arrows)
         if (a.bend == 0 && (a.kind == ArrowKind::Reaction || a.kind == ArrowKind::Equilibrium) && a.from != a.to)
             arrows.push_back(&a);
-    auto place = [](const Arrow* a) {  // rows 4 bond lengths deep, then left to right (a strict order for sort)
-        const QPointF mid = (a->from + a->to) / 2;
-        return std::pair{std::floor(mid.y() / (4 * kBondLength)), mid.x()};
-    };
-    std::sort(arrows.begin(), arrows.end(), [&](const Arrow* a, const Arrow* b) { return place(a) < place(b); });
+    // Reading order: rows (a new one where arrows are over 2 bond lengths apart in y), then left to right.
+    auto mid = [](const Arrow* a) { return (a->from + a->to) / 2; };
+    std::sort(arrows.begin(), arrows.end(), [&](const Arrow* a, const Arrow* b) { return mid(a).y() < mid(b).y(); });
+    std::map<const Arrow*, int> row;
+    for (size_t k = 0; k < arrows.size(); ++k)
+        row[arrows[k]] = k && mid(arrows[k]).y() - mid(arrows[k - 1]).y() > 2 * kBondLength ? row[arrows[k - 1]] + 1
+                         : k ? row[arrows[k - 1]] : 0;
+    std::stable_sort(arrows.begin(), arrows.end(), [&](const Arrow* a, const Arrow* b) {
+        return std::pair{row[a], mid(a).x()} < std::pair{row[b], mid(b).x()};
+    });
     std::vector<Reaction> out(arrows.size());
     for (auto& m : molecules(doc)) {
         const QPointF c = atomBox(m).center();

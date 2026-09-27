@@ -577,6 +577,15 @@ TEST_CASE("a multi-step scheme exports every step (#334)") {
     for (size_t at = rdf.find("$RFMT\n$RXN"); at != std::string::npos; at = rdf.find("$RFMT\n$RXN", at + 1)) ++rxns;
     CHECK(rxns == 2);
     CHECK(chem::reactionOf(doc)->products.size() == 1);  // the first step, as before
+    // Arrows a little apart in height are still one row, read left to right.
+    Document straddle = doc;
+    straddle.arrows[0].from.ry() += 1, straddle.arrows[0].to.ry() += 1;
+    for (double shift : {0.0, 4 * kBondLength - 0.5}) {  // wherever the row sits
+        Document moved = straddle;
+        for (auto& a : moved.atoms) a.pos.ry() += shift;
+        for (auto& a : moved.arrows) a.from.ry() += shift, a.to.ry() += shift;
+        CHECK(chem::toReactionSmiles(chem::reactionsOf(moved)) == chem::toReactionSmiles(steps));
+    }
 }
 
 TEST_CASE("CDXML export reads back: molecules, wedges, arrows and text (#29)") {
