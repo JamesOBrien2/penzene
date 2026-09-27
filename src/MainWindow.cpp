@@ -23,6 +23,7 @@
 #include <QCloseEvent>
 #include <QColorDialog>
 #include <QFile>
+#include <QLockFile>
 #include <QSaveFile>
 #include <QTabBar>
 #include <QUndoGroup>
@@ -566,34 +567,49 @@ void MainWindow::remember(const QString& path) {
     QSettings().setValue("recentFiles", files.mid(0, 10));
 }
 
+// One autosave per process, locked while the process runs: a second Penzene
+// (Windows opens each double-clicked file in its own) leaves it alone (#318).
 QString MainWindow::autosavePath() {
-    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/autosave.penz";
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
+           QString("/autosave-%1.penz").arg(QCoreApplication::applicationPid());
 }
 
 void MainWindow::autosave() {
     if (isClean()) return QFile::remove(autosavePath()), void();
     QDir().mkpath(QFileInfo(autosavePath()).path());
+    static QLockFile lock(autosavePath() + ".lock");  // released when this process exits, or goes stale if it crashes
+    lock.tryLock(0);
     QSaveFile f(autosavePath());  // a crash mid-write keeps the previous autosave
     if (f.open(QIODevice::WriteOnly)) f.write(sheetsToJson(sheets())), f.commit();
 }
 
+// Autosaves left by Penzenes that are no longer running, newest first; the
+// first one accepted is recovered, and each one offered is then removed.
 void MainWindow::offerRecovery() {
-    QFile f(autosavePath());
-    if (!f.open(QIODevice::ReadOnly)) return;
-    auto sheets = sheetsFromJson(f.readAll());
-    f.close();
-    const bool drawn = std::any_of(sheets.begin(), sheets.end(), [](const Sheet& s) { return !s.doc.empty(); });
-    if (drawn &&
-        QMessageBox::question(this, tr("Recover"),
-                              tr("Penzene closed without saving your last drawing. Recover it?")) == QMessageBox::Yes) {
+    const QDir dir(QFileInfo(autosavePath()).path());
+    for (const QFileInfo& file : dir.entryInfoList({"autosave*.penz"}, QDir::Files, QDir::Time)) {
+        if (file.fileName() == QFileInfo(autosavePath()).fileName()) continue;
+        QLockFile lock(file.filePath() + ".lock");
+        if (!lock.tryLock(0)) continue;  // its Penzene is still running
+        QFile f(file.filePath());
+        if (!f.open(QIODevice::ReadOnly)) continue;
+        auto sheets = sheetsFromJson(f.readAll());
+        f.close();
+        const bool drawn = std::any_of(sheets.begin(), sheets.end(), [](const Sheet& s) { return !s.doc.empty(); });
+        const bool recover =
+            drawn && QMessageBox::question(this, tr("Recover"),
+                                           tr("Penzene closed without saving your last drawing. Recover it?")) ==
+                         QMessageBox::Yes;
+        QFile::remove(file.filePath());
+        if (!recover) continue;
         const Document first = sheets[0].doc;
         sheets[0].doc = Document{};
         setPages(sheets);
         canvas_->commit(first, tr("Recover"));  // unsaved, so Save asks where to put it
         pagesEdited_ = sheets.size() > 1;
         updateTitle();
+        return;
     }
-    QFile::remove(autosavePath());
 }
 
 bool MainWindow::saveTo(const QString& path, bool v3000) {
