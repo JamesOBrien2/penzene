@@ -1010,7 +1010,7 @@ TEST_CASE("MOL and CDXML imports keep the drawn Kekulé form (#323)") {
 
 TEST_CASE("a typed charged label sets the element and charge (#324)") {
     for (auto [label, z, charge] : {std::tuple{"NH3+", 7, 1}, {"O-", 8, -1}, {"Na+", 11, 1}, {"Fe3+", 26, 3},
-                                    {"O2-", 8, -2}, {"NH4+", 7, 1}, {"O−", 8, -1}, {"S+2", 16, 2}}) {
+                                    {"O2-", 8, -2}, {"NH4+", 7, 1}, {"O−", 8, -1}, {"S+2", 16, 2}, {"15NH4+", 7, 1}}) {  // the last with an isotope too
         Document d;
         d.addAtom({0, 0});
         REQUIRE(edit::applyLabel(d, 0, QString::fromUtf8(label), true));
