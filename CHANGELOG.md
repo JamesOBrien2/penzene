@@ -4,14 +4,14 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
-## Unreleased
+## 1.3.0 (2026-09-27)
 
+- **Orbitals**: s, p, lobe and hybrid orbitals in Shapes, outlined, shaded or with a gradient, in any colour. Right-click to bring one to the front or send it behind the drawing; ChemDraw files keep them. <!-- icon: shapes -->
+- **Isotopes**: Type 13C, 18OH or D on an atom (d makes deuterium); drawn ¹³C and kept through SMILES, MOL and ChemDraw files, with the formula (C[13C]H6O, CDCl3) and masses to match. <!-- icon: atom -->
 - Charges in text: NH4+, Cu2+ and [Fe(CN)6]3- are set with the charge as a superscript; ^ marks one outright (SO4^2-). ChemDraw files keep counts and charges as sub- and superscripts.
 - More abbreviations: COOH, Bu, iBu, OEt, NHBoc, NMe2, SO3H, TIPS, MOM and THP.
 - A "no reaction" arrow, crossed through the middle, among the arrow tools; it round-trips with ChemDraw.
-- **Orbitals**: s, p, lobe and hybrid orbitals in Shapes, outlined, shaded or with a gradient, in any colour. Right-click to bring one to the front or send it behind the drawing; ChemDraw files keep them. <!-- icon: shapes -->
 - ChemDraw export keeps abbreviations such as Boc and OMe as ChemDraw nicknames, which ChemDraw shows as labels and still knows the chemistry of, instead of drawing them out. ChemDraw nicknames also open as labels.
-- **Isotopes**: Type 13C, 18OH or D on an atom (d makes deuterium); drawn ¹³C and kept through SMILES, MOL and ChemDraw files, with the formula (C[13C]H6O, CDCl3) and masses to match. <!-- icon: atom -->
 - Multi-step schemes export every step: Copy as Reaction SMILES gives a line per arrow, and Save As an RD file (.rdf) writes one Rxnfile per arrow. Before, only the first arrow was exported.
 
 ## 1.2.0 (2026-09-27)
