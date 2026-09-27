@@ -308,14 +308,23 @@ static QPointF pointBack(const std::vector<QPointF>& pts, double by) {
 
 // Filled head at `tip` pointing along `dir`; `sides` +1/-1 for a half head (one barb, and no
 // sliver back along the shaft).
+// Heads are solid even on a dashed arrow.
+static QPen solid(QPen pen) {
+    pen.setStyle(Qt::SolidLine);
+    return pen;
+}
+
 static void drawHead(QPainter& p, QPointF tip, QPointF dir, int sides = 0) {
     QPointF d = unit(dir), n = perp(d), base = tip - d * kHeadLength, notch = tip - d * (kHeadLength * 0.8);
     QPolygonF head = sides > 0   ? QPolygonF{tip, base + n * kHeadWidth, notch}
                      : sides < 0 ? QPolygonF{tip, notch, base - n * kHeadWidth}
                                  : QPolygonF{tip, base + n * kHeadWidth, notch, base - n * kHeadWidth};
-    p.setBrush(p.pen().color());
+    const QPen shaft = p.pen();
+    p.setPen(solid(shaft));
+    p.setBrush(shaft.color());
     p.drawPolygon(head);
     p.setBrush(Qt::NoBrush);
+    p.setPen(shaft);
 }
 
 static void drawArrow(QPainter& p, const Arrow& a) {
@@ -341,6 +350,7 @@ static void drawArrow(QPainter& p, const Arrow& a) {
         QPointF o = n * kEquilibriumGap, back = a.to - d * kHeadLength;
         p.drawLine(a.from + o, back + o + d * kEquilibriumGap);
         p.drawLine(a.from - o, back - o + d * kEquilibriumGap);
+        p.setPen(solid(p.pen()));
         p.drawPolyline(QPolygonF{back + n * (kHeadWidth + kEquilibriumGap), a.to, back - n * (kHeadWidth + kEquilibriumGap)});
         return;
     }
