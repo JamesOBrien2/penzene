@@ -25,6 +25,7 @@ struct Record {
 };
 std::vector<Record> readRecords(const QString& path);
 std::string toMolBlock(const Document& doc, bool v3000 = false);
+std::string toSdf(const Document& doc, bool v3000 = false);  // one record per molecule
 
 // Rotation out of the page: the molecules of `atoms` given a 3D shape (an RDKit
 // conformer posed to match the drawing), which project3D turns about the page's

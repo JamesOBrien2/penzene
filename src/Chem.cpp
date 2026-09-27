@@ -921,6 +921,12 @@ std::string toMolBlock(const Document& doc, bool v3000) {
     return RDKit::MolToMolBlock(*mol, true, -1, false, v3000);
 }
 
+std::string toSdf(const Document& doc, bool v3000) {
+    std::string out;
+    for (const Document& m : molecules(doc)) out += toMolBlock(m, v3000) + "$$$$\n";
+    return out;
+}
+
 std::string toSmiles(const Document& doc) {
     auto mol = toRDKit(doc);
     if (!perceive(*mol)) return "";
