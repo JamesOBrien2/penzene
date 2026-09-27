@@ -2243,7 +2243,8 @@ TEST_CASE("atom numbers stay clear of lone pairs and δ on the same atom (#349)"
     const int plain = ink(false, false), numbers = ink(true, false) - plain, marks = ink(false, true) - plain;
     const int shared = plain + numbers + marks - ink(true, true);
     INFO("numbers " << numbers << " marks " << marks << " shared " << shared);
-    CHECK(shared < 40);  // antialiasing noise (1 here), not a digit on a dot (121 before)
+    // Edge pixels, not a digit on a dot: 0.04% here (macOS) and 1% on Windows' larger glyphs; 4.6% before.
+    CHECK(shared < marks / 50);
 }
 
 #ifndef _WIN32
