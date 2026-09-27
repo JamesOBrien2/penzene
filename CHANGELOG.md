@@ -19,6 +19,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Each running Penzene keeps its own crash-recovery copy, so opening a second one (as Windows does for each double-clicked file) no longer deletes the first one's.
 - `penzene --render` with one output file draws every structure in an SDF or SMILES file, laid out as Open does, not just the last.
 - MOL export writes aromatic rings as the drawn single and double bonds; bond type 4 is only for queries, and some programs rejected it.
+- Large drawings and pages can be scrolled to in full; the canvas no longer stops 5000 points from the origin.
 - Clean keeps aromatic rings' double bonds where they were drawn, and keeps bond colours.
 - MOL and ChemDraw files open with aromatic rings' double bonds where the file drew them.
 

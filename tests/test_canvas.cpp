@@ -341,6 +341,15 @@ TEST_CASE("hotspot is sticky and arrows walk atom -> bond -> atom") {
     CHECK(f.canvas.hotspotAtom() == -1);
 }
 
+TEST_CASE("a drawing beyond ±5000 pt can be brought into view (#326)") {
+    Fixture f;
+    Document d;
+    d.addAtom({8000, 0}, 7);
+    f.canvas.setDocumentSilently(d);
+    f.canvas.fitToDocument();
+    CHECK(f.canvas.viewport()->rect().contains(f.at({8000, 0})));
+}
+
 TEST_CASE("hotkeys: fused ring on a bond") {
     Fixture f;
     f.canvas.setTool(Canvas::Tool::Bond);
