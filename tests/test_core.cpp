@@ -955,6 +955,9 @@ TEST_CASE("MOL export writes Kekulé bonds, not query bond type 4 (#321)") {
 }
 
 TEST_CASE("Clean keeps bond colours and the drawn Kekulé structure (#322)") {
+}
+
+TEST_CASE("MOL and CDXML imports keep the drawn Kekulé form (#323)") {
     auto orders = [](const Document& d) {
         std::vector<std::tuple<int, int, int>> out;
         for (const auto& b : d.bonds) out.push_back({std::min(b.a, b.b), std::max(b.a, b.b), b.order});
@@ -967,5 +970,26 @@ TEST_CASE("Clean keeps bond colours and the drawn Kekulé structure (#322)") {
         const Document c = chem::clean2D(d);
         CHECK(orders(c) == orders(d));
         for (const auto& b : c.bonds) CHECK(b.color == QColor("#ff0000"));
+}
+
+    for (int form : {0, 1}) {  // both Kekulé forms of benzene
+        Document d;
+        for (int k = 0; k < 6; ++k)
+            d.addAtom({kBondLength * std::cos(M_PI / 3 * k), kBondLength * std::sin(M_PI / 3 * k)});
+        for (int k = 0; k < 6; ++k) d.bonds.push_back({k, (k + 1) % 6, (k + form) % 2 ? 1 : 2});
+        auto cdxml = chem::fromChemDraw(chem::toCdxml(d));
+        REQUIRE(cdxml);
+        CHECK(orders(*cdxml) == orders(d));
+        std::string mol = "\n  hand\n\n  6  6  0  0  0  0  0  0  0  0999 V2000\n";
+        for (int k = 0; k < 6; ++k)
+            mol += QString("%1%2    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n")
+                       .arg(1.5 * std::cos(M_PI / 3 * k), 10, 'f', 4)
+                       .arg(1.5 * std::sin(M_PI / 3 * k), 10, 'f', 4)
+                       .toStdString();
+        for (const auto& b : d.bonds)
+            mol += QString("%1%2%3  0\n").arg(b.a + 1, 3).arg(b.b + 1, 3).arg(b.order, 3).toStdString();
+        auto fromMol = chem::fromMolBlock(mol + "M  END\n");
+        REQUIRE(fromMol);
+        CHECK(orders(*fromMol) == orders(d));
     }
 }
