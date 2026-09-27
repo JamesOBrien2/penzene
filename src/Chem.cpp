@@ -408,7 +408,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             labelText = parentLabel;
         } else if (tag == "s" && (text || labelText >= 0) && at.hasAttribute("size")) {
             const double rel = at.value("size").toDouble() * scale / 10;  // 10 pt: the default (ACS) label size
-            (text ? text->scale : labels[labelText].textScale) = rel;
+            if (rel > 0) (text ? text->scale : labels[labelText].textScale) = rel;  // size="0" would save unopenable (#316)
         } else if (tag == "t" && !inside("n") && !inside("fragment")) {
             // p is the first baseline; the bounding box gives the left edge whatever the justification.
             QPointF p = point(at.value("p"));
