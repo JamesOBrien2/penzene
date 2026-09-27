@@ -329,6 +329,15 @@ TEST_CASE("CDXML export keeps abbreviations as ChemDraw nicknames (#333)") {
     }
 }
 
+TEST_CASE("ChemDraw export keeps a charged abbreviation's charge (#382)") {
+    Document d;
+    d.addAtom({0, 0});
+    REQUIRE(edit::applyLabel(d, 0, "N3-", true));
+    const QByteArray cdxml = chem::toCdxml(d);
+    CHECK(cdxml.count("Charge=\"-1\"") == 2);  // N-=N+=N-: the attaching N carries the typed charge too
+    CHECK(cdxml.count("Charge=\"1\"") == 1);
+}
+
 TEST_CASE("explicit hydrogens and carbon/H display options (#97)") {
     auto eth = chem::fromSmiles("CCO");
     REQUIRE(eth);
