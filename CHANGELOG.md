@@ -21,6 +21,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - MOL export writes aromatic rings as the drawn single and double bonds; bond type 4 is only for queries, and some programs rejected it.
 - Clean keeps aromatic rings' double bonds where they were drawn, and keeps bond colours.
 - MOL and ChemDraw files open with aromatic rings' double bonds where the file drew them.
+- Typing a charged label such as NH3+, O- or Fe3+ sets the element and its charge, not an unknown group.
 
 ## 1.1.1 (2026-09-27)
 

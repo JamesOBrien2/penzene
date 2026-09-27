@@ -373,9 +373,22 @@ bool applyLabel(Document& doc, int at, const QString& label, bool anyText) {
     }
     // "OH", "NH2": the element; hydrogens are implicit.
     static const QRegularExpression hydride("^([A-Z][a-z]?)H\\d*$");
-    QString element = hydride.match(label).hasMatch() ? hydride.match(label).captured(1) : label;
-    if (int z = chem::atomicNumber(element.toStdString()); z > 0) {
+    auto elementOf = [](const QString& s) {
+        return chem::atomicNumber((hydride.match(s).hasMatch() ? hydride.match(s).captured(1) : s).toStdString());
+    };
+    if (int z = elementOf(label); z > 0) {
         a.z = z, a.label.clear();
+        return true;
+    }
+    // With a charge: NH3+, O-, Na+, O2- (#324). Digits before the sign are the
+    // charge only on a bare element (Fe3+); NH3+ is NH3 with one plus.
+    static const QRegularExpression metalIon("^(?<base>[A-Z][a-z]?)(?<n>\\d+)(?<sign>[+\\-\\x{2212}])$"),
+        ion("^(?<base>.+?)(?<sign>[+\\-\\x{2212}])(?<n>\\d*)$");
+    auto m = metalIon.match(label);
+    if (!m.hasMatch() || !elementOf(m.captured("base"))) m = ion.match(label);
+    if (int z = m.hasMatch() ? elementOf(m.captured("base")) : 0; z > 0) {
+        a.z = z, a.label.clear();
+        a.charge = (m.captured("sign") == "+" ? 1 : -1) * (m.captured("n").isEmpty() ? 1 : m.captured("n").toInt());
         return true;
     }
     if (chem::attach(doc, at, label.toStdString())) return true;
