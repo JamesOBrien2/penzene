@@ -10,6 +10,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - **White and teal**: The page is white and the window a cool grey, in place of the pale yellow paper; the logo is the teal ring on a white tile, and dark mode is a deeper charcoal. <!-- icon: palette -->
 - **Pages**: A drawing can hold several pages, as tabs along the bottom of the window, each with its own undo history; Edit → Move to Page moves a selection between them. View → Grid and View → Rulers measure the drawing at its final size. <!-- icon: layout-bottombar -->
 - ChemDraw files keep their label size relative to their bonds, so crowded drawings with small labels don't overlap.
+- An arrow with a huge bend, as a damaged file can hold, no longer exhausts memory when drawn.
 
 ## 1.1.1 (2026-09-27)
 
