@@ -5,6 +5,7 @@
 #include <QRegularExpression>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QObject>
 #include <QtEndian>
 #include <algorithm>
 #include <cmath>
@@ -316,4 +317,34 @@ QPointF Document::awayDirection(int atom) const {
         if (next - ang[i] > bestGap + 1e-6) bestGap = next - ang[i], bestMid = (ang[i] + next) / 2;
     }
     return {std::cos(bestMid), std::sin(bestMid)};
+}
+
+QByteArray sheetsToJson(const std::vector<Sheet>& sheets) {
+    auto object = [](const Sheet& s) {
+        QJsonObject o = QJsonDocument::fromJson(s.doc.toJson()).object();
+        o["name"] = s.name;
+        return o;
+    };
+    QJsonObject root = object(sheets.at(0));
+    QJsonArray rest;
+    for (size_t i = 1; i < sheets.size(); ++i) rest.append(object(sheets[i]));
+    if (!rest.isEmpty()) root["pages"] = rest;
+    return QJsonDocument(root).toJson(QJsonDocument::Indented);
+}
+
+std::vector<Sheet> sheetsFromJson(const QByteArray& data) {
+    const QJsonObject root = QJsonDocument::fromJson(data).object();
+    auto first = Document::fromJson(data);
+    if (!first) return {};
+    auto name = [](const QJsonObject& o, size_t n) {
+        const QString s = o["name"].toString().trimmed();
+        return s.isEmpty() ? QObject::tr("Page %1").arg(n) : s;
+    };
+    std::vector<Sheet> sheets{{name(root, 1), *first}};
+    for (const auto& v : root["pages"].toArray()) {
+        auto doc = Document::fromJson(QJsonDocument(v.toObject()).toJson());
+        if (!doc) return {};  // a damaged page: refuse the file rather than drop the page on the next save
+        sheets.push_back({name(v.toObject(), sheets.size() + 1), *doc});
+    }
+    return sheets;
 }

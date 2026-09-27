@@ -125,6 +125,17 @@ struct Document {
     void removeAtoms(const std::vector<int>& atoms);  // also drops their bonds
 };
 
+// A file's pages, the tabs along the bottom of the window. The first page is the .penz
+// document itself (so a version without pages still opens it); the rest follow in its
+// "pages" array, each a .penz document of its own. Every page has a "name".
+struct Sheet {
+    QString name;
+    Document doc;
+    bool operator==(const Sheet&) const = default;
+};
+QByteArray sheetsToJson(const std::vector<Sheet>& sheets);
+std::vector<Sheet> sheetsFromJson(const QByteArray& data);  // empty if it isn't a .penz file
+
 inline bool operator==(const Atom& x, const Atom& y) {
     return x.pos == y.pos && x.z == y.z && x.charge == y.charge && x.label == y.label && x.color == y.color &&
            x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial;
