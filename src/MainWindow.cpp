@@ -576,8 +576,10 @@ void MainWindow::remember(const QString& path) {
 // One autosave per process, locked while the process runs: a second Penzene
 // (Windows opens each double-clicked file in its own) leaves it alone (#318).
 QString MainWindow::autosavePath() {
-    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
-           QString("/autosave-%1.penz").arg(QCoreApplication::applicationPid());
+    // With the start time too: a later process can get a crashed one's pid (#361).
+    static const QString name =
+        QString("/autosave-%1-%2.penz").arg(QCoreApplication::applicationPid()).arg(QDateTime::currentMSecsSinceEpoch());
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + name;
 }
 
 void MainWindow::autosave() {

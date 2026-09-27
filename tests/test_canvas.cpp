@@ -2419,3 +2419,23 @@ TEST_CASE("another running Penzene's autosave is neither offered nor removed (#3
     running.unlock();
     QFile::remove(theirs);
 }
+
+TEST_CASE("a crashed Penzene's autosave is offered even when this process has its pid (#361)") {
+    App app;
+    const QDir dir(QFileInfo(MainWindow::autosavePath()).path());
+    dir.mkpath(".");
+    const QString crashed = dir.filePath(QString("autosave-%1.penz").arg(QCoreApplication::applicationPid()));
+    {
+        QFile f(crashed);
+        REQUIRE(f.open(QIODevice::WriteOnly));
+        f.write(chem::fromSmiles("CCO")->toJson());
+    }
+    MainWindow w;
+    int offered = 0;
+    QTimer::singleShot(0, &w, [&] {
+        if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) ++offered, box->reject();
+    });
+    w.offerRecovery();
+    CHECK(offered == 1);
+    QFile::remove(crashed);
+}
