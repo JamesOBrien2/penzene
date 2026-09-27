@@ -1042,18 +1042,22 @@ QByteArray toCdxml(const Document& doc) {
             // An abbreviation is a ChemDraw nickname: the label, over the group it stands
             // for, joined to the rest through connection points (#333). Other text (R, X,
             // MgEt) is a generic nickname, a label with no chemistry.
-            Document group = doc;
-            if (abbreviationHead(a.label) && attach(group, int(i), a.label.toStdString())) {
+            // Expanded on its own: the atom (0) and its neighbours, which set its direction (#375).
+            Document group;
+            group.atoms.push_back(a);
+            for (int nb : doc.neighbors(int(i))) group.atoms.push_back(doc.atoms[nb]), group.bonds.push_back({0, int(group.atoms.size()) - 1});
+            const int atomsBefore = int(group.atoms.size()), bondsBefore = int(group.bonds.size());
+            if (abbreviationHead(a.label) && attach(group, 0, a.label.toStdString())) {
                 w.writeAttribute("NodeType", "Nickname");
                 w.writeStartElement("fragment");
                 w.writeAttribute("id", QString::number(id++));
-                std::map<int, int> inner{{int(i), id++}};  // group atom -> id
+                std::map<int, int> inner{{0, id++}};  // group atom -> id
                 w.writeStartElement("n");
-                w.writeAttribute("id", QString::number(inner[int(i)]));
+                w.writeAttribute("id", QString::number(inner[0]));
                 w.writeAttribute("p", pt(a.pos));
-                element(group.atoms[i]);
+                element(group.atoms[0]);
                 w.writeEndElement();
-                for (int k = int(doc.atoms.size()); k < int(group.atoms.size()); ++k) {
+                for (int k = atomsBefore; k < int(group.atoms.size()); ++k) {
                     inner[k] = id++;
                     w.writeStartElement("n");
                     w.writeAttribute("id", QString::number(inner[k]));
@@ -1063,14 +1067,14 @@ QByteArray toCdxml(const Document& doc) {
                 }
                 std::vector<std::pair<int, int>> links;  // connection point -> head
                 for (int nb : doc.neighbors(int(i))) {
-                    links.push_back({id++, inner[int(i)]});
+                    links.push_back({id++, inner[0]});
                     w.writeStartElement("n");
                     w.writeAttribute("id", QString::number(links.back().first));
                     w.writeAttribute("p", pt(doc.atoms[nb].pos));
                     w.writeAttribute("NodeType", "ExternalConnectionPoint");
                     w.writeEndElement();
                 }
-                for (int k = int(doc.bonds.size()); k < int(group.bonds.size()); ++k) {
+                for (int k = bondsBefore; k < int(group.bonds.size()); ++k) {
                     const Bond& b = group.bonds[k];
                     w.writeStartElement("b");
                     w.writeAttribute("id", QString::number(id++));
