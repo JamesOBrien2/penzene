@@ -3,7 +3,7 @@
 | Format | Open | Save | Notes |
 |---|---|---|---|
 | Penzene `.penz` | ✓ | ✓ | everything: molecules, arrows, text, shapes, styles |
-| MDL MOL / SDF | ✓ | ✓ | V2000 and V3000; a multi-record SDF opens as a grid |
+| MDL MOL / SDF | ✓ | ✓ | V2000 and V3000; a multi-record SDF opens as a grid, and Save As `.sdf` writes one record per molecule |
 | SMILES `.smi`, InChI `.inchi` | ✓ | | one per line, as a grid; paste either as text too |
 | MDL Rxnfile `.rxn` | ✓ | ✓ | and reaction SMILES by copy and paste |
 | ChemDraw XML `.cdxml` | ✓ | ✓ | molecules, arrows (curved too), text, lines, boxes, ovals, lone pairs |

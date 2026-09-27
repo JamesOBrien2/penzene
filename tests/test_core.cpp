@@ -10,6 +10,7 @@
 #include <QJsonObject>
 #include <QPainter>
 #include <QTemporaryDir>
+#include <set>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -920,4 +921,24 @@ TEST_CASE("ChemDraw export keeps radicals (#319)") {
         REQUIRE(back);
         CHECK(chem::toSmiles(*back) == chem::toSmiles(*doc));
     }
+}
+
+TEST_CASE("SDF export writes one record per molecule (#330)") {
+    auto doc = chem::fromSmiles("CCO.N");
+    REQUIRE(doc);
+    QTemporaryDir dir;
+    const QString path = dir.filePath("two.sdf");
+    QFile f(path);
+    REQUIRE(f.open(QIODevice::WriteOnly));
+    f.write(QByteArray::fromStdString(chem::toSdf(*doc)));
+    f.close();
+    const auto records = chem::readRecords(path);
+    REQUIRE(records.size() == 2);
+    std::set<std::string> smiles;
+    for (const auto& r : records) {
+        REQUIRE(r.doc);
+        smiles.insert(chem::toSmiles(*r.doc));
+    }
+    CHECK(smiles == std::set<std::string>{"CCO", "N"});
+    CHECK(chem::toSdf(Document{}).empty());
 }

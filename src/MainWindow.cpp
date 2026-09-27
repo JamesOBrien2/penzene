@@ -637,11 +637,17 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
             return false;
         }
         data = QByteArray::fromStdString(chem::toRxn(*r));
+    } else if (path.endsWith(".sdf", Qt::CaseInsensitive)) {  // one record per molecule (#330)
+        data = QByteArray::fromStdString(chem::toSdf(doc, v3000));
+        if (data.isEmpty()) {
+            QMessageBox::warning(this, tr("Save"), tr("An SD file holds molecules, and this page has none."));
+            return false;
+        }
     } else if (const QString ext = QFileInfo(path).suffix().toLower(); ext.isEmpty() || ext == "mol") {
         data = QByteArray::fromStdString(chem::toMolBlock(doc, v3000));
     } else {  // an image or library path would get MOL text (#315)
         QMessageBox::warning(this, tr("Save"),
-                             tr("Penzene can't save a drawing as .%1. Save as .penz, .mol, .rxn, .cdxml or .cdx, "
+                             tr("Penzene can't save a drawing as .%1. Save as .penz, .mol, .sdf, .rxn, .cdxml or .cdx, "
                                 "or use File → Export… for images.")
                                  .arg(ext));
         return false;
@@ -672,7 +678,8 @@ bool MainWindow::saveAs() {
     QString filter;
     QString path = QFileDialog::getSaveFileName(this, tr("Save As"), path_,
                                                 tr("Penzene document (*.penz);;MDL Molfile (*.mol);;") + v3000 +
-                                                    tr(";;MDL Rxnfile (*.rxn);;ChemDraw XML (*.cdxml);;ChemDraw, molecules only (*.cdx)"),
+                                                    tr(";;MDL SD file, one record per molecule (*.sdf);;MDL Rxnfile (*.rxn);;ChemDraw XML (*.cdxml);;"
+                                                       "ChemDraw, molecules only (*.cdx)"),
                                                 &filter);
     return !path.isEmpty() && saveTo(path, filter == v3000);
 }
