@@ -28,6 +28,13 @@ for ext in ("cdxml", "cdx"):  # ChemDraw, both ways
     doc.save(os.path.join(out, "aspirin." + ext))
     assert pz.read(os.path.join(out, "aspirin." + ext)).to_smiles() == doc.to_smiles(), ext
 assert pz.read(os.path.join(os.environ["PENZENE_TEST_DATA"], "aspirin.mol")).formula == "C9H8O4"
+try:  # save never writes MOL text into an image (#327)
+    doc.save(os.path.join(out, "aspirin.png"))
+except ValueError:
+    pass
+else:
+    raise AssertionError("save to .png should raise")
+assert not os.path.exists(os.path.join(out, "aspirin.png"))
 
 # The hotkey builder: ChemDraw's cheat-sheet dipeptide, 42n152o from H2N-CH3.
 m = pz.Document()

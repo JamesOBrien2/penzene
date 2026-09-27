@@ -117,7 +117,7 @@ class Document:
 
     def save(self, path: str) -> None:
         """
-        Write .penz (full fidelity), ChemDraw .cdxml or .cdx, or MOL for any other extension.
+        Write .penz (full fidelity), .mol, or ChemDraw .cdxml or .cdx; images go through export().
         """
 
     def export(self, path: str) -> None:
