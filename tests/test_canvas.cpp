@@ -2216,6 +2216,36 @@ TEST_CASE("a dashed arrow's head is solid") {
     for (auto kind : {ArrowKind::Reaction, ArrowKind::Retro}) CHECK(head(kind, true) == head(kind, false));
 }
 
+TEST_CASE("atom numbers stay clear of lone pairs and δ on the same atom (#349)") {
+    App app;
+    const Document base = *chem::fromSmiles("C[C@H](N)C(=O)O");
+    // Ink painted, at 8x; a mark's ink doesn't depend on where it goes, so ink lost
+    // when numbers and marks are both shown is ink they share.
+    auto ink = [&](bool numbers, bool marks) {
+        Document d = base;
+        d.showAtomNumbers = numbers;
+        for (auto& a : d.atoms)
+            if (a.z == 8 && marks) a.lonePairs = 2, a.partial = -1;
+        QImage img(1200, 1200, QImage::Format_ARGB32_Premultiplied);
+        img.fill(Qt::transparent);
+        QPainter p(&img);
+        p.translate(600, 600);
+        p.scale(8, 8);
+        p.translate(-documentBounds(base).center());
+        paintDocument(p, d);
+        p.end();
+        if (auto out = qgetenv("PENZENE_NUMBERS_SHOT"); !out.isEmpty() && numbers && marks) img.save(out);
+        int n = 0;
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x) n += qAlpha(img.pixel(x, y)) > 128;
+        return n;
+    };
+    const int plain = ink(false, false), numbers = ink(true, false) - plain, marks = ink(false, true) - plain;
+    const int shared = plain + numbers + marks - ink(true, true);
+    INFO("numbers " << numbers << " marks " << marks << " shared " << shared);
+    CHECK(shared < 40);  // antialiasing noise (1 here), not a digit on a dot (121 before)
+}
+
 #ifndef _WIN32
 #include <csignal>
 #include <sys/resource.h>

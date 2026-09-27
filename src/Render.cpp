@@ -567,6 +567,10 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             taken.push_back(s == HSide::Right ? 0 : s == HSide::Left ? std::numbers::pi : s == HSide::Below ? std::numbers::pi / 2 : -std::numbers::pi / 2);
         }
         if (a.charge) taken.push_back(-std::numbers::pi / 4);  // up and to the right
+        if (doc.showAtomNumbers || a.map) {  // the atom's number keeps its place (#349)
+            const QPointF d = numberDirection(int(i));
+            taken.push_back(std::atan2(d.y(), d.x()));
+        }
         std::vector<QPointF> dirs;
         if (taken.empty()) dirs.push_back({0, -1}), taken.push_back(-std::numbers::pi / 2);  // a lone atom: on top first
         std::vector<std::pair<double, double>> gaps;  // (start, width)
