@@ -894,3 +894,20 @@ TEST_CASE("a ChemDraw text of size 0 saves a .penz that opens again (#316)") {
     REQUIRE(reopened);
     CHECK(reopened->texts[0].scale == 1);
 }
+
+TEST_CASE("an SDF whose first record has no title keeps that record (#317)") {
+    QTemporaryDir dir;
+    const QString path = dir.filePath("untitled.sdf");
+    QFile f(path);
+    REQUIRE(f.open(QIODevice::WriteOnly));
+    const std::string ethanol = chem::toMolBlock(*chem::fromSmiles("CCO"));
+    REQUIRE(ethanol.front() == '\n');  // an empty name line
+    f.write(QByteArray::fromStdString(ethanol + "$$$$\n" + chem::toMolBlock(*chem::fromSmiles("N")) + "$$$$\n"));
+    f.close();
+    const auto records = chem::readRecords(path);
+    REQUIRE(records.size() == 2);
+    REQUIRE(records[0].doc);
+    CHECK(chem::toSmiles(*records[0].doc) == "CCO");
+    REQUIRE(records[1].doc);
+    CHECK(chem::toSmiles(*records[1].doc) == "N");
+}

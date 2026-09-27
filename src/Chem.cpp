@@ -596,7 +596,8 @@ std::vector<Record> readRecords(const QString& path) {
         if (part.trimmed().isEmpty() || part.startsWith('#')) continue;
         const QString n = QString("%1-%2").arg(base).arg(out.size() + 1);
         if (ext == "sdf") {
-            const QString block = part.startsWith('\n') ? part.mid(1) : part;  // after "$$$$\n"
+            // The newline after "$$$$"; the first record's leading newline is its empty title (#317).
+            const QString block = &raw != &parts.front() && part.startsWith('\n') ? part.mid(1) : part;
             const QString title = block.section('\n', 0, 0).trimmed();  // the molfile's name line
             out.push_back({title.isEmpty() ? n : title, fromMolBlock(block.toStdString())});
         } else {
