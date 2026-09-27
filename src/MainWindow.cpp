@@ -441,9 +441,13 @@ std::vector<Sheet> MainWindow::sheets() const {
 
 void MainWindow::setPages(const std::vector<Sheet>& sheets) {
     QUndoStack* first = pages_[0].undo;
-    for (size_t i = 1; i < pages_.size(); ++i) delete pages_[i].undo;
+    // Off the old pages before their stacks go: deleting the group's active stack signals
+    // cleanChanged, and updateTitle would read the stacks already deleted.
+    undoGroup_->setActiveStack(first);
+    canvas_->setUndoStack(first);
+    const auto old = std::exchange(pages_, {});
+    for (size_t i = 1; i < old.size(); ++i) delete old[i].undo;
     first->clear();
-    pages_.clear();
     for (const Sheet& s : sheets) {
         QUndoStack* undo = pages_.empty() ? first : new QUndoStack(this);
         undoGroup_->addStack(undo);

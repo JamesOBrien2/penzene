@@ -2353,6 +2353,23 @@ TEST_CASE("pages: tabs along the bottom, each with its own drawing and undo hist
     }
 }
 
+TEST_CASE("opening a file while on a later page doesn't touch freed undo stacks (#359)") {
+    App app;
+    QTemporaryDir dir;
+    const QString three = dir.filePath("three.penz");
+    {
+        QFile f(three);
+        REQUIRE(f.open(QIODevice::WriteOnly));
+        f.write(sheetsToJson({{"A", *chem::fromSmiles("C")}, {"B", *chem::fromSmiles("N")}, {"C", *chem::fromSmiles("O")}}));
+    }
+    MainWindow w;
+    REQUIRE(w.openFile(three));
+    auto* tabs = w.findChild<QTabBar*>("pageTabs");
+    tabs->setCurrentIndex(2);  // the last page's stack is the group's active one
+    REQUIRE(w.openFile(QString(PENZENE_TEST_DATA) + "/aspirin.mol"));
+    CHECK(tabs->count() == 1);
+}
+
 TEST_CASE("Save after opening an SDF doesn't overwrite it, and never writes MOL into an image (#315)") {
     App app;
     QTemporaryDir dir;
