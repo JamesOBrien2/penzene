@@ -14,6 +14,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Saving writes a complete copy before replacing the file, so a save that fails part way (a full disk) no longer leaves it cut short; the same goes for autosave.
 - A charged formula shows its charge as a superscript (O₄S²⁻ for sulfate), in the status bar and the Properties panel.
 - Delete on an attachment point removes it, where before it became a methyl.
+- A dashed arrow's head is drawn solid, not with a broken outline.
 
 ## 1.1.0 (2026-09-26)
 

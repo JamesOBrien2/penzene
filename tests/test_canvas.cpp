@@ -2105,3 +2105,14 @@ TEST_CASE("Delete removes an attachment point outright, not turning it into a ca
     QTest::keyClick(f.canvas.viewport(), Qt::Key_Delete);
     CHECK(f.doc().atoms.size() == 1);
 }
+
+TEST_CASE("a dashed arrow's head is solid") {
+    App app;
+    auto head = [](ArrowKind kind, bool dashed) {
+        Document d;
+        d.arrows.push_back({{0, 0}, {50, 0}, kind, 0, {}, dashed});
+        const QImage img = renderImage(d, {288});  // 4 px per point; the frame starts 4 pt left of the tail
+        return img.copy(QRect(4 * (4 + 46.5), 0, 4 * 4, img.height()));  // the head beyond where the shafts stop
+    };
+    for (auto kind : {ArrowKind::Reaction, ArrowKind::Retro}) CHECK(head(kind, true) == head(kind, false));
+}
