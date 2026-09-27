@@ -2602,7 +2602,7 @@ TEST_CASE("the Shapes flyout has every orbital in every look; one clicked on an 
     QToolButton* shadedP = nullptr;
     for (auto* b : shapes->findChildren<QToolButton*>()) {
         const QString tip = b->defaultAction() ? b->defaultAction()->toolTip() : QString();
-        orbitals += tip.contains("orbital,") || tip.startsWith("Lobe,");
+        orbitals += tip.contains("orbital,") || tip.startsWith("lobe,");
         if (tip.startsWith("p orbital, shaded")) shadedP = b;
     }
     CHECK(orbitals == 12);  // s, p, lobe and hybrid, each outline, shaded and gradient
@@ -2680,4 +2680,14 @@ TEST_CASE("d makes deuterium; Delete takes an isotope off before the atom") {
     QTest::keyClick(f.canvas.viewport(), Qt::Key_Delete);
     REQUIRE(f.doc().atoms.size() == 2);
     CHECK(f.doc().atoms[1].isotope == 0);
+}
+
+TEST_CASE("orbital tools are named alike: s orbital, p orbital, lobe, hybrid orbital (#376)") {
+    App app;
+    MainWindow w;
+    QStringList names;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->toolTip().contains(", outline (click an atom")) names << a->toolTip().section(',', 0, 0);
+    names.sort();
+    CHECK(names == QStringList{"hybrid orbital", "lobe", "p orbital", "s orbital"});
 }
