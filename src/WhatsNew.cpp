@@ -19,7 +19,7 @@ struct Tokens {
     QString page, card, border, text, secondary, accent, accentBg;
 };
 
-// The lab notebook look: warm paper, one teal accent; its dark twin when the app is dark.
+// The app's look: white, one teal accent; its dark twin when the app is dark.
 Tokens tokens(const QWidget* w) {
     const Theme& t = theme(w->palette().color(QPalette::Window).lightness() < 128 ? "Dark" : "Light");
     const Chrome c = chrome(t);
