@@ -1094,3 +1094,19 @@ TEST_CASE("arrange: arrows and orbitals stack around the molecule's layer (#204)
     CHECK(edit::restack(doc, {0}, edit::Restack::Front) == std::vector<int>{2});
     CHECK(xs() == std::vector<std::pair<double, bool>>{{0, true}, {1, false}, {2, false}});
 }
+
+TEST_CASE("more abbreviations: acids, alkyls, amines and protecting groups (#331)") {
+    // Each alone, as its parent compound (the group plus H).
+    for (auto [label, formula] : {std::pair{"COOH", "CH2O2"}, {"Bu", "C4H10"}, {"iBu", "C4H10"}, {"OEt", "C2H6O"},
+                                  {"NHBoc", "C5H11NO2"}, {"NMe2", "C2H7N"}, {"SO3H", "H2O3S"},
+                                  {"TIPS", "C9H22Si"}, {"MOM", "C2H6O"}, {"THP", "C5H10O"}}) {
+        Document d;
+        d.addAtom({0, 0});
+        REQUIRE(edit::applyLabel(d, 0, label, true));
+        INFO(label);
+        CHECK(d.atoms[0].label == label);
+        auto p = chem::properties(d);
+        REQUIRE(p);
+        CHECK(p->formula == formula);
+    }
+}

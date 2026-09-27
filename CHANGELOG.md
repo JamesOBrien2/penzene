@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- More abbreviations: COOH, Bu, iBu, OEt, NHBoc, NMe2, SO3H, TIPS, MOM and THP.
 - **Orbitals**: s, p, lobe and hybrid orbitals in Shapes, outlined, shaded or with a gradient, in any colour. Right-click to bring one to the front or send it behind the drawing; ChemDraw files keep them. <!-- icon: shapes -->
 
 ## 1.2.0 (2026-09-27)
