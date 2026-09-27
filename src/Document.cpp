@@ -49,6 +49,7 @@ QByteArray Document::toJson() const {
         if (a.dashed) o["dashed"] = true;
         if (a.look != OrbitalLook::Outline) o["look"] = kLook[int(a.look)];
         if (a.behind) o["behind"] = true;
+        if (a.crossed) o["crossed"] = true;
         ar.append(o);
     }
     for (const auto& t : texts) {
@@ -191,6 +192,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         if (look == std::end(kLook)) return std::nullopt;
         a.look = OrbitalLook(look - std::begin(kLook));
         a.behind = o["behind"].toBool();
+        a.crossed = o["crossed"].toBool();
         doc.arrows.push_back(a);
     }
     for (const auto& v : root["texts"].toArray()) {

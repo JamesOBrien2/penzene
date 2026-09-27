@@ -429,7 +429,7 @@ void Canvas::addDraggedRing(Document& doc) const {
 // The arrow being dragged out: straight ones snap to 15°, curved ones bow left.
 Arrow Canvas::draggedArrow() const {
     Arrow a{pressPos_, curPos_, arrowKind_};
-    a.dashed = arrowDashed_;
+    a.dashed = arrowDashed_, a.crossed = arrowCrossed_;
     a.look = arrowLook_;
     if (isShape(arrowKind_) && !isOrbital(arrowKind_) && arrowKind_ != ArrowKind::Line) {  // boxes and ellipses: any corner, no snapping
         if (shift_) {  // Shift: a square or circle
@@ -696,7 +696,8 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
             Arrow& a = next.arrows[hit];
             if (isOrbital(a.kind)) a.kind = arrowKind_, a.look = arrowLook_;
             else if (arrowCurved_ && a.bend && a.kind == arrowKind_) a.bend = -a.bend;
-            else a.kind = arrowKind_, a.bend = arrowCurved_ ? 0.3 * len(a.to - a.from) : 0, a.dashed = arrowDashed_;
+            else a.kind = arrowKind_, a.bend = arrowCurved_ ? 0.3 * len(a.to - a.from) : 0, a.dashed = arrowDashed_,
+                   a.crossed = arrowCrossed_;
         } else {
             // default size: an arrow's length, a box 3 × 2 bonds, or an upright orbital
             if (click && isOrbital(arrowKind_))

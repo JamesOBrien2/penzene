@@ -572,6 +572,15 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             }
             p.setPen(QPen(ink(a.color), lineWidth, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin));
             drawArrow(p, a);
+            if (a.crossed && !isShape(a.kind)) {  // ✕ over the middle of the shaft, solid even on a dashed arrow
+                const auto pts = arrowPoints(a);
+                const QPointF c = pts.size() == 2 ? (pts[0] + pts[1]) / 2 : pts[pts.size() / 2];
+                const QPointF d = unit(pts.size() == 2 ? pts[1] - pts[0] : pts[pts.size() / 2 + 1] - pts[pts.size() / 2 - 1]);
+                const QPointF u = rotated(d, 45) * kHeadLength * 0.75, v = rotated(d, -45) * kHeadLength * 0.75;
+                p.setPen(QPen(ink(a.color), lineWidth, Qt::SolidLine, Qt::RoundCap));
+                p.drawLine(c - u, c + u);
+                p.drawLine(c - v, c + v);
+            }
         }
     };
     drawArrows(true);

@@ -82,7 +82,7 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
 
 ## Arrows, text, shapes and colour
 
-- Arrows: reaction, equilibrium, resonance, retrosynthesis, and curved (electron pair) and fishhook
+- Arrows: reaction, no reaction (crossed), equilibrium, resonance, retrosynthesis, and curved (electron pair) and fishhook
   (single electron) arrows. Click a curved arrow again to flip its curve.
 - Text: formulas get subscripts automatically (H2O → H₂O).
 - Lines (solid or dashed), boxes, rounded boxes and ellipses for grouping; Shift draws a square or

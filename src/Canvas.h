@@ -71,8 +71,9 @@ public:
     // The Bond tool's order and style (None, Interaction or Partial).
     void setBondOrder(int order, BondStereo style = BondStereo::None) { bondOrder_ = order, bondStyle_ = style; }
     void setRing(int size, bool aromatic) { ringSize_ = size, ringAromatic_ = aromatic; }
-    void setArrow(ArrowKind kind, bool curved, bool dashed = false, OrbitalLook look = OrbitalLook::Outline) {
-        arrowKind_ = kind, arrowCurved_ = curved, arrowDashed_ = dashed, arrowLook_ = look;
+    void setArrow(ArrowKind kind, bool curved, bool dashed = false, OrbitalLook look = OrbitalLook::Outline,
+                  bool crossed = false) {
+        arrowKind_ = kind, arrowCurved_ = curved, arrowDashed_ = dashed, arrowLook_ = look, arrowCrossed_ = crossed;
     }
     void setTheme(const Theme& t) { theme_ = t, refresh(); }
     void setGuides(bool grid, bool rulers) { grid_ = grid, rulers_ = rulers, viewport()->update(); }  // View menu
@@ -124,7 +125,7 @@ private:
     BondStereo bondStyle_ = BondStereo::None;
     bool ringAromatic_ = true;
     ArrowKind arrowKind_ = ArrowKind::Reaction;
-    bool arrowCurved_ = false, arrowDashed_ = false;
+    bool arrowCurved_ = false, arrowDashed_ = false, arrowCrossed_ = false;
     OrbitalLook arrowLook_ = OrbitalLook::Outline;
     QColor fillColor_ = QColor(207, 227, 255);
     QColor colour_ = QColor(0xFF, 0x0D, 0x0D);  // CPK oxygen

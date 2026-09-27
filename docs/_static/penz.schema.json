@@ -82,7 +82,8 @@
         "color": {"$ref": "#/$defs/color"},
         "dashed": {"type": "boolean"},
         "look": {"enum": ["outline", "shaded", "gradient"], "default": "outline", "description": "Orbitals: lines only, the main phase filled, or both phases in a soft gradient."},
-        "behind": {"type": "boolean", "description": "Drawn under the molecule rather than over it."}
+        "behind": {"type": "boolean", "description": "Drawn under the molecule rather than over it."},
+        "crossed": {"type": "boolean", "description": "No reaction: an ✕ across the arrow's middle."}
       }
     },
     "text": {
