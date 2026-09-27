@@ -1243,3 +1243,18 @@ TEST_CASE("a charged abbreviation keeps the group: N3- is azide, not nitride (#3
     REQUIRE(edit::applyLabel(fe, 0, "Fe3+", true));  // an element's digits are still its charge
     CHECK(fe.atoms[0].charge == 3);
 }
+
+TEST_CASE("a lone abbreviation comes back from ChemDraw as a labelled atom (#384)") {
+    for (const char* label : {"Boc", "N3-"}) {
+        Document d;
+        d.addAtom({0, 0});
+        REQUIRE(edit::applyLabel(d, 0, label, true));
+        auto back = chem::fromChemDraw(chem::toCdxml(d));
+        REQUIRE(back);
+        INFO(label);
+        REQUIRE(back->atoms.size() == 1);
+        CHECK(back->texts.empty());
+        CHECK(back->atoms[0].label == d.atoms[0].label);
+        CHECK(chem::properties(*back)->formula == chem::properties(d)->formula);
+    }
+}

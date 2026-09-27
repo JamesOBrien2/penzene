@@ -597,6 +597,16 @@ static void placeLabels(Document& doc, const std::vector<LabelNode>& labels,
                 std::any_of(l.inner.begin(), l.inner.end(), [&](QPointF q) { return at(p, q); }))
                 atoms.push_back(i);
         }
+        const auto head = abbreviationHead(l.text);
+        if (bondCount.value(l.id) == 0 && !l.inner.empty() && head) {  // a lone group (Boc, N3-): one labelled atom (#384)
+            auto at0 = std::find_if(atoms.begin(), atoms.end(), [&](int i) { return at(doc.atoms[i].pos, l.pos); });
+            if (at0 == atoms.end()) continue;
+            Atom& a = doc.atoms[*at0];
+            a.z = head->z, a.label = l.text, a.pos = l.pos;  // its charge, as the file has it, stays (N3-)
+            for (int i : atoms)
+                if (i != *at0) drop.push_back(i);
+            continue;
+        }
         if (bondCount.value(l.id) == 0) {
             if (!l.text.isEmpty()) doc.texts.push_back({l.textPos, l.text, l.textScale});
             drop.insert(drop.end(), atoms.begin(), atoms.end());
@@ -617,7 +627,6 @@ static void placeLabels(Document& doc, const std::vector<LabelNode>& labels,
             return std::any_of(n.begin(), n.end(), [&](int j) { return !group.contains(j); });
         });
         if (attach == atoms.end()) continue;
-        const auto head = abbreviationHead(l.text);
         Atom& a = doc.atoms[*attach];
         a.z = head ? head->z : 0, a.charge = head ? head->charge : 0, a.label = l.text, a.pos = l.pos;
         for (int i : atoms)
