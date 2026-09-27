@@ -331,14 +331,15 @@ std::optional<Document> fromInchi(const std::string& inchi) {
 // aromatic bonds, or none when the file has no single/double form for one.
 // `key` matches atoms between the sanitized and unsanitized readings.
 template <class Key>
-using DrawnBonds = std::map<std::pair<std::invoke_result_t<Key, const RDKit::Atom*>,
-                                      std::invoke_result_t<Key, const RDKit::Atom*>>,
+using DrawnBonds = std::map<std::pair<std::invoke_result_t<Key, const RWMol&, const RDKit::Atom*>,
+                                      std::invoke_result_t<Key, const RWMol&, const RDKit::Atom*>>,
                             RDKit::Bond::BondType>;
 
 template <class Key>
 static DrawnBonds<Key> bondTypes(const RWMol& mol, Key key) {
     DrawnBonds<Key> out;
-    for (const auto* b : mol.bonds()) out[std::minmax(key(b->getBeginAtom()), key(b->getEndAtom()))] = b->getBondType();
+    for (const auto* b : mol.bonds())
+        out[std::minmax(key(mol, b->getBeginAtom()), key(mol, b->getEndAtom()))] = b->getBondType();
     return out;
 }
 
@@ -347,7 +348,7 @@ static void keepDrawnKekule(RWMol& mol, const DrawnBonds<Key>& drawn, Key key) {
     std::vector<std::pair<RDKit::Bond*, RDKit::Bond::BondType>> set;
     for (auto* b : mol.bonds()) {
         if (!b->getIsAromatic()) continue;
-        auto it = drawn.find(std::minmax(key(b->getBeginAtom()), key(b->getEndAtom())));
+        auto it = drawn.find(std::minmax(key(mol, b->getBeginAtom()), key(mol, b->getEndAtom())));
         if (it == drawn.end() || (it->second != RDKit::Bond::SINGLE && it->second != RDKit::Bond::DOUBLE)) return;
         set.push_back({b, it->second});
     }
@@ -365,7 +366,7 @@ std::optional<Document> fromMolBlock(const std::string& block) {
         if (mol) break;
     }
     if (!mol || !mol->getNumAtoms()) return std::nullopt;
-    auto index = [](const RDKit::Atom* a) { return int(a->getIdx()); };
+    auto index = [](const RWMol&, const RDKit::Atom* a) { return int(a->getIdx()); };
     try {
         if (std::unique_ptr<RWMol> drawn(RDKit::MolBlockToMol(block, false, false)); drawn)
             keepDrawnKekule(*mol, bondTypes(*drawn, index), index);
@@ -583,8 +584,8 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         return std::nullopt;
     }
     // The two readings share coordinates, not atom order (only one drops hydrogens).
-    auto at = [](const RDKit::Atom* a) {
-        const auto p = a->getOwningMol().getConformer().getAtomPos(a->getIdx());
+    auto at = [](const RWMol& mol, const RDKit::Atom* a) {  // not getOwningMol: Windows links no RDKit logger
+        const auto p = mol.getConformer().getAtomPos(a->getIdx());
         return std::pair{std::lround(p.x * 1000), std::lround(p.y * 1000)};
     };
     DrawnBonds<decltype(at)> drawn;  // over all fragments
