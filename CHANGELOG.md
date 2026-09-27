@@ -40,6 +40,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - MOL and ChemDraw files open with aromatic rings' double bonds where the file drew them.
 - Drag a structure file onto the window to open it.
 - Typing a charged label such as NH3+, O- or Fe3+ sets the element and its charge, not an unknown group.
+- Multi-step schemes export every step: Copy as Reaction SMILES gives a line per arrow, and Save As an RD file (.rdf) writes one Rxnfile per arrow. Before, only the first arrow was exported.
 
 ## 1.1.1 (2026-09-27)
 

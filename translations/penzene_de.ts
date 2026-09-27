@@ -566,10 +566,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>An Rxnfile needs a reaction arrow in the drawing.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Cannot write %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -590,11 +586,19 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Penzene can&apos;t save a drawing as .%1. Save as .penz, .mol, .sdf, .rxn, .cdxml or .cdx, or use File → Export… for images.</source>
+        <source>A reaction file needs a reaction arrow in the drawing.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>;;MDL SD file, one record per molecule (*.sdf);;MDL Rxnfile (*.rxn);;ChemDraw XML (*.cdxml);;ChemDraw, molecules only (*.cdx)</source>
+        <source>An Rxnfile holds one step. Save as an RD file (.rdf) to keep all %1.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Penzene can&apos;t save a drawing as .%1. Save as .penz, .mol, .sdf, .rxn, .rdf, .cdxml or .cdx, or use File → Export… for images.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>;;MDL SD file, one record per molecule (*.sdf);;MDL Rxnfile (*.rxn);;MDL RD file, every reaction step (*.rdf);;ChemDraw XML (*.cdxml);;ChemDraw, molecules only (*.cdx)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

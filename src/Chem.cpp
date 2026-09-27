@@ -22,6 +22,7 @@
 #include <GraphMol/SmilesParse/SmilesParse.h>
 #include <GraphMol/SmilesParse/SmilesWrite.h>
 
+#include <QDateTime>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -757,22 +758,59 @@ std::vector<Document> molecules(const Document& doc) {
     return out;
 }
 
-// ponytail: the first straight reaction or equilibrium arrow only; multi-step
-// schemes would need a split per arrow.
-std::optional<Reaction> reactionOf(const Document& doc) {
-    auto arrow = std::find_if(doc.arrows.begin(), doc.arrows.end(), [](const Arrow& a) {
-        return a.bend == 0 && (a.kind == ArrowKind::Reaction || a.kind == ArrowKind::Equilibrium);
+// One reaction per straight reaction or equilibrium arrow, in reading order (#334).
+// A molecule nearer an arrow's line than any arrow's end is one of its agents; otherwise it's a reactant of
+// the arrow whose tail is nearest ahead of it, and a product of the arrow whose
+// head is nearest behind it, so B in A -> B -> C is both.
+// ponytail: a scheme that wraps to a new row loses the link between rows (B ends
+// one row, the next arrow starts far to its left); reactants would need arrow order.
+std::vector<Reaction> reactionsOf(const Document& doc) {
+    std::vector<const Arrow*> arrows;
+    for (const Arrow& a : doc.arrows)
+        if (a.bend == 0 && (a.kind == ArrowKind::Reaction || a.kind == ArrowKind::Equilibrium) && a.from != a.to)
+            arrows.push_back(&a);
+    std::sort(arrows.begin(), arrows.end(), [](const Arrow* a, const Arrow* b) {  // rows, then left to right
+        const QPointF p = (a->from + a->to) / 2, q = (b->from + b->to) / 2;
+        return std::abs(p.y() - q.y()) > 2 * kBondLength ? p.y() < q.y() : p.x() < q.x();
     });
-    if (arrow == doc.arrows.end()) return std::nullopt;
-    const QPointF d = arrow->to - arrow->from;
-    const double len2 = QPointF::dotProduct(d, d);
-    if (len2 <= 0) return std::nullopt;
-    Reaction r;
+    std::vector<Reaction> out(arrows.size());
     for (auto& m : molecules(doc)) {
-        const double t = QPointF::dotProduct(atomBox(m).center() - arrow->from, d) / len2;
-        (t < 0 ? r.reactants : t > 1 ? r.products : r.agents).push_back(std::move(m));
+        const QPointF c = atomBox(m).center();
+        int agentOf = -1, reactantOf = -1, productOf = -1;
+        double agent = 1e300, reactant = 1e300, product = 1e300;
+        for (int k = 0; k < int(arrows.size()); ++k) {
+            const QPointF d = arrows[k]->to - arrows[k]->from;
+            const double t = QPointF::dotProduct(c - arrows[k]->from, d) / QPointF::dotProduct(d, d);
+            if (t >= 0 && t <= 1) {
+                const QPointF off = c - (arrows[k]->from + d * t);
+                if (double dist = std::hypot(off.x(), off.y()); dist < agent) agent = dist, agentOf = k;
+            } else if (t < 0) {
+                const QPointF off = c - arrows[k]->from;
+                if (double dist = std::hypot(off.x(), off.y()); dist < reactant) reactant = dist, reactantOf = k;
+            } else {
+                const QPointF off = c - arrows[k]->to;
+                if (double dist = std::hypot(off.x(), off.y()); dist < product) product = dist, productOf = k;
+            }
+        }
+        if (agentOf >= 0 && agent < std::min(reactant, product)) {  // nearer that arrow than any end
+            out[agentOf].agents.push_back(m);
+            continue;
+        }
+        if (reactantOf >= 0) out[reactantOf].reactants.push_back(m);
+        if (productOf >= 0) out[productOf].products.push_back(m);
     }
-    return r;
+    return out;
+}
+
+std::optional<Reaction> reactionOf(const Document& doc) {
+    auto all = reactionsOf(doc);
+    return all.empty() ? std::nullopt : std::optional(all.front());
+}
+
+std::string toReactionSmiles(const std::vector<Reaction>& steps) {
+    std::string out;
+    for (const auto& r : steps) out += (out.empty() ? "" : "\n") + toReactionSmiles(r);
+    return out;
 }
 
 std::string toReactionSmiles(const Reaction& r) {
@@ -788,6 +826,12 @@ std::string toRxn(const Reaction& r) {
     std::string out = "$RXN\n\n  Penzene\n\n" + QString("%1%2").arg(r.reactants.size(), 3).arg(r.products.size(), 3).toStdString() + "\n";
     for (const auto* side : {&r.reactants, &r.products})
         for (const auto& m : *side) out += "$MOL\n" + toMolBlock(m);
+    return out;
+}
+
+std::string toRdf(const std::vector<Reaction>& steps) {
+    std::string out = "$RDFILE 1\n$DATM    " + QDateTime::currentDateTime().toString("MM/dd/yy HH:mm").toStdString() + "\n";
+    for (const auto& r : steps) out += "$RFMT\n" + toRxn(r);
     return out;
 }
 
