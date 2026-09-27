@@ -11,7 +11,9 @@
 #include <GraphMol/Descriptors/Lipinski.h>
 #include <GraphMol/Descriptors/MolDescriptors.h>
 #include <GraphMol/Descriptors/MolSurf.h>
+#include <algorithm>
 #include <map>
+#include <type_traits>
 #include <GraphMol/inchi.h>
 #include <GraphMol/FileParsers/FileParsers.h>
 #include <GraphMol/FileParsers/FileWriters.h>
@@ -324,6 +326,35 @@ std::optional<Document> fromInchi(const std::string& inchi) {
     return fromRDKit(*mol);
 }
 
+// Sanitizing marks rings aromatic, and fromRDKit's Kekulize then picks its own
+// double bonds. Put back the ones drawn in the file (#323): all of a molecule's
+// aromatic bonds, or none when the file has no single/double form for one.
+// `key` matches atoms between the sanitized and unsanitized readings.
+template <class Key>
+using DrawnBonds = std::map<std::pair<std::invoke_result_t<Key, const RDKit::Atom*>,
+                                      std::invoke_result_t<Key, const RDKit::Atom*>>,
+                            RDKit::Bond::BondType>;
+
+template <class Key>
+static DrawnBonds<Key> bondTypes(const RWMol& mol, Key key) {
+    DrawnBonds<Key> out;
+    for (const auto* b : mol.bonds()) out[std::minmax(key(b->getBeginAtom()), key(b->getEndAtom()))] = b->getBondType();
+    return out;
+}
+
+template <class Key>
+static void keepDrawnKekule(RWMol& mol, const DrawnBonds<Key>& drawn, Key key) {
+    std::vector<std::pair<RDKit::Bond*, RDKit::Bond::BondType>> set;
+    for (auto* b : mol.bonds()) {
+        if (!b->getIsAromatic()) continue;
+        auto it = drawn.find(std::minmax(key(b->getBeginAtom()), key(b->getEndAtom())));
+        if (it == drawn.end() || (it->second != RDKit::Bond::SINGLE && it->second != RDKit::Bond::DOUBLE)) return;
+        set.push_back({b, it->second});
+    }
+    for (auto [b, type] : set) b->setBondType(type), b->setIsAromatic(false);
+    for (auto* a : mol.atoms()) a->setIsAromatic(false);
+}
+
 std::optional<Document> fromMolBlock(const std::string& block) {
     std::unique_ptr<RWMol> mol;
     for (bool sanitize : {true, false}) {
@@ -334,6 +365,12 @@ std::optional<Document> fromMolBlock(const std::string& block) {
         if (mol) break;
     }
     if (!mol || !mol->getNumAtoms()) return std::nullopt;
+    auto index = [](const RDKit::Atom* a) { return int(a->getIdx()); };
+    try {
+        if (std::unique_ptr<RWMol> drawn(RDKit::MolBlockToMol(block, false, false)); drawn)
+            keepDrawnKekule(*mol, bondTypes(*drawn, index), index);
+    } catch (...) {
+    }
     RDKit::Chirality::reapplyMolBlockWedging(*mol);
     return fromRDKit(*mol);
 }
@@ -545,11 +582,24 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
     } catch (...) {
         return std::nullopt;
     }
+    // The two readings share coordinates, not atom order (only one drops hydrogens).
+    auto at = [](const RDKit::Atom* a) {
+        const auto p = a->getOwningMol().getConformer().getAtomPos(a->getIdx());
+        return std::pair{std::lround(p.x * 1000), std::lround(p.y * 1000)};
+    };
+    DrawnBonds<decltype(at)> drawn;  // over all fragments
+    try {
+        const RDKit::v2::CDXMLParser::CDXMLParserParams asDrawn(false, false, RDKit::v2::CDXMLParser::CDXMLFormat::CDXML);
+        for (auto& m : RDKit::v2::CDXMLParser::MolsFromCDXML(data.toStdString(), asDrawn))
+            if (m->getNumConformers()) drawn.merge(bondTypes(*m, at));
+    } catch (...) {
+    }
     Document doc;
     std::vector<int> nodeOf;  // CDX node id of each atom, to match label nodes
     for (auto& mol : mols) {
         if (!mol->getNumConformers()) continue;
         if (!mol->getNumAtoms()) continue;
+        keepDrawnKekule(*mol, drawn, at);
         RDKit::Chirality::wedgeMolBonds(*mol, &mol->getConformer());
         for (const auto* a : mol->atoms()) {
             unsigned id = 0;
