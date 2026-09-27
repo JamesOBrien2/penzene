@@ -454,8 +454,9 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         } else if (tag == "n") {
             if (at.hasAttribute("Z")) moleculeZ = std::min(moleculeZ, at.value("Z").toDouble());
             const int id = at.value("id").toInt();
-            for (const Open& o : stack)  // an atom inside a label's fragment
-                if (o.label >= 0) labels[o.label].inner.push_back(point(at.value("p")));
+            for (const Open& o : stack)  // an atom inside a label's fragment (its link out isn't one)
+                if (o.label >= 0 && at.value("NodeType") != u"ExternalConnectionPoint")
+                    labels[o.label].inner.push_back(point(at.value("p")));
             if (labelTypes.contains(at.value("NodeType").toString())) {
                 labels.push_back({id, point(at.value("p"))});
                 stack.back().label = int(labels.size()) - 1;
@@ -871,8 +872,7 @@ std::optional<Document> readFile(const QString& path) {
 // ChemDraw and chemDrawGraphics read it back unscaled.
 // ponytail: abbreviations are written expanded, free-text labels as generic
 // nicknames; ChemDraw's own Fragment/Nickname nodes would keep "OMe" as a label.
-QByteArray toCdxml(const Document& in) {
-    const Document doc = expanded(in);
+QByteArray toCdxml(const Document& doc) {
     QByteArray out;
     QXmlStreamWriter w(&out);
     w.setAutoFormatting(true);
@@ -970,28 +970,81 @@ QByteArray toCdxml(const Document& in) {
     if (!doc.atoms.empty()) {
         w.writeStartElement("fragment");
         w.writeAttribute("id", QString::number(id++));
-        const int base = id;
-        for (size_t i = 0; i < doc.atoms.size(); ++i) {
-            const Atom& a = doc.atoms[i];
-            // Expansion drops labels it can't draw out; free text (R, X, MgEt) is in the original.
-            const QString label = i < in.atoms.size() && a.z == 0 ? in.atoms[i].label : QString();
-            w.writeStartElement("n");
-            w.writeAttribute("id", QString::number(id++));
-            w.writeAttribute("Z", QString::number(z));
-            w.writeAttribute("p", pt(a.pos));
-            if (!label.isEmpty()) {
-                w.writeAttribute("NodeType", "GenericNickname");
-                w.writeAttribute("GenericNickname", label);
-                w.writeStartElement("t");
-                w.writeAttribute("p", pt(a.pos + QPointF(-3, 4)));
-                w.writeTextElement("s", label);
-                w.writeEndElement();
-            } else if (a.z != 6) {
-                w.writeAttribute("Element", QString::number(a.z));
-            }
+        std::vector<int> node(doc.atoms.size());  // each atom's id, for the bonds
+        auto element = [&](const Atom& a) {
+            if (a.z != 6) w.writeAttribute("Element", QString::number(a.z));
             if (a.charge) w.writeAttribute("Charge", QString::number(a.charge));
             if (a.radicals) w.writeAttribute("Radical", a.radicals == 1 ? "Doublet" : "Triplet");
             if (a.isotope && a.z > 0) w.writeAttribute("Isotope", QString::number(a.isotope));
+        };
+        for (size_t i = 0; i < doc.atoms.size(); ++i) {
+            const Atom& a = doc.atoms[i];
+            node[i] = id++;
+            w.writeStartElement("n");
+            w.writeAttribute("id", QString::number(node[i]));
+            w.writeAttribute("Z", QString::number(z));
+            w.writeAttribute("p", pt(a.pos));
+            if (a.label.isEmpty()) {
+                element(a);
+                w.writeEndElement();
+                continue;
+            }
+            // An abbreviation is a ChemDraw nickname: the label, over the group it stands
+            // for, joined to the rest through connection points (#333). Other text (R, X,
+            // MgEt) is a generic nickname, a label with no chemistry.
+            Document group = doc;
+            if (abbreviationHead(a.label) && attach(group, int(i), a.label.toStdString())) {
+                w.writeAttribute("NodeType", "Nickname");
+                w.writeStartElement("fragment");
+                w.writeAttribute("id", QString::number(id++));
+                std::map<int, int> inner{{int(i), id++}};  // group atom -> id
+                w.writeStartElement("n");
+                w.writeAttribute("id", QString::number(inner[int(i)]));
+                w.writeAttribute("p", pt(a.pos));
+                element(group.atoms[i]);
+                w.writeEndElement();
+                for (int k = int(doc.atoms.size()); k < int(group.atoms.size()); ++k) {
+                    inner[k] = id++;
+                    w.writeStartElement("n");
+                    w.writeAttribute("id", QString::number(inner[k]));
+                    w.writeAttribute("p", pt(group.atoms[k].pos));
+                    element(group.atoms[k]);
+                    w.writeEndElement();
+                }
+                std::vector<std::pair<int, int>> links;  // connection point -> head
+                for (int nb : doc.neighbors(int(i))) {
+                    links.push_back({id++, inner[int(i)]});
+                    w.writeStartElement("n");
+                    w.writeAttribute("id", QString::number(links.back().first));
+                    w.writeAttribute("p", pt(doc.atoms[nb].pos));
+                    w.writeAttribute("NodeType", "ExternalConnectionPoint");
+                    w.writeEndElement();
+                }
+                for (int k = int(doc.bonds.size()); k < int(group.bonds.size()); ++k) {
+                    const Bond& b = group.bonds[k];
+                    w.writeStartElement("b");
+                    w.writeAttribute("id", QString::number(id++));
+                    w.writeAttribute("B", QString::number(inner[b.a]));
+                    w.writeAttribute("E", QString::number(inner[b.b]));
+                    if (b.order > 1) w.writeAttribute("Order", QString::number(b.order));
+                    w.writeEndElement();
+                }
+                for (auto [from, to] : links) {
+                    w.writeStartElement("b");
+                    w.writeAttribute("id", QString::number(id++));
+                    w.writeAttribute("B", QString::number(from));
+                    w.writeAttribute("E", QString::number(to));
+                    w.writeEndElement();
+                }
+                w.writeEndElement();  // fragment
+            } else {
+                w.writeAttribute("NodeType", "GenericNickname");
+                w.writeAttribute("GenericNickname", a.label);
+            }
+            w.writeStartElement("t");
+            w.writeAttribute("p", pt(a.pos + QPointF(-3, 4)));
+            w.writeTextElement("s", a.label);
+            w.writeEndElement();
             w.writeEndElement();
         }
         static const char* display[] = {nullptr, "WedgeBegin", "WedgedHashBegin", "Bold", "Dash", "Wavy", nullptr, "Dash"};
@@ -999,8 +1052,8 @@ QByteArray toCdxml(const Document& in) {
         for (const Bond& b : doc.bonds) {
             w.writeStartElement("b");
             w.writeAttribute("id", QString::number(id++));
-            w.writeAttribute("B", QString::number(base + b.a));
-            w.writeAttribute("E", QString::number(base + b.b));
+            w.writeAttribute("B", QString::number(node[b.a]));
+            w.writeAttribute("E", QString::number(node[b.b]));
             // ChemDraw's own hydrogen-bond order, and half orders for partial bonds.
             if (b.stereo == BondStereo::Interaction) w.writeAttribute("Order", "hydrogen");
             else if (b.stereo == BondStereo::Partial) w.writeAttribute("Order", b.order == 2 ? "1.5" : "0.5");

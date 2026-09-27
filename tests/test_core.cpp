@@ -304,6 +304,31 @@ TEST_CASE("CDXML label nodes: reagent labels become text, R groups stay labelled
     CHECK(*back == *doc);
 }
 
+TEST_CASE("CDXML export keeps abbreviations as ChemDraw nicknames (#333)") {
+    Document d = *chem::fromSmiles("c1ccccc1");
+    const int boc = d.addAtom({d.atoms[0].pos.x() + kBondLength, d.atoms[0].pos.y()});
+    d.bonds.push_back({0, boc});
+    REQUIRE(edit::applyLabel(d, boc, "Boc", true));
+    const int ome = d.addAtom({d.atoms[3].pos.x() - kBondLength, d.atoms[3].pos.y()});
+    d.bonds.push_back({3, ome});
+    REQUIRE(edit::applyLabel(d, ome, "OMe", true));
+    const QByteArray cdxml = chem::toCdxml(d);
+    CHECK(cdxml.count("NodeType=\"Nickname\"") == 2);  // not drawn out, and not a label without chemistry
+    CHECK(cdxml.count("ExternalConnectionPoint") == 2);
+    for (const QByteArray& file : {cdxml, chem::toCdx(d)}) {
+        if (file.isEmpty()) continue;  // a build without binary CDX
+        auto back = chem::fromChemDraw(file);
+        REQUIRE(back);
+        CHECK(back->atoms.size() == d.atoms.size());
+        CHECK(chem::properties(*back)->formula == chem::properties(d)->formula);
+        QStringList labels;
+        for (const auto& a : back->atoms)
+            if (!a.label.isEmpty()) labels << a.label;
+        labels.sort();
+        CHECK(labels == QStringList{"Boc", "OMe"});
+    }
+}
+
 TEST_CASE("explicit hydrogens and carbon/H display options (#97)") {
     auto eth = chem::fromSmiles("CCO");
     REQUIRE(eth);
