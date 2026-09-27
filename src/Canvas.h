@@ -73,6 +73,7 @@ public:
         arrowKind_ = kind, arrowCurved_ = curved, arrowDashed_ = dashed;
     }
     void setTheme(const Theme& t) { theme_ = t, refresh(); }
+    void setGuides(bool grid, bool rulers) { grid_ = grid, rulers_ = rulers, viewport()->update(); }  // View menu
     void setFillColor(QColor c) { fillColor_ = c; }
     QColor fillColor() const { return fillColor_; }
     void setColour(QColor c) { colour_ = c; }
@@ -106,11 +107,13 @@ private:
     int draggedRingSize() const;
     void addDraggedRing(Document& doc) const;
     void refresh();
+    void drawRulers(QPainter* p);
     std::vector<QPointF> dragPath() const;
 
     Document doc_;
     QPicture picture_;
     Theme theme_;
+    bool grid_ = false, rulers_ = false;
     std::vector<QPointF> preview_;
     QUndoStack* undo_;
     Tool tool_ = Tool::Bond;

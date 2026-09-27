@@ -2167,3 +2167,28 @@ TEST_CASE("an export that can't be written in full leaves the old file whole (#3
     }
 }
 #endif
+
+TEST_CASE("View shows a light grid and rulers, measured at the final size (#219)") {
+    Fixture f;
+    f.canvas.setTheme(theme("Light"));
+    f.canvas.setDocumentSilently(Document{});
+    const QPoint origin = f.at({0, 0});  // with no page, guides count from the origin
+    auto pixel = [&](QPoint at) { return f.canvas.viewport()->grab().toImage().pixelColor(at); };
+    const QPoint onLine(origin.x(), origin.y() + 3), band(4, 4);  // band: the rulers' corner
+    CHECK(pixel(onLine) == theme("Light").paper);
+    CHECK(pixel(band) == theme("Light").paper);
+    f.canvas.setGuides(true, false);
+    CHECK(pixel(onLine) != theme("Light").paper);  // a grid line through the origin
+    CHECK(pixel(band) == theme("Light").paper);
+    f.canvas.setGuides(false, true);
+    CHECK(pixel(onLine) == theme("Light").paper);
+    CHECK(pixel(band) == theme("Light").window);  // the rulers
+    if (auto out = qgetenv("PENZENE_GUIDES_SHOT"); !out.isEmpty()) {
+        Document aspirin = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
+        aspirin.page = "A4";
+        f.canvas.setDocumentSilently(aspirin);
+        f.canvas.setGuides(true, true);
+        f.canvas.fitToDocument();
+        f.canvas.grab().save(out);
+    }
+}

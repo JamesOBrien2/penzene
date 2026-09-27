@@ -1568,6 +1568,20 @@ void MainWindow::buildMenus() {
     view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { canvas_->zoomBy(1.25); });
     view->addAction(tr("Zoom &Out"), QKeySequence::ZoomOut, this, [this] { canvas_->zoomBy(0.8); });
     view->addAction(tr("&Fit to Window"), QKeySequence(tr("Ctrl+0")), canvas_, &Canvas::fitToDocument);
+    // Guides are the user's own, not the document's: remembered, never saved or exported.
+    auto* grid = view->addAction(tr("&Grid"));
+    auto* rulers = view->addAction(tr("&Rulers"));
+    for (auto* a : {grid, rulers}) {
+        a->setCheckable(true);
+        a->setChecked(QSettings().value(a == grid ? "showGrid" : "showRulers").toBool());
+        connect(a, &QAction::toggled, this, [=, this] {
+            QSettings().setValue("showGrid", grid->isChecked());
+            QSettings().setValue("showRulers", rulers->isChecked());
+            canvas_->setGuides(grid->isChecked(), rulers->isChecked());
+        });
+    }
+    canvas_->setGuides(grid->isChecked(), rulers->isChecked());
+    view->addSeparator();
     // Display options belong to the document (saved, and in exports), so changing one is an edit.
     auto setDisplay = [this](auto change, const QString& what) {
         Document next = canvas_->document();

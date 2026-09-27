@@ -214,8 +214,23 @@ void Canvas::refresh() {
     viewport()->update();
 }
 
+// Guides are measured at the drawing's final size: 5 mm grid squares, rulers in centimetres,
+// from the page's corner (or the origin without a page).
+static double modelPerMm(const Document& doc) { return 72 / 25.4 / exportScale(doc); }
+
 void Canvas::drawBackground(QPainter* p, const QRectF& rect) {
     p->fillRect(rect, theme_.paper);
+    if (const double step = 5 * modelPerMm(doc_); grid_ && step * transform().m11() >= 6) {
+        const QRectF page = pageRect(doc_);
+        const QPointF zero = page.isEmpty() ? QPointF() : page.topLeft();
+        QColor line = theme_.ink;
+        line.setAlphaF(0.08);
+        p->setPen(QPen(line, 0));
+        for (double x = zero.x() + std::ceil((rect.left() - zero.x()) / step) * step; x <= rect.right(); x += step)
+            p->drawLine(QPointF(x, rect.top()), QPointF(x, rect.bottom()));
+        for (double y = zero.y() + std::ceil((rect.top() - zero.y()) / step) * step; y <= rect.bottom(); y += step)
+            p->drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y));
+    }
     if (const QRectF page = pageRect(doc_); !page.isEmpty()) {  // the page's edge, and its margins dashed
         QColor edge = theme_.ink;
         edge.setAlphaF(0.35);
@@ -264,6 +279,46 @@ void Canvas::announceHotspot() {
         text = tr("Hotspot: %1 bond, %2 to %3").arg(order, name(b.a), name(b.b));
     }
     if (text != accessibleDescription()) setAccessibleDescription(text);  // also after an edit in place
+}
+
+void Canvas::drawRulers(QPainter* p) {
+    const double perMm = modelPerMm(doc_) * transform().m11();  // screen pixels per millimetre
+    const QRectF page = pageRect(doc_);
+    const QPointF zero = mapFromScene(page.isEmpty() ? QPointF() : page.topLeft());
+    const int w = viewport()->width(), h = viewport()->height(), band = 18;
+    int every = 1, labelled = 10;  // millimetres between ticks and between numbers
+    for (int n : {5, 10, 50, 100, 500}) if (every * perMm < 5) every = n;
+    for (int n : {50, 100, 500, 1000}) if (labelled * perMm < 30) labelled = n;
+    QColor ink = theme_.ink;
+    ink.setAlphaF(0.6);
+    p->save();
+    p->resetTransform();
+    p->setRenderHint(QPainter::Antialiasing, false);
+    const QColor band_ = theme_.window.isValid() ? theme_.window : theme_.paper;
+    p->fillRect(0, 0, w, band, band_);
+    p->fillRect(0, 0, band, h, band_);
+    QFont f = font();
+    f.setPixelSize(9);
+    p->setFont(f);
+    p->setPen(ink);
+    for (bool across : {true, false}) {
+        const double origin = across ? zero.x() : zero.y();
+        const int length = across ? w : h;
+        for (long mm = long(std::floor((band - origin) / perMm / every)) * every;; mm += every) {
+            const int at = int(std::lround(origin + mm * perMm));
+            if (at > length) break;
+            if (at < band) continue;
+            const int tick = mm % labelled == 0 ? band : mm % (5 * every) == 0 ? band / 2 : band / 4;
+            across ? p->drawLine(at, band - tick, at, band) : p->drawLine(band - tick, at, band, at);
+            if (mm % labelled == 0) {
+                const QString cm = QString::number(mm / 10.0);
+                across ? p->drawText(at + 2, 9, cm) : p->drawText(2, at + 10, cm);
+            }
+        }
+    }
+    p->drawLine(0, band, w, band);
+    p->drawLine(band, 0, band, h);
+    p->restore();
 }
 
 void Canvas::drawForeground(QPainter* p, const QRectF&) {
@@ -331,6 +386,7 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
         p->setFont(f);
         p->drawText(curPos_ + QPointF(6, -6), QString::number(draggedRingSize()));  // the size, by the cursor
     }
+    if (rulers_) drawRulers(p);
 }
 
 int Canvas::arrowAt(QPointF p) const {
