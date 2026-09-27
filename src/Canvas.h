@@ -32,6 +32,7 @@ public:
     void setSelection(QSet<int> atoms, QSet<int> arrows = {}, QSet<int> texts = {});
     Document selectedSubset() const;  // selection (or everything) as a standalone doc
     void deleteSelection();
+    void setUndoStack(QUndoStack* undo) { undo_ = undo; }  // each page has its own history
     void insert(Document fragment, const QString& text);  // centred in view, selected
     void selectAll();
     void rotateSelection(double degrees);

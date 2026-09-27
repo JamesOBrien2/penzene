@@ -43,6 +43,7 @@
 #include <QMimeData>
 #include <qpa/qwindowsysteminterface.h>
 #include <QMenu>
+#include <QTabBar>
 #include <QToolButton>
 #include <QWidgetAction>
 #include <QUndoStack>
@@ -2190,5 +2191,84 @@ TEST_CASE("View shows a light grid and rulers, measured at the final size (#219)
         f.canvas.setGuides(true, true);
         f.canvas.fitToDocument();
         f.canvas.grab().save(out);
+    }
+}
+
+TEST_CASE("pages: tabs along the bottom, each with its own drawing and undo history (#219)") {
+    App app;
+    QFile::remove(MainWindow::autosavePath());
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    auto* tabs = w.findChild<QTabBar*>("pageTabs");
+    REQUIRE(tabs);
+    REQUIRE(tabs->count() == 1);
+    CHECK(tabs->tabText(0) == "Page 1");
+    QAction* undo = nullptr;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->shortcut() == QKeySequence::Undo) undo = a;
+    REQUIRE(undo);
+
+    canvas->commit(*chem::fromSmiles("CCO"), "Draw");  // page 1
+    w.findChild<QToolButton*>("addPage")->click();
+    REQUIRE(tabs->count() == 2);
+    CHECK(tabs->currentIndex() == 1);
+    CHECK(tabs->tabText(1) == "Page 2");
+    CHECK(canvas->document().empty());
+    CHECK_FALSE(undo->isEnabled());  // page 2 has no history of its own yet
+    canvas->commit(*chem::fromSmiles("c1ccccc1"), "Draw");  // page 2
+
+    tabs->setCurrentIndex(0);
+    CHECK(chem::toSmiles(canvas->document()) == "CCO");
+    undo->trigger();  // undoes page 1's edit, not page 2's
+    CHECK(canvas->document().empty());
+    tabs->setCurrentIndex(1);
+    CHECK(chem::toSmiles(canvas->document()) == "c1ccccc1");
+    CHECK(w.isWindowModified());
+
+    // Move a selection over to page 1: cut here, pasted there.
+    canvas->selectAll();
+    QMenu* moveTo = nullptr;
+    for (auto* m : w.findChildren<QMenu*>())
+        if (m->title() == "Mo&ve to Page") moveTo = m;
+    REQUIRE(moveTo);
+    emit moveTo->aboutToShow();
+    REQUIRE(moveTo->actions().size() == 1);
+    moveTo->actions()[0]->trigger();
+    CHECK(tabs->currentIndex() == 0);
+    CHECK(chem::toSmiles(canvas->document()) == "c1ccccc1");
+    tabs->setCurrentIndex(1);
+    CHECK(canvas->document().empty());
+
+    // Every page is written, and a file with pages opens as tabs.
+    w.autosave();
+    QFile f(MainWindow::autosavePath());
+    REQUIRE(f.open(QIODevice::ReadOnly));
+    const auto sheets = sheetsFromJson(f.readAll());
+    f.close();
+    REQUIRE(sheets.size() == 2);
+    CHECK(chem::toSmiles(sheets[0].doc) == "c1ccccc1");
+    CHECK(sheets[1].doc.empty());
+    QTemporaryDir dir;
+    const QString path = dir.filePath("pages.penz");
+    QFile out(path);
+    REQUIRE(out.open(QIODevice::WriteOnly));
+    out.write(sheetsToJson({{"Scheme", *chem::fromSmiles("CCO")}, {"Notes", *chem::fromSmiles("O")}}));
+    out.close();
+    MainWindow other;
+    REQUIRE(other.openFile(path));
+    auto* otherTabs = other.findChild<QTabBar*>("pageTabs");
+    REQUIRE(otherTabs->count() == 2);
+    CHECK(otherTabs->tabText(1) == "Notes");
+    CHECK_FALSE(other.isWindowModified());
+    QFile::remove(MainWindow::autosavePath());
+    if (auto shot = qgetenv("PENZENE_PAGES_SHOT"); !shot.isEmpty()) {
+        other.resize(1000, 650);
+        other.show();
+        other.openFile(QString(PENZENE_TEST_DATA) + "/aspirin.mol");
+        other.findChild<QToolButton*>("addPage")->click();
+        other.findChild<QToolButton*>("addPage")->click();
+        other.findChild<QTabBar*>("pageTabs")->setCurrentIndex(0);
+        QApplication::processEvents();
+        other.grab().save(QString::fromUtf8(shot));
     }
 }

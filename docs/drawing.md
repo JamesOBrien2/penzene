@@ -85,3 +85,15 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
 - Lines (solid or dashed), boxes, rounded boxes and ellipses for grouping; Shift draws a square or
   circle.
 - The colour tool paints atoms, bonds, arrows and text; the fill tool shades a ring.
+
+## Pages, grid and rulers
+
+- A drawing can have several pages, as tabs along the bottom of the window. **+** adds one; drag
+  a tab to reorder it, double-click to rename it, and right-click to rename or delete it.
+  Ctrl+PgDown and Ctrl+PgUp step through them. Each page has its own undo history.
+- **Edit → Move to Page** moves the selection to another page. Copy and paste work between pages
+  too.
+- Pages are saved together in a `.penz` file. Other formats (MOL, ChemDraw) hold one page, so save
+  as `.penz`, or export the page you want.
+- **View → Grid** and **View → Rulers** measure the drawing at its final size: 5 mm grid squares,
+  and rulers in centimetres from the page's corner.
