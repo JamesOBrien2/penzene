@@ -348,7 +348,7 @@ QString labelHotkey(const QString& key) {
     static const QHash<QString, QString> k{
         {"c", "C"},   {"n", "N"},    {"w", "N"},     {"o", "O"},    {"q", "O"},   {"s", "S"},
         {"p", "P"},   {"f", "F"},    {"l", "Cl"},    {"C", "Cl"},   {"b", "Br"},  {"i", "I"},
-        {"h", "H"},   {"d", "H"},    {"B", "B"},     {"S", "Si"},   {"L", "Li"},  {"m", "Me"},
+        {"h", "H"},   {"d", "D"},    {"B", "B"},     {"S", "Si"},   {"L", "Li"},  {"m", "Me"},
         {"e", "Et"},  {"A", "Ac"},   {"P", "Ph"},    {"F", "CF3"},  {"N", "NO2"}, {"O", "OMe"},
         {"E", "CO2Me"}, {"Z", "N3"}, {"M", "MgBr"},  {"Q", "Fmoc"}, {"H", "Cbz"}, {"Y", "Boc"}, {"y", "Boc"},
         {"x", "X"},   {"r", "R"},
@@ -363,21 +363,27 @@ bool applyLabel(Document& doc, int at, const QString& label, bool anyText) {
     // Abbreviations first: in a drawing, Ac, Pr and Ts mean acetyl, propyl and
     // tosyl, not actinium, praseodymium and tennessine (#125).
     if (auto head = chem::abbreviationHead(label)) {
-        a.z = head->z, a.charge = head->charge, a.label = label;
+        a.z = head->z, a.charge = head->charge, a.label = label, a.isotope = 0;
         return true;
     }
     // In a drawing "Ar" is an aryl group, not argon (the strict API keeps the element).
     if (anyText && label.trimmed() == "Ar") {
-        a.z = 0, a.charge = 0, a.label = "Ar";
+        a.z = 0, a.charge = 0, a.label = "Ar", a.isotope = 0;
         return true;
     }
-    // "OH", "NH2": the element; hydrogens are implicit.
-    static const QRegularExpression hydride("^([A-Z][a-z]?)H\\d*$");
-    auto elementOf = [](const QString& s) {
-        return chem::atomicNumber((hydride.match(s).hasMatch() ? hydride.match(s).captured(1) : s).toStdString());
+    // "OH", "NH2": the element; hydrogens are implicit. A mass number before it is an
+    // isotope ("13C", "18OH"); D and T are hydrogen-2 and -3. Gives {z, mass}, z 0 if not one.
+    static const QRegularExpression element("^(\\d{0,3})([A-Z][a-z]?)(H\\d*)?$");
+    auto elementOf = [](const QString& s) -> std::pair<int, int> {
+        const auto m = element.match(s.trimmed());
+        if (!m.hasMatch()) return {0, 0};
+        const QString sym = m.captured(2);
+        const bool heavyH = (sym == "D" || sym == "T") && m.captured(1).isEmpty();
+        const int z = heavyH ? 1 : chem::atomicNumber(sym.toStdString()), mass = heavyH ? (sym == "D" ? 2 : 3) : m.captured(1).toInt();
+        return z > 0 && (mass == 0 || mass >= z) ? std::pair{z, mass} : std::pair{0, 0};  // no mass below the proton count
     };
-    if (int z = elementOf(label); z > 0) {
-        a.z = z, a.label.clear();
+    if (const auto [z, mass] = elementOf(label); z > 0) {
+        a.z = z, a.isotope = mass, a.label.clear();
         return true;
     }
     // With a charge: NH3+, O-, Na+, O2- (#324). Digits before the sign are the
@@ -385,16 +391,23 @@ bool applyLabel(Document& doc, int at, const QString& label, bool anyText) {
     static const QRegularExpression metalIon("^(?<base>[A-Z][a-z]?)(?<n>\\d+)(?<sign>[+\\-\\x{2212}])$"),
         ion("^(?<base>.+?)(?<sign>[+\\-\\x{2212}])(?<n>\\d*)$");
     auto m = metalIon.match(label);
-    if (!m.hasMatch() || !elementOf(m.captured("base"))) m = ion.match(label);
-    if (int z = m.hasMatch() ? elementOf(m.captured("base")) : 0; z > 0) {
-        a.z = z, a.label.clear();
+    if (!m.hasMatch() || !elementOf(m.captured("base")).first) m = ion.match(label);
+    if (const auto [z, mass] = m.hasMatch() ? elementOf(m.captured("base")) : std::pair{0, 0}; z > 0) {
+        a.z = z, a.isotope = mass, a.label.clear();
         a.charge = (m.captured("sign") == "+" ? 1 : -1) * (m.captured("n").isEmpty() ? 1 : m.captured("n").toInt());
         return true;
     }
     if (chem::attach(doc, at, label.toStdString())) return true;
     if (!anyText || label.trimmed().isEmpty()) return false;
-    a.z = 0, a.charge = 0, a.label = label.trimmed();
+    a.z = 0, a.charge = 0, a.label = label.trimmed(), a.isotope = 0;
     return true;
+}
+
+QString atomText(const Atom& a) {
+    if (!a.label.isEmpty()) return a.label;
+    if (a.z == 1 && (a.isotope == 2 || a.isotope == 3)) return a.isotope == 2 ? "D" : "T";
+    const QString sym = QString::fromStdString(chem::symbol(a.z));
+    return a.isotope ? QString::number(a.isotope) + sym : sym;
 }
 
 

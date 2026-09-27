@@ -73,6 +73,7 @@ bool attach(Document& doc, int at, const std::string& what) {
     if (!frag || frag->atoms.empty()) return false;
     doc.atoms[at].z = frag->atoms[0].z;
     doc.atoms[at].charge = frag->atoms[0].charge;
+    doc.atoms[at].isotope = frag->atoms[0].isotope;
     doc.atoms[at].label.clear();
     if (frag->atoms.size() == 1) return true;
 
@@ -189,6 +190,7 @@ static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
         auto* atom = new RDKit::Atom(a.z);
         atom->setFormalCharge(a.charge);
         atom->setNumRadicalElectrons(a.radicals);
+        if (a.isotope && a.z > 0) atom->setIsotope(a.isotope);
         // Not setAtomMapNum: it logs through rdErrorLog, which the Windows DLL doesn't export.
         if (a.map > 0) atom->setProp(RDKit::common_properties::molAtomMapNumber, a.map);
         // Generic atoms (expansion drops their labels, so they come from `in`): R1…Rn as
@@ -284,6 +286,7 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
         doc.atoms.push_back({QPointF(p.x * scale, -p.y * scale), int(a->getAtomicNum()),
                              a->getFormalCharge(), label, {}, int(a->getAtomMapNum()), 0,
                              int(std::min(2u, a->getNumRadicalElectrons()))});
+        if (a->getAtomicNum() > 0) doc.atoms.back().isotope = int(a->getIsotope());  // on a dummy it's an R-group number
     }
     for (const auto* b : mol.bonds()) {
         Bond out{int(b->getBeginAtomIdx()), int(b->getEndAtomIdx())};
@@ -976,6 +979,7 @@ QByteArray toCdxml(const Document& in) {
             }
             if (a.charge) w.writeAttribute("Charge", QString::number(a.charge));
             if (a.radicals) w.writeAttribute("Radical", a.radicals == 1 ? "Doublet" : "Triplet");
+            if (a.isotope && a.z > 0) w.writeAttribute("Isotope", QString::number(a.isotope));
             w.writeEndElement();
         }
         static const char* display[] = {nullptr, "WedgeBegin", "WedgedHashBegin", "Bold", "Dash", "Wavy", nullptr, "Dash"};
@@ -1246,7 +1250,7 @@ Document removeHydrogens(const Document& doc) {
     std::vector<int> drop;
     for (int i = 0; i < int(doc.atoms.size()); ++i) {
         const Atom& a = doc.atoms[i];
-        if (a.z != 1 || a.charge || !a.label.isEmpty() || doc.neighbors(i).size() != 1) continue;
+        if (a.z != 1 || a.isotope || a.charge || !a.label.isEmpty() || doc.neighbors(i).size() != 1) continue;  // D stays
         const Bond& b = doc.bonds[doc.bondBetween(i, doc.neighbors(i)[0])];
         if (b.stereo == BondStereo::Wedge || b.stereo == BondStereo::Hash) continue;  // stereo H stays
         if (doc.atoms[doc.neighbors(i)[0]].z == 1) continue;  // H2 stays

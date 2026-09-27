@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <limits>
 #include <numbers>
+#include <tuple>
 #include <numeric>
 
 // Presets. Values come from the ChemDraw stationery (.cds) of the same name;
@@ -49,7 +50,7 @@ const DrawingStyle& drawingStyle(const QString& name) {
 // Carbons are skeletal unless alone or the document asks for their labels.
 static bool hasLabel(const Document& doc, int i, const std::vector<int>& degree) {
     if (doc.atoms[i].z == 0 && doc.atoms[i].label.isEmpty()) return false;  // attachment point, η centroid: a bare point
-    if (doc.atoms[i].z != 6 || degree[i] == 0 || !doc.atoms[i].label.isEmpty()) return true;
+    if (doc.atoms[i].z != 6 || degree[i] == 0 || !doc.atoms[i].label.isEmpty() || doc.atoms[i].isotope) return true;
     return doc.carbonLabels == Document::CarbonLabels::All ||
            (doc.carbonLabels == Document::CarbonLabels::Terminal && degree[i] == 1);
 }
@@ -77,6 +78,34 @@ static void drawText(QPainter& p, const QString& s, QPointF baselineLeft, const 
     QPainterPath path;
     path.addText(baselineLeft, f, s);
     p.fillPath(path, p.pen().color());
+}
+
+// An isotope's mass number, written before the symbol (¹³C); none for D and T, which have letters.
+static QString massNumber(const Atom& a) {
+    return a.isotope && a.label.isEmpty() && !(a.z == 1 && (a.isotope == 2 || a.isotope == 3)) ? QString::number(a.isotope) : QString();
+}
+
+// Where the mass number sits, relative to the atom (as drawLabel puts it), with a point to spare.
+static QRectF massBox(const Atom& a, const DrawingStyle& st) {
+    QFontMetricsF fm(labelFont(st)), sm(labelFont(st, 0.7));
+    const double symbol = fm.horizontalAdvance(QString::fromStdString(chem::symbol(a.z))), cap = fm.capHeight();
+    const double right = -symbol / 2, baseline = cap / 2 - 0.7 * cap;
+    return QRectF(QPointF(right - sm.horizontalAdvance(massNumber(a)), baseline - sm.capHeight()), QPointF(right, baseline))
+        .adjusted(-1, -1, 0.5, 0.5);
+}
+
+// How far along the unit vector `u` a ray from the origin has left `box`; 0 if it misses it.
+static double exitAlong(const QRectF& box, QPointF u) {
+    double lo = 0, hi = std::numeric_limits<double>::infinity();
+    for (auto [o, a0, a1] : {std::tuple{u.x(), box.left(), box.right()}, std::tuple{u.y(), box.top(), box.bottom()}}) {
+        if (std::abs(o) < 1e-9) {
+            if (a0 > 0 || a1 < 0) return 0;
+            continue;
+        }
+        const double t0 = std::min(a0 / o, a1 / o), t1 = std::max(a0 / o, a1 / o);
+        lo = std::max(lo, t0), hi = std::min(hi, t1);
+    }
+    return lo <= hi ? hi : 0;
 }
 
 // Abbreviation written from the right, bond side last: OMe -> MeO.
@@ -110,11 +139,16 @@ static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HS
     if (!a.label.isEmpty()) return drawAbbreviation(p, a, hLeft, st);
     QFont f = labelFont(st), sub = labelFont(st, 0.7);
     QFontMetricsF fm(f), sm(sub);
-    QString sym = QString::fromStdString(chem::symbol(a.z));
+    // Deuterium and tritium by their own letters; any other isotope as a mass number before the symbol (¹³C).
+    const bool heavyH = a.z == 1 && (a.isotope == 2 || a.isotope == 3);
+    QString sym = heavyH ? (a.isotope == 2 ? "D" : "T") : QString::fromStdString(chem::symbol(a.z));
+    const QString mass = massNumber(a);
     double w = fm.horizontalAdvance(sym);
     double base = a.pos.y() + fm.capHeight() / 2;
     double x = a.pos.x() - w / 2;
     drawText(p, sym, {x, base}, f);
+    double left = x;
+    if (!mass.isEmpty()) left -= sm.horizontalAdvance(mass), drawText(p, mass, {left, base - fm.capHeight() * 0.7}, sub);
 
     double right = x + w;
     if (hydrogens > 0) {
@@ -125,7 +159,7 @@ static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HS
             drawText(p, "H", {hx, base + dy}, f);
             if (!n.isEmpty()) drawText(p, n, {hx + hw, base + dy + fm.capHeight() * 0.35}, sub);
         } else {
-            double hx = hLeft ? x - hw - nw : right;
+            double hx = hLeft ? left - hw - nw : right;
             drawText(p, "H", {hx, base}, f);
             if (!n.isEmpty()) drawText(p, n, {hx + hw, base + fm.capHeight() * 0.35}, sub);
             if (!hLeft) right += hw + nw;
@@ -144,8 +178,13 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     QPointF d = unit(pb - pa), n = perp(d);
     const double gap = st.bondSpacing * kBondLength;  // double-bond spacing
     // Trim at labels.
-    QPointF a = labeled[b.a] ? pa + d * st.labelRadius : pa;
-    QPointF e = labeled[b.b] ? pb - d * st.labelRadius : pb;
+    // A bond that would cross an isotope's raised mass number (¹³C) stops beyond it; a level one passes beneath.
+    auto trim = [&](int atom, QPointF toward) {
+        const QString mass = massNumber(doc.atoms[atom]);
+        return mass.isEmpty() ? st.labelRadius : std::max(st.labelRadius, 1 + exitAlong(massBox(doc.atoms[atom], st), toward));
+    };
+    QPointF a = labeled[b.a] ? pa + d * trim(b.a, d) : pa;
+    QPointF e = labeled[b.b] ? pb - d * trim(b.b, -d) : pb;
 
     if (b.stereo == BondStereo::Wedge) {
         QPolygonF tri{a, e + n * st.wedgeWidth / 2, e - n * st.wedgeWidth / 2};
@@ -766,7 +805,8 @@ QRectF documentBounds(const Document& doc) {
     for (const auto& b : doc.bonds) ++degree[b.a], ++degree[b.b];
     for (size_t i = 0; i < doc.atoms.size(); ++i) {  // room for labels, which can run either way
         const Atom& a = doc.atoms[i];
-        double w = fs * std::max(1.5, 0.7 * a.label.size());
+        const qsizetype chars = a.label.isEmpty() && a.isotope ? 3 + massNumber(a).size() : a.label.size();  // H₃¹³C
+        double w = fs * std::max(1.5, 0.7 * chars);
         // A labelled atom with bonds on both sides may stack its H above or below.
         double h = fs * (degree[i] >= 2 && hasLabel(doc, int(i), degree) ? 2.2 : 1);
         grow(QRectF(a.pos, a.pos).adjusted(-w, -h, w, h));

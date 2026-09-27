@@ -29,7 +29,7 @@ Generated from Help → Keyboard Shortcuts in the app. Point at an atom or bond 
 
 | Keys | |
 |---|---|
-| `c n/w o/q s p f l b i h` | C N O S P F Cl Br I H |
+| `c n/w o/q s p f l b i h d` | C N O S P F Cl Br I H D (deuterium) |
 | `B S L` | B, Si, Li |
 | `m e P A` | Me, Et, Ph, Ac |
 | `O N F E Z` | OMe, NO₂, CF₃, CO₂Me, N₃ |
