@@ -1617,11 +1617,12 @@ TEST_CASE("the colour swatch opens CPK colours; the pick paints atoms and bonds 
     CHECK(canvas->document().bonds[0].color == blue);
 }
 
-TEST_CASE("Lab notebook theme; tools on a rail whose groups open beside it (#214, #220)") {
-    CHECK(theme("Light").paper == QColor("#FBF8F1"));
+TEST_CASE("White and teal theme; tools on a rail whose groups open beside it (#273, #220)") {
+    CHECK(theme("Light").paper == QColor("#FFFFFF"));
+    CHECK(theme("Light").window == QColor("#F3F5F6"));
     CHECK(theme("Light").accent == QColor("#0F6E56"));
-    CHECK(theme("Dark").paper == QColor("#22211F"));
-    CHECK(theme("Dark").accent == QColor("#5DCAA5"));
+    CHECK(theme("Dark").paper == QColor("#15171A"));
+    CHECK(theme("Dark").accent == QColor("#4CC9A0"));
     App app;
     MainWindow w;
     w.resize(1000, 700);
@@ -1766,21 +1767,21 @@ TEST_CASE("bold bonds meet without a notch at a skeletal atom (#217)") {
     }
 }
 
-TEST_CASE("the logo is drawn in the lab notebook palette (#234)") {
+TEST_CASE("the logo is the teal ring on a white tile (#273)") {
     App app;
     QFile f(":/logo.svg");
     REQUIRE(f.open(QIODevice::ReadOnly));
     const QString svg = QString::fromUtf8(f.readAll()).toLower();
     CHECK(svg.contains(theme("Light").accent.name()));  // teal ink
-    CHECK(svg.contains(theme("Light").paper.name()));   // on warm paper
+    CHECK(svg.contains(theme("Light").paper.name()));   // on a white tile
 }
 
-TEST_CASE("the window and What's New share one lab notebook palette (#246)") {
+TEST_CASE("the window and What's New share one palette (#246, #273)") {
     const Chrome light = chrome(theme("Light")), dark = chrome(theme("Dark"));
-    CHECK(light.border == QColor("#E4E1D6"));
-    CHECK(light.secondary == QColor("#5F5E5A"));
+    CHECK(light.border == QColor("#DDE1E4"));
+    CHECK(light.secondary == QColor("#5E6770"));
     CHECK(light.accentBg == QColor("#E1F5EE"));
-    CHECK(dark.border == QColor("#444441"));
+    CHECK(dark.border == QColor("#353A40"));
     CHECK(dark.accentBg == QColor("#0B3B30"));
     CHECK(chrome(theme("Catppuccin Mocha")).secondary == theme("Catppuccin Mocha").text);  // keeps its own
 }

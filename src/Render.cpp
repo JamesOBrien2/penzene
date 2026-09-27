@@ -796,10 +796,11 @@ const std::vector<Theme>& themes() {
     };
     static const std::vector<Theme> t{
         {"System"},
-        {"Light", false, QColor("#FBF8F1"), QColor("#2C2C2A"), QColor(220, 40, 40),
-         QColor("#0F6E56"), QColor("#0F6E56"), QColor("#FBF8F1"), QColor("#FFFFFF"), QColor("#2C2C2A")},
-        {"Dark", true, QColor("#22211F"), QColor("#F1EFE8"), QColor(255, 105, 97),
-         QColor("#5DCAA5"), QColor("#5DCAA5"), QColor("#22211F"), QColor("#2C2C2A"), QColor("#F1EFE8")},
+        // White and teal: a white page in a cool grey window.
+        {"Light", false, QColor("#FFFFFF"), QColor("#1D2125"), QColor(220, 40, 40),
+         QColor("#0F6E56"), QColor("#0F6E56"), QColor("#F3F5F6"), QColor("#FFFFFF"), QColor("#1D2125")},
+        {"Dark", true, QColor("#15171A"), QColor("#E8EAED"), QColor(255, 105, 97),
+         QColor("#4CC9A0"), QColor("#4CC9A0"), QColor("#1C1F23"), QColor("#24282D"), QColor("#E8EAED")},
         // https://catppuccin.com/palette: base, mantle, surface0, text, red, blue, green (hotspot)
         // Latte's teal, not its green, for the hotspot: the green is under 3:1 on its base.
         cat("Catppuccin Latte", false, "#eff1f5", "#e6e9ef", "#ccd0da", "#4c4f69", "#d20f39", "#1e66f5", "#179299"),
@@ -817,8 +818,8 @@ const Theme& theme(const QString& name) {
 }
 
 Chrome chrome(const Theme& t) {
-    if (t.name == "Light") return {QColor("#E4E1D6"), QColor("#5F5E5A"), QColor("#E1F5EE")};
-    if (t.name == "Dark") return {QColor("#444441"), QColor("#B4B2A9"), QColor("#0B3B30")};
+    if (t.name == "Light") return {QColor("#DDE1E4"), QColor("#5E6770"), QColor("#E1F5EE")};
+    if (t.name == "Dark") return {QColor("#353A40"), QColor("#A3AAB2"), QColor("#0B3B30")};
     // The Catppuccin themes keep their own colours.
     return {t.surface.lighter(125), t.text, t.dark ? t.surface.lighter(145) : t.surface.darker(110)};
 }
