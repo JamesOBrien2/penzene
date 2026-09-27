@@ -338,8 +338,10 @@ using DrawnBonds = std::map<std::pair<std::invoke_result_t<Key, const RWMol&, co
 template <class Key>
 static DrawnBonds<Key> bondTypes(const RWMol& mol, Key key) {
     DrawnBonds<Key> out;
-    for (const auto* b : mol.bonds())
-        out[std::minmax(key(mol, b->getBeginAtom()), key(mol, b->getEndAtom()))] = b->getBondType();
+    for (const auto* b : mol.bonds()) {
+        auto [it, fresh] = out.emplace(std::minmax(key(mol, b->getBeginAtom()), key(mol, b->getEndAtom())), b->getBondType());
+        if (!fresh && it->second != b->getBondType()) it->second = RDKit::Bond::UNSPECIFIED;  // overlapping atoms (#365)
+    }
     return out;
 }
 

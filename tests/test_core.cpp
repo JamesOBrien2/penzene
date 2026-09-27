@@ -1019,3 +1019,18 @@ TEST_CASE("a typed charged label sets the element and charge (#324)") {
         CHECK(d.atoms[0].label.isEmpty());
     }
 }
+
+TEST_CASE("CDXML import's Kekulé restore isn't fooled by overlapping atoms (#365)") {
+    Document d;
+    for (int k = 0; k < 6; ++k) d.addAtom({kBondLength * std::cos(M_PI / 3 * k), kBondLength * std::sin(M_PI / 3 * k)});
+    for (int k = 0; k < 6; ++k) d.bonds.push_back({k, (k + 1) % 6, k % 2 ? 1 : 2});  // 1-2 is single
+    const int a = d.addAtom(d.atoms[1].pos), b = d.addAtom(d.atoms[2].pos);  // an ethylene on top of it
+    d.bonds.push_back({a, b, 2});
+    auto back = chem::fromChemDraw(chem::toCdxml(d));
+    REQUIRE(back);
+    for (int i = 0; i < int(back->atoms.size()); ++i) {
+        int doubles = 0;
+        for (const auto& bond : back->bonds) doubles += (bond.a == i || bond.b == i) && bond.order == 2;
+        CHECK(doubles <= 1);
+    }
+}
