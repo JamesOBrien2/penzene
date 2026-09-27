@@ -12,6 +12,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - **SDF export**: Save As an SD file writes each molecule on the page as its own record, ready for a compound library. <!-- icon: database -->
 - ChemDraw files keep their label size relative to their bonds, so crowded drawings with small labels don't overlap.
 - An arrow with a huge bend, as a damaged file can hold, no longer exhausts memory when drawn.
+- Python: `Document.save` replaces a file whole, so a failed save leaves the old one intact, and it refuses image names (use `export()`) rather than writing MOL text into them.
 - A ChemDraw text of size 0 no longer saves a drawing Penzene can't reopen, and drawings saved that way open again.
 - An SDF file whose first structure has no title opens with that structure.
 - Radicals survive export and copying to ChemDraw.
