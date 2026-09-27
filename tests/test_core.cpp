@@ -991,5 +991,18 @@ TEST_CASE("MOL and CDXML imports keep the drawn Kekulé form (#323)") {
         auto fromMol = chem::fromMolBlock(mol + "M  END\n");
         REQUIRE(fromMol);
         CHECK(orders(*fromMol) == orders(d));
+}
+}
+
+TEST_CASE("a typed charged label sets the element and charge (#324)") {
+    for (auto [label, z, charge] : {std::tuple{"NH3+", 7, 1}, {"O-", 8, -1}, {"Na+", 11, 1}, {"Fe3+", 26, 3},
+                                    {"O2-", 8, -2}, {"NH4+", 7, 1}, {"O−", 8, -1}, {"S+2", 16, 2}}) {
+        Document d;
+        d.addAtom({0, 0});
+        REQUIRE(edit::applyLabel(d, 0, QString::fromUtf8(label), true));
+        INFO(label << " -> z " << d.atoms[0].z << " label '" << d.atoms[0].label.toStdString() << "'");
+        CHECK(d.atoms[0].z == z);
+        CHECK(d.atoms[0].charge == charge);
+        CHECK(d.atoms[0].label.isEmpty());
     }
 }
