@@ -11,6 +11,8 @@
 #include <QSettings>
 #include <QStatusBar>
 #include <QFileDialog>
+
+#include <QLockFile>
 #include <QMessageBox>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -927,8 +929,12 @@ TEST_CASE("recent files, autosave and crash recovery (#91)") {
     canvas->commit(*chem::fromSmiles("CCO"), "edit");  // unsaved changes
     w.autosave();
     REQUIRE(QFile::exists(MainWindow::autosavePath()));
+    // "Crash": the autosave is now another, no longer running, Penzene's.
+    const QString crashed = QFileInfo(MainWindow::autosavePath()).dir().filePath("autosave-crashed.penz");
+    QFile::remove(crashed);
+    REQUIRE(QFile::rename(MainWindow::autosavePath(), crashed));
 
-    // A fresh window after a "crash" offers the autosave back; answer Yes.
+    // A fresh window after the crash offers the autosave back; answer Yes.
     MainWindow after;
     QTimer::singleShot(0, &after, [] {
         if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
@@ -937,7 +943,7 @@ TEST_CASE("recent files, autosave and crash recovery (#91)") {
     after.offerRecovery();
     auto* c2 = after.findChild<Canvas*>();
     CHECK(chem::toSmiles(c2->document()) == "CCO");
-    CHECK_FALSE(QFile::exists(MainWindow::autosavePath()));  // offered once only
+    CHECK_FALSE(QFile::exists(crashed));  // offered once only
 
     after.autosave();  // once changes are saved (the stack is clean), autosave removes its copy
     REQUIRE(QFile::exists(MainWindow::autosavePath()));
@@ -2317,4 +2323,32 @@ TEST_CASE("Save after opening an SDF doesn't overwrite it, and never writes MOL 
     CHECK(back.readAll() == library);
     REQUIRE_FALSE(image.isEmpty());
     CHECK_FALSE(QFile::exists(image));
+}
+
+TEST_CASE("another running Penzene's autosave is neither offered nor removed (#318)") {
+    App app;
+    // One autosave per process: a second Penzene never writes or removes this one's.
+    CHECK(QFileInfo(MainWindow::autosavePath()).fileName().contains(QString::number(QCoreApplication::applicationPid())));
+    const QDir dir(QFileInfo(MainWindow::autosavePath()).path());
+    dir.mkpath(".");
+    const QString theirs = dir.filePath("autosave-running.penz");
+    QLockFile running(theirs + ".lock");  // held, as by a live process
+    REQUIRE(running.tryLock(0));
+    Document d = *chem::fromSmiles("CCO");
+    {
+        QFile f(theirs);
+        REQUIRE(f.open(QIODevice::WriteOnly));
+        f.write(d.toJson());
+    }
+    MainWindow w;
+    w.autosave();  // nothing unsaved here: removes only its own copy
+    int offered = 0;
+    QTimer::singleShot(0, &w, [&] {
+        if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) ++offered, box->reject();
+    });
+    w.offerRecovery();
+    CHECK(offered == 0);
+    CHECK(QFile::exists(theirs));
+    running.unlock();
+    QFile::remove(theirs);
 }
