@@ -16,6 +16,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Delete on an attachment point removes it, where before it became a methyl.
 - A dashed arrow's head is drawn solid, not with a broken outline.
 - Dragging an atom onto another keeps its brackets and its ring's circle setting, where before they lost it.
+- Image exports (PNG, SVG, PDF) and descriptor tables replace a file only once they are written in full, so a failed export no longer leaves it cut short.
 
 ## 1.1.0 (2026-09-26)
 

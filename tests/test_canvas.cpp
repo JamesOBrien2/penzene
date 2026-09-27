@@ -2116,3 +2116,36 @@ TEST_CASE("a dashed arrow's head is solid") {
     };
     for (auto kind : {ArrowKind::Reaction, ArrowKind::Retro}) CHECK(head(kind, true) == head(kind, false));
 }
+
+#ifndef _WIN32
+#include <csignal>
+#include <sys/resource.h>
+
+TEST_CASE("an export that can't be written in full leaves the old file whole (#304)") {
+    App app;
+    QTemporaryDir dir;
+    auto doc = chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
+    REQUIRE(doc);
+    for (const char* name : {"old.png", "old.svg", "old.pdf"}) {
+        const QString path = dir.filePath(name);
+        QFile old(path);
+        REQUIRE(old.open(QIODevice::WriteOnly));
+        old.write("old");
+        old.close();
+        // Files may grow to 64 bytes: as a full disk, every export stops part way.
+        auto previous = std::signal(SIGXFSZ, SIG_IGN);
+        rlimit saved{};
+        getrlimit(RLIMIT_FSIZE, &saved);
+        rlimit small = saved;
+        small.rlim_cur = 64;
+        setrlimit(RLIMIT_FSIZE, &small);
+        const bool ok = exportDocument(*doc, path);
+        setrlimit(RLIMIT_FSIZE, &saved);
+        std::signal(SIGXFSZ, previous);
+        CHECK_FALSE(ok);
+        REQUIRE(old.open(QIODevice::ReadOnly));
+        CHECK(old.readAll() == "old");
+        old.close();
+    }
+}
+#endif
