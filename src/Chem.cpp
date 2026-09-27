@@ -1055,7 +1055,8 @@ std::optional<Properties> properties(const Document& doc) {
     if (doc.atoms.empty()) return std::nullopt;
     auto mol = toRDKit(doc);
     if (!perceive(*mol)) return std::nullopt;
-    return Properties{RDKit::Descriptors::calcMolFormula(*mol), RDKit::Descriptors::calcAMW(*mol),
+    return Properties{RDKit::Descriptors::calcMolFormula(*mol, true),  // isotopes apart: C[13C]H6O, CDH3
+                       RDKit::Descriptors::calcAMW(*mol),
                       RDKit::Descriptors::calcExactMW(*mol)};
 }
 

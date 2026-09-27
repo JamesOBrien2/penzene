@@ -2204,6 +2204,12 @@ TEST_CASE("formula HTML: counts subscripted, charge superscripted") {
     CHECK(formulaHtml("O4S-2") == "O<sub>4</sub>S<sup>2−</sup>");
     CHECK(formulaHtml("C2H3O2-") == "C<sub>2</sub>H<sub>3</sub>O<sub>2</sub><sup>−</sup>");
     CHECK(formulaHtml("C6H6") == "C<sub>6</sub>H<sub>6</sub>");
+    CHECK(formulaHtml("C[13C]H6O") == "C<sup>13</sup>CH<sub>6</sub>O");  // an isotope, apart (#285)
+}
+
+TEST_CASE("the formula counts isotopes apart: 13C isn't C, D isn't H (#285)") {
+    CHECK(chem::properties(*chem::fromSmiles("[13CH3]CO"))->formula == "C[13C]H6O");
+    CHECK(chem::properties(*chem::fromSmiles("[2H]C(Cl)(Cl)Cl"))->formula == "CDCl3");
 }
 
 TEST_CASE("Properties → Copy as Text keeps the formula's charge unambiguous") {

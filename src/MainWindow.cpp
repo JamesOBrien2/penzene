@@ -366,8 +366,19 @@ QString formulaHtml(const std::string& formula) {
     const auto m = charge.match(f);
     QString sup;
     if (m.hasMatch()) sup = m.captured(2) + (m.captured(1) == "+" ? "+" : "−"), f.chop(m.capturedLength());
-    f = f.toHtmlEscaped().replace(QRegularExpression("(\\d+)"), "<sub>\\1</sub>");
-    return sup.isEmpty() ? f : f + "<sup>" + sup + "</sup>";
+    // Counts subscripted; an isotope written apart ("[13C]") as its mass number up front, ¹³C.
+    static const QRegularExpression token("\\[(\\d+)([A-Z][a-z]?)\\]|(\\d+)");
+    f = f.toHtmlEscaped();
+    QString html;
+    qsizetype last = 0;
+    for (auto it = token.globalMatch(f); it.hasNext();) {
+        const auto m = it.next();
+        html += f.mid(last, m.capturedStart() - last);
+        html += m.hasCaptured(1) ? "<sup>" + m.captured(1) + "</sup>" + m.captured(2) : "<sub>" + m.captured(3) + "</sub>";
+        last = m.capturedEnd();
+    }
+    html += f.mid(last);
+    return sup.isEmpty() ? html : html + "<sup>" + sup + "</sup>";
 }
 
 void MainWindow::updateProfile() {
