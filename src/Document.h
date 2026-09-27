@@ -69,6 +69,7 @@ struct Arrow {
     bool dashed = false;
     OrbitalLook look = OrbitalLook::Outline;  // orbitals only
     bool behind = false;  // under the molecule (Send to Back), not over it
+    bool crossed = false;  // "no reaction": an ✕ across the middle (ChemDraw's NoGo)
     bool operator==(const Arrow&) const = default;
 };
 

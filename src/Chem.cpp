@@ -524,6 +524,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         } else if (tag == "arrow") {
             const auto head = at.value("ArrowheadHead"), tail = at.value("ArrowheadTail");
             Arrow a{point(at.value("Tail3D")), point(at.value("Head3D"))};
+            a.crossed = at.value("NoGo") == u"Cross";
             if (head.isEmpty() && tail.isEmpty()) {  // a plain line
                 a.kind = ArrowKind::Line;
                 a.dashed = at.value("LineType").contains(u"Dash");
@@ -945,6 +946,7 @@ QByteArray toCdxml(const Document& in) {
         case ArrowKind::Fishhook: w.writeAttribute("ArrowheadHead", "HalfLeft"); break;
         }
         if (a.kind != ArrowKind::Retro) w.writeAttribute("ArrowheadType", "Solid");
+        if (a.crossed) w.writeAttribute("NoGo", "Cross");
         if (std::abs(a.bend) > 1e-6 && a.kind != ArrowKind::Equilibrium) {
             // The circle through both ends and the arc's midpoint (bend off the chord, as read back).
             const QPointF d = a.to - a.from, mid = (a.from + a.to) / 2;

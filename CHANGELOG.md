@@ -8,6 +8,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 - Charges in text: NH4+, Cu2+ and [Fe(CN)6]3- are set with the charge as a superscript; ^ marks one outright (SO4^2-). ChemDraw files keep counts and charges as sub- and superscripts.
 - More abbreviations: COOH, Bu, iBu, OEt, NHBoc, NMe2, SO3H, TIPS, MOM and THP.
+- A "no reaction" arrow, crossed through the middle, among the arrow tools; it round-trips with ChemDraw.
 - **Orbitals**: s, p, lobe and hybrid orbitals in Shapes, outlined, shaded or with a gradient, in any colour. Right-click to bring one to the front or send it behind the drawing; ChemDraw files keep them. <!-- icon: shapes -->
 - **Isotopes**: Type 13C, 18OH or D on an atom (d makes deuterium); drawn ¹³C and kept through SMILES, MOL and ChemDraw files, with the formula (C[13C]H6O, CDCl3) and masses to match. <!-- icon: atom -->
 

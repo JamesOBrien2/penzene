@@ -685,6 +685,29 @@ TEST_CASE("curved arrows are circular arcs, exact past 180 degrees (#86)") {
     CHECK(std::abs(mid.y() + 8) < 0.2);
 }
 
+TEST_CASE("a no-reaction arrow is crossed, draws its cross, and keeps it through .penz and CDXML") {
+    Fixture f;
+    f.canvas.setDocumentSilently({});
+    f.canvas.setTool(Canvas::Tool::Arrow);
+    f.canvas.setArrow(ArrowKind::Reaction, false, false, OrbitalLook::Outline, true);
+    f.drag({0, 0}, {60, 0});
+    REQUIRE(f.doc().arrows.size() == 1);
+    CHECK(f.doc().arrows[0].crossed);
+
+    Document d = *chem::fromSmiles("CCO");
+    d.arrows.push_back({{40, 0}, {100, 0}});
+    Document crossed = d;
+    crossed.arrows[0].crossed = true;
+    CHECK(renderImage(crossed, {300}) != renderImage(d, {300}));  // the ✕ is drawn
+    CHECK(Document::fromJson(crossed.toJson())->arrows[0].crossed);
+    CHECK_FALSE(Document::fromJson(d.toJson())->arrows[0].crossed);
+    const auto back = chem::fromChemDraw(chem::toCdxml(crossed));
+    REQUIRE(back);
+    REQUIRE(back->arrows.size() == 1);
+    CHECK(back->arrows[0].crossed);
+    CHECK(chem::toCdxml(crossed).contains("NoGo=\"Cross\""));
+}
+
 TEST_CASE("a huge arrow bend is drawn with a bounded number of points (#314)") {
     Arrow a{{0, 0}, {10, 0}};
     a.bend = 1e7;  // from a file: this took 2.9 GB to draw

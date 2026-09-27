@@ -1158,10 +1158,11 @@ static Document ringDoc(int n, bool aromatic) {
     return d;
 }
 
-static Document arrowDoc(ArrowKind kind, double bend = 0, bool dashed = false) {
+static Document arrowDoc(ArrowKind kind, double bend = 0, bool dashed = false, bool crossed = false) {
     Document d;
     const bool area = isShape(kind) && kind != ArrowKind::Line;
     d.arrows.push_back({{0, area ? -5.0 : 0.0}, {16, area ? 5.0 : 0.0}, kind, bend, {}, dashed});
+    d.arrows.back().crossed = crossed;
     return d;
 }
 
@@ -1587,8 +1588,10 @@ void MainWindow::buildTools() {
         }
 
     startGroup(tr("Arrows"), docIcon(arrowDoc(ArrowKind::Reaction)));
-    auto arrow = [this](ArrowKind k, bool curved, bool dashed = false) {
-        return [this, k, curved, dashed] { canvas_->setTool(T::Arrow), canvas_->setArrow(k, curved, dashed); };
+    auto arrow = [this](ArrowKind k, bool curved, bool dashed = false, bool crossed = false) {
+        return [this, k, curved, dashed, crossed] {
+            canvas_->setTool(T::Arrow), canvas_->setArrow(k, curved, dashed, OrbitalLook::Outline, crossed);
+        };
     };
     const QString drag = tr(" (drag to draw; click an arrow to restyle it)");
     keys["e"] = add(docIcon(arrowDoc(ArrowKind::Reaction)), tr("Reaction arrow — e") + drag,
@@ -1596,6 +1599,8 @@ void MainWindow::buildTools() {
     add(docIcon(arrowDoc(ArrowKind::Equilibrium)), tr("Equilibrium arrow") + drag, arrow(ArrowKind::Equilibrium, false));
     add(docIcon(arrowDoc(ArrowKind::Resonance)), tr("Resonance arrow") + drag, arrow(ArrowKind::Resonance, false));
     add(docIcon(arrowDoc(ArrowKind::Retro)), tr("Retrosynthesis arrow") + drag, arrow(ArrowKind::Retro, false));
+    add(docIcon(arrowDoc(ArrowKind::Reaction, 0, false, true)), tr("No reaction (crossed arrow)") + drag,
+        arrow(ArrowKind::Reaction, false, false, true));
     add(docIcon(arrowDoc(ArrowKind::Reaction, 10)), tr("Curved arrow, electron pair (click it again to flip the curve)"),
         arrow(ArrowKind::Reaction, true));
     add(docIcon(arrowDoc(ArrowKind::Fishhook, 10)), tr("Fishhook arrow, single electron (click it again to flip)"),
