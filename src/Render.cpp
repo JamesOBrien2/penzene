@@ -948,6 +948,13 @@ QImage renderImage(const Document& doc, const ExportOptions& o) {
     return img;
 }
 
+QByteArray renderPng(const Document& doc, const ExportOptions& o) {
+    QByteArray png;
+    QBuffer buf(&png);
+    if (!buf.open(QIODevice::WriteOnly) || !renderImage(doc, o).save(&buf, "PNG")) return {};
+    return png;
+}
+
 QByteArray renderSvg(const Document& doc, const ExportOptions& o) {
     const auto [r, s] = exportFrame(doc, o);
     QBuffer buf;
@@ -993,8 +1000,7 @@ bool exportDocument(const Document& doc, const QString& path, const ExportOption
     const QString ext = QFileInfo(path).suffix().toLower();
     QByteArray data;
     if (ext == "png") {
-        QBuffer buf(&data);
-        if (!buf.open(QIODevice::WriteOnly) || !renderImage(doc, o).save(&buf, "PNG")) return false;
+        data = renderPng(doc, o);
     } else if (ext == "svg") {
         data = renderSvg(doc, o);
     } else if (ext == "pdf") {

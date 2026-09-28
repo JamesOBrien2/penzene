@@ -1311,6 +1311,47 @@ TEST_CASE("exported SVG and PNG reopen as the editable drawing (#100)") {
     CHECK(w.findChild<Canvas*>()->document().atoms.size() == doc.atoms.size());
 }
 
+TEST_CASE("copied PNG keeps the embedded drawing and pastes back (#399)") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    Document doc = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
+    doc.texts.push_back({{0, 60}, "aspirin"});
+    canvas->setDocumentSilently(doc);
+    canvas->selectAll();
+    const Document copied = canvas->selectedSubset();
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->shortcut() == QKeySequence::Copy) a->trigger();
+    const QByteArray png = QApplication::clipboard()->mimeData()->data("image/png");
+    REQUIRE(png.startsWith("\x89PNG"));
+    auto embedded = Document::fromEmbedded(png);
+    REQUIRE(embedded);
+    CHECK(*embedded == copied);
+    CHECK(QApplication::clipboard()->mimeData()->hasImage());  // still a bitmap for apps that want one
+    CHECK(!QApplication::clipboard()->mimeData()->hasText());  // else Office pastes the SMILES, not the picture
+#ifdef Q_OS_WIN
+    CHECK(QApplication::clipboard()->mimeData()->data("application/x-qt-windows-mime;value=\"PNG\"") == png);
+#endif
+#ifdef Q_OS_MACOS
+    ChemDrawPasteboard uti;
+    CHECK(uti.utiForMime("image/png") == "public.png");
+    CHECK(uti.mimeForUti("public.png") == "image/png");
+#endif
+
+    // The PNG alone, as another app (Office) hands it back, pastes as the drawing.
+    for (const char* type : {"image/png", "application/x-qt-windows-mime;value=\"PNG\""}) {
+        INFO(type);
+        auto* mime = new QMimeData;
+        mime->setData(type, png);
+        QApplication::clipboard()->setMimeData(mime);
+        canvas->setDocumentSilently(Document{});
+        for (auto* a : w.findChildren<QAction*>())
+            if (a->shortcut() == QKeySequence::Paste) a->trigger();
+        CHECK(canvas->document().atoms.size() == doc.atoms.size());
+        CHECK(canvas->document().texts.size() == 1);
+    }
+}
+
 TEST_CASE("paste from ChemDraw: CDX/CDXML clipboard formats (#104)") {
     App app;
     const QString path = QString(PENZENE_TEST_DATA) + "/scheme.cdxml";

@@ -80,7 +80,6 @@ Help → Keyboard Shortcuts (F1).
 ## Menu shortcuts that differ
 
 Penzene uses the platform's standard keys (Ctrl on Windows and Linux, ⌘ on macOS)
-for File and Edit commands, as ChemDraw does. ChemDraw's own extras (⌘D copy as
-CDXML, ⌥⌘C copy as SMILES, ⌥⌘P paste as SMILES) aren't bound: Copy already
-carries SMILES, MOL and (where RDKit can write it, not yet on Windows, #185) CDX together,
-and Paste reads any of them.
+for File and Edit commands, as ChemDraw does. ⌥⌘C copies as SMILES, as in ChemDraw; Copy
+itself carries the picture, MOL and CDX but no plain text, so Office pastes the picture, and
+Paste reads any of them, SMILES text included.

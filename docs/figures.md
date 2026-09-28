@@ -20,9 +20,10 @@ Preferences sets the style for new documents.
 ```{feature} file-export
 :title: Export and copy
 **File → Export** writes SVG, PNG or PDF of the selection, or of everything. **Copy** puts the same
-picture on the clipboard (vector PDF, PNG and SVG) together with MOL, SMILES, CDX and the Penzene
+picture on the clipboard (vector PDF, PNG and SVG) together with MOL, CDX and the Penzene
 drawing, so Word, PowerPoint, Keynote and ChemDraw each get what they understand, and Office and
-Keynote get sharp vectors rather than pixels.
+Keynote get sharp vectors rather than pixels. It carries no plain text, so a plain paste into Office
+gives the picture; **Edit → Copy as SMILES** (⌥⌘C) gives the text.
 ```
 
 ```{feature} file-type-pdf

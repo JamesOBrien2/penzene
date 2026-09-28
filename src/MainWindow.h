@@ -6,7 +6,8 @@
 
 #ifdef Q_OS_MACOS
 #include <QUtiMimeConverter>
-// ChemDraw's pasteboard type (binary CDX) as chemical/x-cdx, and com.adobe.pdf as application/pdf.
+// ChemDraw's pasteboard type (binary CDX) as chemical/x-cdx, com.adobe.pdf as application/pdf,
+// and public.png as image/png (the bytes unchanged, so an exported drawing stays in them).
 struct ChemDrawPasteboard : QUtiMimeConverter {
     ChemDrawPasteboard();
     QString mimeForUti(const QString& uti) const override;
