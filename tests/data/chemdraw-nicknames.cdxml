@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE CDXML SYSTEM "http://www.cambridgesoft.com/xml/cdxml.dtd" >
+<CDXML
+ CreationProgram="ChemDraw 22.0.0.22"
+ Name="chemdraw-nicknames.cdxml"
+ BoundingBox="335.07 157.41 388.80 192.92"
+ WindowPosition="0 0"
+ WindowSize="0 0"
+ FractionalWidths="yes"
+ InterpretChemically="yes"
+ ShowAtomQuery="yes"
+ ShowAtomStereo="no"
+ ShowAtomEnhancedStereo="yes"
+ ShowAtomNumber="no"
+ ShowResidueID="no"
+ ShowBondQuery="yes"
+ ShowBondRxn="yes"
+ ShowBondStereo="no"
+ ShowTerminalCarbonLabels="no"
+ ShowNonTerminalCarbonLabels="no"
+ HideImplicitHydrogens="no"
+ Magnification="1175"
+ LabelFont="311"
+ LabelSize="10"
+ LabelFace="96"
+ CaptionFont="311"
+ CaptionSize="10"
+ HashSpacing="1.81"
+ MarginWidth="1.16"
+ LineWidth="0.88"
+ BoldWidth="1.81"
+ BondLength="14.17"
+ BondSpacing="18"
+ BondSpacingAbs="-2.55"
+ ChainAngle="120"
+ LabelJustification="Auto"
+ CaptionJustification="Left"
+ AminoAcidTermini="HOH"
+ ShowSequenceTermini="yes"
+ ShowSequenceBonds="yes"
+ ShowSequenceUnlinkedBranches="no"
+ ResidueWrapCount="40"
+ ResidueBlockCount="10"
+ PrintMargins="36 36 36 36"
+ MacPrintInfo="000300000048004800000000032E0237FFF2FFF2033C02450367057B03DF000200000048004800000000032E0237000100000064000000010001010100000001270F000100010000000000000000000000000002001901900000000000400000000000000000000100000000000000000000000000000000"
+ ChemPropName=""
+ ChemPropFormula="Chemical Formula: "
+ ChemPropExactMass="Exact Mass: "
+ ChemPropMolWt="Molecular Weight: "
+ ChemPropMOverZ="m/z: "
+ ChemPropAnalysis="Elemental Analysis: "
+ ChemPropBoilingPt="Boiling Point: "
+ ChemPropMeltingPt="Melting Point: "
+ ChemPropCritTemp="Critical Temp: "
+ ChemPropCritPres="Critical Pres: "
+ ChemPropCritVol="Critical Vol: "
+ ChemPropGibbs="Gibbs Energy: "
+ ChemPropLogP="Log P: "
+ ChemPropMR="MR: "
+ ChemPropHenry="Henry&apos;s Law: "
+ ChemPropEForm="Heat of Form: "
+ ChemProptPSA="tPSA: "
+ ChemPropID=""
+ ChemPropFragmentLabel=""
+ color="0"
+ bgcolor="1"
+ RxnAutonumberStart="1"
+ RxnAutonumberConditions="no"
+ RxnAutonumberStyle="Roman"
+ RxnAutonumberFormat="(#)"
+><colortable>
+<color r="1" g="1" b="1"/>
+<color r="0" g="0" b="0"/>
+<color r="0.1804" g="0.2824" b="0.3451"/>
+<color r="0.2000" g="0.3961" b="0.5412"/>
+<color r="0.5255" g="0.7294" b="0.8471"/>
+<color r="0.9765" g="0.4392" b="0.1961"/>
+<color r="0.9608" g="0.6824" b="0.1765"/>
+<color r="0.5020" g="0.5020" b="0.5020"/>
+<color r="0.1020" g="0.0902" b="0.0902"/>
+<color r="0" g="0" b="0.5020"/>
+<color r="0.5020" g="0" b="0"/>
+<color r="0.0471" g="0.7059" b="0.0706"/>
+<color r="0.9804" g="0.8353" b="0.3608"/>
+<color r="0.6471" g="0.3804" b="0.8157"/>
+<color r="0.2353" g="0.6157" b="1"/>
+<color r="1" g="0.3059" b="0.3255"/>
+<color r="0.0510" g="0.4902" b="0.2510"/>
+<color r="0.8000" g="0.8000" b="0.8000"/>
+<color r="0.9922" g="0.5020" b="0.0314"/>
+<color r="0.0510" g="0.5020" b="0.2510"/>
+<color r="0.9804" g="0.5020" b="0.0314"/>
+<color r="0.4000" g="0.8000" b="0.9961"/>
+<color r="0.8863" g="0.1059" b="0.4000"/>
+</colortable><fonttable>
+<font id="311" charset="Unknown" name="IBM Plex Sans Light"/>
+</fonttable><page
+ id="87294"
+ BoundingBox="0 0 1046 770"
+ HeaderPosition="36"
+ FooterPosition="36"
+ PrintTrimMarks="yes"
+ HeightPages="1"
+ WidthPages="2"
+><fragment
+ id="87274"
+ BoundingBox="335.07 157.41 388.80 192.92"
+ Z="4"
+><n
+ id="87271"
+ p="335.53 167.99"
+ Z="1"
+ AS="N"
+/><n
+ id="87273"
+ p="335.53 182.16"
+ Z="3"
+ AS="N"
+/><n
+ id="87275"
+ p="347.80 189.25"
+ Z="5"
+ AS="N"
+/><n
+ id="87277"
+ p="360.07 182.16"
+ Z="7"
+ AS="N"
+/><n
+ id="87279"
+ p="360.07 167.99"
+ Z="9"
+ AS="N"
+/><n
+ id="87281"
+ p="347.80 160.90"
+ Z="11"
+ AS="N"
+/><n
+ id="87289"
+ p="372.35 160.90"
+ Z="19"
+ NodeType="Nickname"
+ NeedsClean="yes"
+ AS="N"
+><fragment
+ id="87295"
+><n
+ id="87296"
+ p="384.60 167.98"
+ Element="8"
+ NumHydrogens="0"
+/><n
+ id="87297"
+ p="396.86 160.90"
+/><n
+ id="87298"
+ p="409.11 153.83"
+/><n
+ id="87299"
+ p="396.86 146.75"
+/><n
+ id="87300"
+ p="409.11 167.98"
+/><n
+ id="87301"
+ p="372.35 160.90"
+/><n
+ id="87302"
+ p="372.35 146.75"
+ Element="8"
+ NumHydrogens="0"
+/><n
+ id="87303"
+ p="360.09 167.98"
+ NodeType="ExternalConnectionPoint"
+/><b
+ id="87304"
+ B="87301"
+ E="87302"
+ Order="2"
+/><b
+ id="87305"
+ B="87297"
+ E="87298"
+/><b
+ id="87306"
+ B="87297"
+ E="87299"
+/><b
+ id="87307"
+ B="87297"
+ E="87300"
+/><b
+ id="87308"
+ B="87296"
+ E="87297"
+/><b
+ id="87309"
+ B="87296"
+ E="87301"
+/><b
+ id="87310"
+ B="87303"
+ E="87301"
+/></fragment><t
+ p="369.16 164.39"
+ BoundingBox="370.15 157.41 385.69 164.51"
+ LabelJustification="Left"
+ LabelAlignment="Left"
+><s font="311" size="10" color="0" face="96">Boc</s></t></n><n
+ id="87291"
+ p="372.35 189.25"
+ Z="21"
+ NodeType="Fragment"
+ NeedsClean="yes"
+ AS="N"
+><fragment
+ id="87312"
+><n
+ id="87313"
+ p="372.35 189.25"
+ Element="8"
+ NumHydrogens="0"
+/><n
+ id="87314"
+ p="384.60 182.17"
+ NumHydrogens="3"
+/><n
+ id="87315"
+ p="360.09 182.17"
+ NodeType="ExternalConnectionPoint"
+/><b
+ id="87316"
+ B="87313"
+ E="87314"
+/><b
+ id="87317"
+ B="87315"
+ E="87313"
+/></fragment><t
+ p="368.86 192.80"
+ BoundingBox="369.49 185.70 388.80 192.92"
+ LabelJustification="Left"
+ LabelAlignment="Left"
+><s font="311" size="10" color="0" face="96">OMe</s></t></n><b
+ id="87283"
+ Z="13"
+ B="87271"
+ E="87273"
+ Order="2"
+ BS="N"
+ BondCircularOrdering="87288 0 0 87284"
+/><b
+ id="87284"
+ Z="14"
+ B="87273"
+ E="87275"
+ BS="N"
+/><b
+ id="87285"
+ Z="15"
+ B="87275"
+ E="87277"
+ Order="2"
+ BS="N"
+ BondCircularOrdering="87284 0 87292 87286"
+/><b
+ id="87286"
+ Z="16"
+ B="87277"
+ E="87279"
+ BS="N"
+/><b
+ id="87287"
+ Z="17"
+ B="87279"
+ E="87281"
+ Order="2"
+ BS="N"
+ BondCircularOrdering="87286 87290 0 87288"
+/><b
+ id="87288"
+ Z="18"
+ B="87281"
+ E="87271"
+ BS="N"
+/><b
+ id="87290"
+ Z="20"
+ B="87279"
+ E="87289"
+ BS="N"
+/><b
+ id="87292"
+ Z="22"
+ B="87277"
+ E="87291"
+ BS="N"
+/></fragment><annotation
+ Keyword="GUID"
+ Content="a987bd67-a520-4e09-8594-58d9146c8351"
+/><annotation
+ Keyword="Name"
+ Content="Chimp"
+/></page></CDXML>

@@ -354,6 +354,15 @@ TEST_CASE("ChemDraw export keeps a charged abbreviation's charge (#382)") {
     CHECK(cdxml.count("Charge=\"1\"") == 1);
 }
 
+TEST_CASE("a ChemDraw-made file keeps its Boc nickname and OMe fragment labels (#391)") {
+    auto doc = chem::readFile(QString(PENZENE_TEST_DATA) + "/chemdraw-nicknames.cdxml");  // ChemDraw 22
+    REQUIRE(doc);
+    REQUIRE(doc->atoms.size() == 8);  // the ring plus one atom per label
+    CHECK(doc->atoms[6].label == "Boc");
+    CHECK(doc->atoms[7].label == "OMe");
+    CHECK(chem::properties(*doc)->formula == "C12H16O3");
+}
+
 TEST_CASE("explicit hydrogens and carbon/H display options (#97)") {
     auto eth = chem::fromSmiles("CCO");
     REQUIRE(eth);
