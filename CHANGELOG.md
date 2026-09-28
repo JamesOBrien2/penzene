@@ -4,7 +4,7 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
-## Unreleased
+## 1.5.0 (2026-09-28)
 
 - The nmrshiftdb2 Database License for the built-in NMR shift table is now in the bundled third-party notices, so About → Third-party licenses shows it.
 - **Predicted NMR shifts**: View → Predicted NMR Shifts writes each carbon's ¹³C shift, and the ¹H shift of atoms with hydrogens, beside the structure, looked up by HOSE code in data from nmrshiftdb2 (about 2.4 ppm ¹³C and 0.27 ppm ¹H mean error). <!-- icon: atom -->
