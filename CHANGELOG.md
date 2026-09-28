@@ -8,6 +8,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 - A reaction scheme that wraps onto a new row keeps the link between rows: the last product of one row is the next row's reactant when exported.
 - Structure → Invert Stereochemistry turns every wedge into a hash and every hash into a wedge, giving the enantiomer without redrawing it (the selection's molecules, or the whole drawing).
+- Open reads MDL RD files (.rdf): the steps open as one scheme, left to right, with a step's product carrying on as the next step's reactant.
 - Preferences can check structures before export and copy: unassigned stereocentres and valence errors are listed first, with Export Anyway or Cancel.
 
 ## 1.4.0 (2026-09-28)

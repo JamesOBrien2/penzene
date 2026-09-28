@@ -1715,7 +1715,7 @@ void MainWindow::buildMenus() {
     file->addAction(tr("&Open…"), QKeySequence::Open, this, [this] {
         if (!maybeSave()) return;
         QString p = QFileDialog::getOpenFileName(this, tr("Open"), {},
-                                                 tr("Structures (*.penz *.mol *.sdf *.smi *.inchi *.rxn *.cdxml *.cdx);;Penzene figures (*.svg *.png *.pdf);;All files (*)"));
+                                                 tr("Structures (*.penz *.mol *.sdf *.smi *.inchi *.rxn *.rdf *.cdxml *.cdx);;Penzene figures (*.svg *.png *.pdf);;All files (*)"));
         if (!p.isEmpty()) openFile(p);
     });
     auto* recent = file->addMenu(tr("Open &Recent"));
