@@ -1111,27 +1111,29 @@ TEST_CASE("MOL export writes Kekulé bonds, not query bond type 4 (#321)") {
         auto back = chem::fromMolBlock(mol);
         REQUIRE(back);
         CHECK(chem::toSmiles(*back) == "c1ccccc1");
+    }
 }
+
+// Bond (lower atom, higher atom, order) triples, sorted, to compare Kekulé forms.
+static std::vector<std::tuple<int, int, int>> bondOrders(const Document& d) {
+    std::vector<std::tuple<int, int, int>> out;
+    for (const auto& b : d.bonds) out.push_back({std::min(b.a, b.b), std::max(b.a, b.b), b.order});
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 TEST_CASE("Clean keeps bond colours and the drawn Kekulé structure (#322)") {
-}
-
-TEST_CASE("MOL and CDXML imports keep the drawn Kekulé form (#323)") {
-    auto orders = [](const Document& d) {
-        std::vector<std::tuple<int, int, int>> out;
-        for (const auto& b : d.bonds) out.push_back({std::min(b.a, b.b), std::max(b.a, b.b), b.order});
-        std::sort(out.begin(), out.end());
-        return out;
-    };
     for (bool flip : {false, true}) {  // either Kekulé form stays as drawn
         Document d = *chem::fromSmiles("c1ccccc1");
         for (auto& b : d.bonds) b.order = flip ? 3 - b.order : b.order, b.color = QColor("#ff0000");
         const Document c = chem::clean2D(d);
-        CHECK(orders(c) == orders(d));
+        CHECK(bondOrders(c) == bondOrders(d));
         for (const auto& b : c.bonds) CHECK(b.color == QColor("#ff0000"));
+    }
 }
 
+TEST_CASE("MOL and CDXML imports keep the drawn Kekulé form (#323)") {
+    auto orders = bondOrders;
     for (int form : {0, 1}) {  // both Kekulé forms of benzene
         Document d;
         for (int k = 0; k < 6; ++k)
@@ -1151,7 +1153,7 @@ TEST_CASE("MOL and CDXML imports keep the drawn Kekulé form (#323)") {
         auto fromMol = chem::fromMolBlock(mol + "M  END\n");
         REQUIRE(fromMol);
         CHECK(orders(*fromMol) == orders(d));
-}
+    }
 }
 
 TEST_CASE("a racemic (&1) centre keeps its stereo group through .penz, MOL V3000, CDXML and CDX (#389)") {
