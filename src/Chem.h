@@ -79,6 +79,13 @@ struct Profile {
     bool veber = true;           // rotatable bonds <= 10 and TPSA <= 140
 };
 std::optional<Profile> profile(const Document& doc);  // nullopt if empty or invalid
+// The mass spectrum's isotope pattern for an ion of everything in `doc` (all fragments, like the
+// formula), from natural abundances; drawn isotopes (13C) count as that isotope only.
+enum class Ion { M, MplusH, MplusNa, MminusH };
+struct Peak {
+    double mz, intensity;  // intensity: the tallest is 100
+};
+std::vector<Peak> isotopePattern(const Document& doc, Ion ion);  // by m/z; empty if it can't be worked out
 std::string toInchi(const Document& doc);                   // "" if invalid
 // One CSV row per record: identifiers and descriptors (docs/cli.md defines them). A record that
 // isn't valid chemistry keeps its row, with the reason under "error". columns: a subset, in order.

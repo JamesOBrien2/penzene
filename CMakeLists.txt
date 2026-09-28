@@ -72,6 +72,10 @@ target_link_libraries(penzene_core PUBLIC
     Qt6::Gui Qt6::Svg
     RDKit::SmilesParse RDKit::FileParsers RDKit::Depictor RDKit::GraphMol
     RDKit::Descriptors RDKit::RDInchiLib RDKit::CIPLabeler RDKit::DistGeomHelpers)
+# RDKit is DLLs on Windows; without this its headers don't mark data (the isotope table) dllimport.
+if(WIN32)
+    target_compile_definitions(penzene_core PUBLIC RDKIT_DYN_LINK)
+endif()
 # Whole: RDKit's shared ChemDraw library (macOS, Linux) defines the same functions, and a
 # plain archive link would take RDKit's copies instead of these (which carry Penzene's fixes).
 target_link_libraries(penzene_core PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,penzene_chemdraw>")

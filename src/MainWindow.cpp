@@ -83,6 +83,48 @@ static const char* kEmfMime = "image/x-emf";  // offered to Office as CF_ENHMETA
 static const char* kDocsUrl = "https://penzene.readthedocs.io/";
 static const QSize kExampleIcon(168, 84);
 
+// The Mass Spec panel's stick spectrum: m/z along the bottom, the main peaks labelled.
+class SpectrumView : public QWidget {
+public:
+    std::vector<chem::Peak> peaks;
+    SpectrumView() { setMinimumSize(260, 200); }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QColor ink = palette().color(QPalette::WindowText);
+        if (peaks.empty()) {
+            p.setPen(ink);
+            p.drawText(rect(), Qt::AlignCenter | Qt::TextWordWrap,
+                       QCoreApplication::translate("MainWindow", "Draw or select a valid structure."));
+            return;
+        }
+        const QFontMetrics fm(font());
+        const QRectF plot = QRectF(rect()).adjusted(8, fm.height() + 6, -8, -fm.height() - 8);
+        const double lo = peaks.front().mz - 1, hi = peaks.back().mz + 1;
+        auto x = [&](double mz) { return plot.left() + (mz - lo) / (hi - lo) * plot.width(); };
+        p.setPen(QPen(ink, 1));
+        p.drawLine(plot.bottomLeft(), plot.bottomRight());
+        for (int m = int(std::ceil(lo)); m <= hi; ++m) p.drawLine(QPointF(x(m), plot.bottom()), QPointF(x(m), plot.bottom() + 3));
+        p.setPen(QPen(palette().color(QPalette::Highlight), 2, Qt::SolidLine, Qt::FlatCap));
+        for (const auto& k : peaks)
+            p.drawLine(QPointF(x(k.mz), plot.bottom()), QPointF(x(k.mz), plot.bottom() - k.intensity / 100 * plot.height()));
+        // Labels on the tallest stick of each nominal mass, if it's 5% or more.
+        p.setPen(ink);
+        for (const auto& k : peaks) {
+            const bool main = k.intensity >= 5 && std::none_of(peaks.begin(), peaks.end(), [&](const chem::Peak& o) {
+                                  return std::abs(o.mz - k.mz) < 0.5 && o.intensity > k.intensity;
+                              });
+            if (!main) continue;
+            const QString text = QString::number(k.mz, 'f', 4);
+            const double y = plot.bottom() - k.intensity / 100 * plot.height() - 4;
+            p.drawText(QPointF(x(k.mz) - fm.horizontalAdvance(text) / 2.0, y), text);
+        }
+        p.drawText(QRectF(plot.left(), plot.bottom() + 4, plot.width(), fm.height() + 4), Qt::AlignRight, "m/z");
+    }
+};
+
 static QString uiStyle(const Theme& t) {
     const Chrome c = chrome(t);
     return QString(R"(
@@ -264,6 +306,28 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     connect(profileDock_, &QDockWidget::visibilityChanged, this, &MainWindow::updateProfile);
     connect(canvas_, &Canvas::documentChanged, this, &MainWindow::updateProfile);
     connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::updateProfile);
+    // Mass Spec panel, beside Properties: the isotope pattern of the selection or everything.
+    massDock_ = new QDockWidget(tr("Mass Spec"), this);
+    massDock_->setObjectName("massSpec");
+    auto* massCard = new QFrame;
+    massCard->setObjectName("panelCard");
+    auto* massLayout = new QVBoxLayout(massCard);
+    massLayout->setContentsMargins(12, 12, 12, 12);
+    ion_ = new QComboBox;
+    ion_->addItems({"[M]", "[M+H]⁺", "[M+Na]⁺", "[M−H]⁻"});
+    ion_->setCurrentIndex(1);
+    spectrum_ = new SpectrumView;
+    spectrum_->setAccessibleName(tr("Isotope pattern"));
+    massLayout->addWidget(ion_);
+    massLayout->addWidget(spectrum_, 1);
+    massCard->setMinimumWidth(300);
+    massDock_->setWidget(massCard);
+    addDockWidget(Qt::RightDockWidgetArea, massDock_);
+    massDock_->hide();
+    connect(massDock_, &QDockWidget::visibilityChanged, this, &MainWindow::updateMassSpec);
+    connect(ion_, &QComboBox::currentIndexChanged, this, &MainWindow::updateMassSpec);
+    connect(canvas_, &Canvas::documentChanged, this, &MainWindow::updateMassSpec);
+    connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::updateMassSpec);
     buildTools();
     buildMenus();
     connect(undoGroup_, &QUndoGroup::cleanChanged, this, &MainWindow::updateTitle);
@@ -427,6 +491,16 @@ void MainWindow::updateProfile() {
     }
     profile_->setText(html + "</table>");
     profileText_ = plain.join("\n");
+}
+
+void MainWindow::updateMassSpec() {
+    if (!massDock_->isVisible()) return;
+    spectrum_->peaks = chem::isotopePattern(canvas_->selectedSubset(), chem::Ion(ion_->currentIndex()));
+    QStringList sticks;  // for screen readers
+    for (const auto& k : spectrum_->peaks)
+        sticks << QString("%1 (%2%)").arg(k.mz, 0, 'f', 4).arg(k.intensity, 0, 'f', 1);
+    spectrum_->setAccessibleDescription(sticks.join(", "));
+    spectrum_->update();
 }
 
 // Formula and masses of the selection, or of everything.
@@ -2056,6 +2130,9 @@ void MainWindow::buildMenus() {
     panelToggle->setText(tr("&Properties Panel"));
     panelToggle->setShortcut(QKeySequence(tr("Ctrl+I")));
     view->addAction(panelToggle);
+    auto* massToggle = massDock_->toggleViewAction();
+    massToggle->setText(tr("&Mass Spec Panel"));
+    view->addAction(massToggle);
     auto* pageMenu = view->addMenu(tr("&Page"));
     auto* pageGroup = new QActionGroup(pageMenu);
     QStringList pages{""};
