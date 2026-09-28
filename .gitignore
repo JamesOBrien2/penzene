@@ -2,3 +2,6 @@
 build*/
 .DS_Store
 dist/
+
+# clangd index
+.cache/
