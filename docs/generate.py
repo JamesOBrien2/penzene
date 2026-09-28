@@ -5,6 +5,8 @@
 
 python docs/generate.py            # rewrite them (needs the built module on PYTHONPATH)
 python docs/generate.py --check    # exit 1 if they're out of date (a ctest)
+
+Both also fail if a public name's docstring doesn't end with "(since X.Y)".
 """
 import html
 import inspect
@@ -46,10 +48,15 @@ def python_page():
         out += member(pz, name)
     for cls in (pz.Document, pz.Atom, pz.Bond):
         out += ["", f"## {cls.__name__}", "", (cls.__doc__ or "").strip(), ""]
-        names = [n for n in vars(cls) if not n.startswith("_") or n == "__init__"]
-        for name in sorted(names, key=lambda n: (n != "__init__", n)):
+        for name in sorted(public(cls), key=lambda n: (n != "__init__", n)):
             out += member(cls, name, cls.__name__)
     return "\n".join(out) + "\n"
+
+
+def public(cls):
+    """A class's public names, with __init__ if Python code can call it (Atom and Bond have none)."""
+    return [n for n, v in vars(cls).items()
+            if not n.startswith("_") or (n == "__init__" and not isinstance(v, type(object.__init__)))]
 
 
 def member(owner, name, prefix=None):
@@ -63,7 +70,18 @@ def member(owner, name, prefix=None):
     return [f"### `{sig if sig.startswith(name) else title}`", "", rest.strip(), ""]
 
 
+def undated():
+    """Public names whose docstring doesn't end with "(since X.Y)", the release that added them."""
+    import penzene as pz
+    names = [(pz, n) for n in pz.__all__ if n != "__version__"]
+    names += [(c, n) for c in (pz.Document, pz.Atom, pz.Bond) for n in public(c)]
+    return [f"{getattr(o, '__name__', 'penzene')}.{n}" for o, n in names
+            if not re.search(r"\(since \d+\.\d+\)$", (getattr(o, n).__doc__ or "").strip())]
+
+
 def main():
+    if missing := undated():
+        sys.exit(f"no \"(since X.Y)\" at the end of the docstring: {', '.join(missing)}")
     pages = {"keys.md": keys_page(), "python-api.md": python_page()}
     stale = [p for p, body in pages.items() if not (DOCS / p).exists() or (DOCS / p).read_text(encoding="utf-8") != body]
     if "--check" in sys.argv:

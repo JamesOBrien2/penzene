@@ -65,26 +65,26 @@ NB_MODULE(_penzene, m) {
     m.doc() = "Penzene: 2D chemical structures, drawn by the same engine as the app.";
     m.attr("__version__") = PENZENE_VERSION;
 
-    nb::class_<Atom>(m, "Atom", "An atom of a Document (read-only; edit through Document).")
-        .def_prop_ro("symbol", &symbol, "Element symbol, or the abbreviation (Boc, OMe…) if it has one")
-        .def_prop_ro("x", [](const Atom& a) { return a.pos.x(); }, "Points, x right")
-        .def_prop_ro("y", [](const Atom& a) { return a.pos.y(); }, "Points, y down")
-        .def_ro("charge", &Atom::charge, "Formal charge")
-        .def_ro("isotope", &Atom::isotope, "Mass number (13 for carbon-13, 2 for deuterium); 0 for natural abundance")
+    nb::class_<Atom>(m, "Atom", "An atom of a Document (read-only; edit through Document). (since 0.4)")
+        .def_prop_ro("symbol", &symbol, "Element symbol, or the abbreviation (Boc, OMe…) if it has one (since 0.4)")
+        .def_prop_ro("x", [](const Atom& a) { return a.pos.x(); }, "Points, x right (since 0.4)")
+        .def_prop_ro("y", [](const Atom& a) { return a.pos.y(); }, "Points, y down (since 0.4)")
+        .def_ro("charge", &Atom::charge, "Formal charge (since 0.4)")
+        .def_ro("isotope", &Atom::isotope, "Mass number (13 for carbon-13, 2 for deuterium); 0 for natural abundance (since 1.3)")
         .def("__repr__", [](const Atom& a) { return "<Atom " + symbol(a) + ">"; });
 
-    nb::class_<Bond>(m, "Bond", "A bond of a Document (read-only).")
-        .def_ro("a", &Bond::a, "Index of the first atom (a wedge starts here)")
-        .def_ro("b", &Bond::b, "Index of the second atom")
-        .def_ro("order", &Bond::order, "1, 2 or 3")
+    nb::class_<Bond>(m, "Bond", "A bond of a Document (read-only). (since 0.4)")
+        .def_ro("a", &Bond::a, "Index of the first atom (a wedge starts here) (since 0.4)")
+        .def_ro("b", &Bond::b, "Index of the second atom (since 0.4)")
+        .def_ro("order", &Bond::order, "1, 2 or 3 (since 0.4)")
         .def("__repr__", [](const Bond& b) {
             return "<Bond " + std::to_string(b.a) + "-" + std::to_string(b.b) + " order " + std::to_string(b.order) + ">";
         });
 
-    nb::class_<Document>(m, "Document", "A drawing: molecules, arrows and text, as the app holds it.")
-        .def(nb::init<>(), "An empty drawing.")
-        .def_ro("atoms", &Document::atoms, "The atoms, in order (their index is what add_bond and hotkeys take)")
-        .def_ro("bonds", &Document::bonds, "The bonds")
+    nb::class_<Document>(m, "Document", "A drawing: molecules, arrows and text, as the app holds it. (since 0.4)")
+        .def(nb::init<>(), "An empty drawing. (since 0.4)")
+        .def_ro("atoms", &Document::atoms, "The atoms, in order (their index is what add_bond and hotkeys take) (since 0.4)")
+        .def_ro("bonds", &Document::bonds, "The bonds (since 0.4)")
         .def_prop_rw(
             "style", [](const Document& d) { return drawingStyle(d.style).name.toStdString(); },
             [](Document& d, const std::string& name) {
@@ -92,7 +92,7 @@ NB_MODULE(_penzene, m) {
                 if (s.name != qs(name)) throw nb::value_error(("unknown drawing style: " + name).c_str());
                 d.style = s.name == drawingStyles()[0].name ? QString() : s.name;
             },
-            "Drawing style: 'ACS 1996' (default), 'JDP' or 'RSC'")
+            "Drawing style: 'ACS 1996' (default), 'JDP' or 'RSC' (since 0.4)")
         .def(
             "add_atom",
             [](Document& d, const std::string& label, double x, double y) {
@@ -104,7 +104,7 @@ NB_MODULE(_penzene, m) {
                 return i;
             },
             "label"_a = "C", "x"_a = 0.0, "y"_a = 0.0,
-            "Add an atom: an element, an abbreviation (OMe, Boc…) or a SMILES fragment. Returns its index.")
+            "Add an atom: an element, an abbreviation (OMe, Boc…) or a SMILES fragment. Returns its index. (since 0.4)")
         .def(
             "add_bond",
             [](Document& d, int a, int b, int order) {
@@ -113,7 +113,7 @@ NB_MODULE(_penzene, m) {
                 if (order < 1 || order > 3) throw nb::value_error("order must be 1, 2 or 3");
                 edit::link(d, a, b, order);
             },
-            "a"_a, "b"_a, "order"_a = 1, "Bond atoms a and b (order 1, 2 or 3).")
+            "a"_a, "b"_a, "order"_a = 1, "Bond atoms a and b (order 1, 2 or 3). (since 0.4)")
         .def(
             "hotkeys",
             [](Document& d, int atom, const std::string& keys, std::optional<int> bond) {
@@ -128,16 +128,16 @@ NB_MODULE(_penzene, m) {
             },
             "atom"_a, "keys"_a, "bond"_a = nb::none(),
             "Type hotkeys with this atom as the hotspot (or atom=-1, bond=i for a bond). "
-            "Returns the final (atom, bond) hotspot.")
+            "Returns the final (atom, bond) hotspot. (since 0.4)")
         .def(
             "clean", [](Document& d, std::vector<int> atoms) { d = chem::clean2D(d, atoms); }, "atoms"_a = std::vector<int>{},
-            "Lay out afresh with RDKit; with atoms, only the molecules containing them.")
-        .def("to_smiles", [](const Document& d) { return chem::toSmiles(d); }, "Canonical SMILES (\"\" if the drawing isn't valid chemistry).")
-        .def("to_molblock", [](const Document& d) { return chem::toMolBlock(d); }, "MDL MOL (V2000), with the drawing's wedges.")
-        .def("to_inchi", [](const Document& d) { return chem::toInchi(d); }, "Standard InChI.")
-        .def("to_inchikey", [](const Document& d) { return chem::toInchiKey(d); }, "Standard InChIKey.")
-        .def("to_json", [](const Document& d) { return d.toJson().toStdString(); }, "The .penz document (JSON).")
-        .def("to_svg", [](const Document& d) { return renderSvg(d).toStdString(); }, "SVG, as the app exports it (the drawing embedded, so it reopens editable).")
+            "Lay out afresh with RDKit; with atoms, only the molecules containing them. (since 0.4)")
+        .def("to_smiles", [](const Document& d) { return chem::toSmiles(d); }, "Canonical SMILES (\"\" if the drawing isn't valid chemistry). (since 0.4)")
+        .def("to_molblock", [](const Document& d) { return chem::toMolBlock(d); }, "MDL MOL (V2000), with the drawing's wedges. (since 0.4)")
+        .def("to_inchi", [](const Document& d) { return chem::toInchi(d); }, "Standard InChI. (since 0.4)")
+        .def("to_inchikey", [](const Document& d) { return chem::toInchiKey(d); }, "Standard InChIKey. (since 0.4)")
+        .def("to_json", [](const Document& d) { return d.toJson().toStdString(); }, "The .penz document (JSON). (since 0.4)")
+        .def("to_svg", [](const Document& d) { return renderSvg(d).toStdString(); }, "SVG, as the app exports it (the drawing embedded, so it reopens editable). (since 0.4)")
         .def(
             "to_png",
             [](const Document& d, double dpi) {
@@ -147,37 +147,37 @@ NB_MODULE(_penzene, m) {
                 renderImage(d, {dpi}).save(&buf, "PNG");
                 return nb::bytes(png.constData(), png.size());
             },
-            "dpi"_a = 300, "PNG bytes at this resolution.")
+            "dpi"_a = 300, "PNG bytes at this resolution. (since 0.4)")
         .def_prop_ro("formula", [](const Document& d) { auto p = chem::properties(d); return p ? p->formula : ""; },
-                     "Molecular formula, Hill order, all molecules together")
-        .def_prop_ro("mw", [](const Document& d) { auto p = chem::properties(d); return p ? p->mw : 0.0; }, "Molecular weight")
+                     "Molecular formula, Hill order, all molecules together (since 0.4)")
+        .def_prop_ro("mw", [](const Document& d) { auto p = chem::properties(d); return p ? p->mw : 0.0; }, "Molecular weight (since 0.4)")
         .def_prop_ro("exact_mass", [](const Document& d) { auto p = chem::properties(d); return p ? p->exactMass : 0.0; },
-                     "Monoisotopic mass")
-        .def("save", &save, "path"_a, "Write .penz (full fidelity), .mol, or ChemDraw .cdxml or .cdx; images go through export().")
+                     "Monoisotopic mass (since 0.4)")
+        .def("save", &save, "path"_a, "Write .penz (full fidelity), .mol, or ChemDraw .cdxml or .cdx; images go through export(). (since 0.4)")
         .def(
             "export",
             [](const Document& d, const std::string& path) {
                 if (!exportDocument(d, qs(path))) throw nb::value_error(("cannot export " + path).c_str());
             },
-            "path"_a, "Write .svg, .png or .pdf, exactly as the app exports.")
+            "path"_a, "Write .svg, .png or .pdf, exactly as the app exports. (since 0.4)")
         .def("_repr_svg_", [](const Document& d) { return renderSvg(d).toStdString(); })
         .def("__repr__", [](const Document& d) {
             auto p = chem::properties(d);
             return "<penzene.Document " + (p ? p->formula : std::to_string(d.atoms.size()) + " atoms") + ">";
         });
 
-    m.def("from_smiles", &fromSmiles, "smiles"_a, "A structure from SMILES, laid out in 2D.");
+    m.def("from_smiles", &fromSmiles, "smiles"_a, "A structure from SMILES, laid out in 2D. (since 0.4)");
     m.def("from_json", [](const std::string& json) {
         auto d = Document::fromJson(QByteArray::fromStdString(json));
         if (!d) throw nb::value_error("not a .penz document");
         return *d;
-    }, "json"_a, "A Document from .penz JSON (as to_json writes).");
+    }, "json"_a, "A Document from .penz JSON (as to_json writes). (since 0.4)");
     m.def("read", &readPath, "path"_a,
           "Open a file: .penz, MOL, ChemDraw .cdxml/.cdx, .rxn, a Penzene SVG/PNG, or every record of an "
-          "SDF, .smi or .inchi file laid out as a grid.");
+          "SDF, .smi or .inchi file laid out as a grid. (since 0.4)");
     m.def("drawing_styles", [] {
         std::vector<std::string> out;
         for (const auto& s : drawingStyles()) out.push_back(s.name.toStdString());
         return out;
-    }, "The drawing style names Document.style takes.");
+    }, "The drawing style names Document.style takes. (since 0.4)");
 }

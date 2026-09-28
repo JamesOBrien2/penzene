@@ -34,7 +34,11 @@ From 1.0 the module follows [semantic versioning](https://semver.org):
 
 - **The public API is what `penzene.__all__` lists**: `Document`, `Atom`, `Bond`, `read`,
   `from_smiles`, `from_json`, `drawing_styles` and `__version__`, with their methods and properties.
-  Names that start with an underscore, such as `penzene._penzene`, can change in any release.
+  Their argument names and order and their return types are stable too. Names that start with an
+  underscore, such as `penzene._penzene`, can change in any release, as can `repr()` strings and the
+  exact bytes of SVG and PNG output.
+- **Every public name says when it arrived**: its docstring, and the
+  [API reference](python-api.md), ends with "(since X.Y)".
 - **Minor releases (1.1, 1.2…) only add.** New functions, methods and optional arguments; existing
   calls keep working and return the same kinds of values.
 - **Removing or changing something takes a deprecation first.** It keeps working for at least one
