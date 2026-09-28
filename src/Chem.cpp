@@ -20,6 +20,7 @@
 #include <GraphMol/FileParsers/FileWriters.h>
 #include <GraphMol/MolOps.h>
 #include <GraphMol/atomic_data.h>
+#include <GraphMol/new_canon.h>
 #include <GraphMol/SmilesParse/SmilesParse.h>
 #include <GraphMol/SmilesParse/SmilesWrite.h>
 
@@ -1823,6 +1824,231 @@ Document project3D(const Document& doc, const Pose3D& pose, double aboutX, doubl
         if (k < 0 || (b->getBondDir() != RDKit::Bond::BEGINWEDGE && b->getBondDir() != RDKit::Bond::BEGINDASH)) continue;
         out.bonds[k].a = i, out.bonds[k].b = j;
         out.bonds[k].stereo = b->getBondDir() == RDKit::Bond::BEGINWEDGE ? BondStereo::Wedge : BondStereo::Hash;
+    }
+    return out;
+}
+
+}  // namespace chem
+
+namespace chem {
+
+// HOSE codes (Bremser 1978), following the description of CDK's HOSECodeGenerator (default mode):
+// spheres of neighbours out from the root, each sphere's branches ranked by element, bond and the
+// degree of their children, with & for an atom met before (a ring closure) and "," between branches.
+// cmake/nmr-table.py builds the shift table with this same function, through the Python module.
+namespace {
+struct HoseNode {
+    int atom = -1;    // -1: the empty branch after a terminal atom
+    int parent = -1;  // node index; -1: the root
+    int bond = 0;     // 1-3, 4 aromatic, 0 for an empty branch
+    int degree = 0;
+    long score = 0;
+    int ranking = 0, sortOrder = 1;
+    bool stopper = false;
+};
+
+QString hoseCharge(int charge) {
+    if (!charge) return {};
+    if (std::abs(charge) == 1) return charge < 0 ? "-" : "+";
+    return "'" + QString(charge > 0 ? "+" : "") + QString::number(charge) + "'";
+}
+
+long hoseRank(int z) {  // CDK's element ranks; other elements by their mass
+    switch (z) {
+    case 6: return 9000; case 8: return 8900; case 7: return 8800; case 16: return 8700; case 15: return 8600;
+    case 14: return 8500; case 5: return 8400; case 9: return 8300; case 17: return 8200; case 35: return 8100;
+    case 53: return 7900; case 0: return 800000;
+    }
+    // ponytail: rounded average mass, not the major isotope's mass number (PeriodicTable's inline
+    // lookups aren't exported by the Windows DLL); it only orders rare elements, the same way everywhere.
+    return 800000 - std::lround(RDKit::Atom(z).getMass());
+}
+
+std::string hoseSymbol(int z) {  // the one-letter stand-ins inside the spheres
+    return z == 14 ? "Q" : z == 17 ? "X" : z == 35 ? "Y" : symbol(z);
+}
+
+// One atom's code to `spheres` spheres. `mol` has no H atoms; `ranks` are its canonical ranks.
+std::string hoseCode(const RDKit::ROMol& mol, int root, int spheres, const std::vector<unsigned>& ranks) {
+    static const char* delimiters[] = {"(", "/", "/", ")", "/", "/", "/", "/", "/", "/", "/", "/"};
+    static const char* bondSymbols[] = {"", "", "=", "%", "*"};
+    static const long bondRanks[] = {0, 0, 200000, 300000, 100000};
+    auto neighbours = [&](int a) {
+        std::vector<int> out;
+        for (const auto* n : mol.atomNeighbors(mol.getAtomWithIdx(a))) out.push_back(int(n->getIdx()));
+        return out;
+    };
+    auto bondType = [&](int a, int b) {
+        const auto* bond = mol.getBondBetweenAtoms(a, b);
+        if (bond->getIsAromatic()) return 4;
+        const auto t = bond->getBondType();
+        return t == RDKit::Bond::DOUBLE ? 2 : t == RDKit::Bond::TRIPLE ? 3 : 1;
+    };
+    std::vector<HoseNode> nodes;
+    auto atomOf = [&](int parent) { return parent < 0 ? root : nodes[parent].atom; };
+    auto byRank = [&](std::vector<int>& sphere) {  // the canonical order, which ties keep
+        std::stable_sort(sphere.begin(), sphere.end(), [&](int x, int y) {
+            const long rx = nodes[x].atom < 0 ? -1 : long(ranks[nodes[x].atom]);
+            const long ry = nodes[y].atom < 0 ? -1 : long(ranks[nodes[y].atom]);
+            return rx < ry;
+        });
+    };
+    auto add = [&](int atom, int parent, int bond) {
+        nodes.push_back({atom, parent, bond, atom < 0 ? 0 : int(mol.getAtomWithIdx(atom)->getDegree())});
+        return int(nodes.size()) - 1;
+    };
+    // Breadth first, one sphere past the last written (its degrees rank the last one).
+    std::vector<std::vector<int>> sphere(spheres + 1);
+    for (int n : neighbours(root)) sphere[0].push_back(add(n, -1, bondType(root, n)));
+    byRank(sphere[0]);
+    for (int s = 1; s <= spheres; ++s) {
+        for (int k : sphere[s - 1]) {
+            const int atom = nodes[k].atom;
+            if (atom < 0) continue;
+            const auto next = neighbours(atom);
+            if (next.size() == 1) {
+                sphere[s].push_back(add(-1, k, 0));
+                continue;
+            }
+            for (int n : next)
+                if (n != atomOf(nodes[k].parent)) sphere[s].push_back(add(n, k, bondType(atom, n)));
+        }
+        byRank(sphere[s]);
+    }
+    for (int s = spheres; s >= 1; --s)
+        for (int k : sphere[s]) nodes[nodes[k].parent].ranking += nodes[k].degree;
+    std::vector<bool> visited(mol.getNumAtoms());
+    auto parentOrder = [&](int k) { return nodes[k].parent < 0 ? 1 : nodes[nodes[k].parent].sortOrder; };
+    for (int s = 0; s < spheres; ++s) {
+        for (int k : sphere[s]) {
+            HoseNode& n = nodes[k];
+            n.score += n.atom >= 0 && visited[n.atom] ? 1100 : n.atom >= 0 ? hoseRank(mol.getAtomWithIdx(n.atom)->getAtomicNum()) : 1000;
+            n.score += bondRanks[n.bond] + n.ranking;
+        }
+        for (int k : sphere[s])
+            if (nodes[k].atom >= 0) visited[nodes[k].atom] = true;
+        std::stable_sort(sphere[s].begin(), sphere[s].end(), [&](int x, int y) {
+            if (parentOrder(x) != parentOrder(y)) return parentOrder(x) > parentOrder(y);
+            return nodes[x].score > nodes[y].score;
+        });
+        for (size_t i = 0; i < sphere[s].size(); ++i) nodes[sphere[s][i]].sortOrder = int(sphere[s].size() - i);
+    }
+    const auto* r = mol.getAtomWithIdx(root);
+    QString code = QString::fromStdString(symbol(r->getAtomicNum())) + "-" +
+                   QString::number(r->getDegree() + r->getTotalNumHs()) + hoseCharge(r->getFormalCharge()) + ";";
+    std::fill(visited.begin(), visited.end(), false);
+    for (int s = 0; s < spheres; ++s) {
+        if (!sphere[s].empty()) {
+            int branch = atomOf(nodes[sphere[s][0]].parent);
+            for (int k : sphere[s]) {
+                HoseNode& n = nodes[k];
+                const bool parentStops = n.parent >= 0 && nodes[n.parent].stopper;
+                if (!parentStops) {
+                    if (atomOf(n.parent) != branch) branch = atomOf(n.parent), code += ',';
+                    code += bondSymbols[n.bond];
+                    if (n.atom >= 0) {
+                        const auto* a = mol.getAtomWithIdx(n.atom);
+                        if (visited[n.atom]) code += '&', n.stopper = true;
+                        else code += QString::fromStdString(hoseSymbol(a->getAtomicNum()));
+                        code += hoseCharge(a->getFormalCharge());
+                    }
+                }
+                if (n.atom >= 0) visited[n.atom] = true;
+                if (parentStops) n.stopper = true;
+            }
+        }
+        code += delimiters[s];
+    }
+    for (int s = spheres; s < 4; ++s) code += delimiters[s];
+    return code.toStdString();
+}
+
+// Every atom's codes, on a copy without H atoms (explicit or not, the same codes).
+std::vector<std::vector<std::string>> hoseCodesOf(const RWMol& in, int maxSpheres) {
+    std::vector<std::vector<std::string>> out(in.getNumAtoms());
+    RWMol mol(in);
+    for (auto* a : mol.atoms()) a->setProp("penzeneIndex", int(a->getIdx()));
+    try {
+        RDKit::MolOps::removeAllHs(mol, false);
+        mol.updatePropertyCache(false);
+        std::vector<unsigned> ranks;
+        RDKit::Canon::rankMolAtoms(mol, ranks, true, false, false, false, false, false);
+        for (const auto* a : mol.atoms()) {
+            auto& codes = out[a->getProp<int>("penzeneIndex")];
+            for (int s = 1; s <= maxSpheres; ++s) codes.push_back(hoseCode(mol, int(a->getIdx()), s, ranks));
+        }
+    } catch (...) {
+        return {};
+    }
+    return out;
+}
+
+// The table: sorted "<spheres> <code>\t13C\tcount\t1H\tcount" lines, found by binary search.
+struct ShiftTable {
+    QByteArray text;
+    std::vector<std::string_view> lines;
+    ShiftTable() {
+        QFile f(":/nmr/hose.tsv");
+        if (!f.open(QIODevice::ReadOnly)) return;
+        text = f.readAll();
+        std::string_view all(text.constData(), size_t(text.size()));
+        for (size_t at = 0; at < all.size();) {
+            const size_t end = std::min(all.find('\n', at), all.size());
+            if (end > at && all[at] != '#') lines.push_back(all.substr(at, end - at));
+            at = end + 1;
+        }
+    }
+    // The 13C (column 0) or 1H (column 1) shift for a code, if the table has one.
+    std::optional<double> find(const std::string& key, int column) const {
+        auto keyOf = [](std::string_view line) { return line.substr(0, line.find('\t')); };
+        auto it = std::lower_bound(lines.begin(), lines.end(), key,
+                                   [&](std::string_view line, const std::string& k) { return keyOf(line) < k; });
+        if (it == lines.end() || keyOf(*it) != key) return std::nullopt;
+        const auto fields = QByteArray(it->data(), qsizetype(it->size())).split('\t');
+        bool ok = false;
+        const double v = fields.value(1 + 2 * column).toDouble(&ok);
+        return ok ? std::optional(v) : std::nullopt;
+    }
+};
+}  // namespace
+
+std::vector<std::vector<std::string>> hoseCodes(const std::string& molBlock, int maxSpheres) {
+    try {
+        std::unique_ptr<RWMol> mol(RDKit::MolBlockToMol(molBlock, true, false));
+        return mol ? hoseCodesOf(*mol, maxSpheres) : std::vector<std::vector<std::string>>{};
+    } catch (...) {
+        return {};
+    }
+}
+
+std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSpheres) {
+    auto mol = toRDKit(doc);
+    if (doc.atoms.empty() || !perceive(*mol)) return {};  // half-perceived: codes the table can't match
+    auto codes = hoseCodesOf(*mol, maxSpheres);
+    codes.resize(std::min(codes.size(), doc.atoms.size()));  // not expanded abbreviations' atoms
+    return codes;
+}
+
+std::vector<Shift> predictShifts(const Document& doc) {
+    static const ShiftTable table;
+    std::vector<Shift> out;
+    const auto codes = hoseCodes(doc, 4);
+    const auto info = atomInfo(doc);
+    std::vector<int> hydrogens(codes.size());
+    for (size_t i = 0; i < codes.size(); ++i) hydrogens[i] = info[i].hydrogens;
+    for (const Bond& b : doc.bonds)  // drawn H atoms too
+        for (auto [h, to] : {std::pair{b.a, b.b}, std::pair{b.b, b.a}})
+            if (doc.atoms[h].z == 1 && size_t(to) < codes.size()) ++hydrogens[to];
+    for (size_t i = 0; i < codes.size(); ++i) {
+        Shift s{int(i)};
+        auto look = [&](int column, double& value, int& spheres) {
+            for (int n = int(codes[i].size()); n >= 1 && !spheres; --n)
+                if (auto v = table.find(std::to_string(n) + " " + codes[i][n - 1], column)) value = *v, spheres = n;
+        };
+        if (codes[i].empty()) continue;
+        if (doc.atoms[i].z == 6) look(0, s.carbon, s.carbonSpheres);
+        if (hydrogens[i] && doc.atoms[i].z != 1) look(1, s.proton, s.protonSpheres);
+        if (s.carbonSpheres || s.protonSpheres) out.push_back(s);
     }
     return out;
 }

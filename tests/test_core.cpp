@@ -1428,3 +1428,58 @@ TEST_CASE("a lone abbreviation comes back from ChemDraw as a labelled atom (#384
         CHECK(chem::properties(*back)->formula == chem::properties(d)->formula);
     }
 }
+
+TEST_CASE("HOSE codes match CDK's reference codes (#403)") {
+    auto codesOf = [](const char* smiles) {
+        std::vector<std::string> out;
+        for (const auto& c : chem::hoseCodes(*chem::fromSmiles(smiles), 4)) out.push_back(c.empty() ? "" : c.back());
+        return out;
+    };
+    // CDK's HOSECodeGeneratorTest, 4 spheres: a chain (Br drawn as Y), and indole's rings (& closes one).
+    CHECK(codesOf("CC=CBr") == std::vector<std::string>{"C-4;C(=C/Y/)", "C-3;=CC(Y,//)", "C-3;=CY(C,//)", "Br-1;C(=C/C/)"});
+    CHECK(codesOf("C1(C=CN2)=C2C=CC=C1") ==
+          std::vector<std::string>{"C-3;*C*C*C(*C*N,*C,*C/*C,*&,*&,*&/*&)", "C-3;*C*C(*C*C,*N/*C*&,*C,*&/*C,*&)",
+                                   "C-3;*C*N(*C,*C/*C*&,*C*&/*C,*C)", "N-3;*C*C(*C*C,*C/*C*&,*C,*&/*C,*&)",
+                                   "C-3;*C*C*N(*C*C,*C,*C/*C,*&,*&,*&/*&)", "C-3;*C*C(*C*N,*C/*C*C,*C,*&/*&,*&,*&)",
+                                   "C-3;*C*C(*C,*C/*C*N,*&/*C*&,*C)", "C-3;*C*C(*C,*C/*C*C,*&/*N*&,*C)",
+                                   "C-3;*C*C(*C*C,*C/*C*N,*C,*&/*&,*&,*&)"});
+    CHECK(codesOf("CCO")[0] == "C-4;C(O//)");
+    CHECK(chem::hoseCodes(*chem::fromSmiles("CCO"), 1)[0][0] == "C-4;C(//)");
+}
+
+TEST_CASE("HOSE codes are the same from a drawing and from its MOL block, H drawn or not (#403)") {
+    for (const char* smiles : {"c1ccccc1O", "C[N+](C)(C)CC(=O)[O-]", "CC(=O)Oc1ccccc1C(=O)O", "[H]OC([H])([H])C", "c1cc[nH]c1", "c1ccc2[nH]ccc2c1"}) {
+        auto doc = chem::fromSmiles(smiles);
+        REQUIRE(doc);
+        const auto drawn = chem::hoseCodes(*doc);
+        CHECK(drawn == chem::hoseCodes(chem::toMolBlock(*doc)));
+        const auto withH = chem::hoseCodes(chem::addHydrogens(*doc));
+        REQUIRE(withH.size() >= drawn.size());
+        for (size_t i = 0; i < drawn.size(); ++i)
+            if (doc->atoms[i].z != 1) CHECK(withH[i] == drawn[i]);
+    }
+    Document boc = *chem::fromSmiles("CN");  // an abbreviation: codes for the drawn atoms, of the expanded structure
+    boc.atoms[1].label = "NHBoc";
+    const auto codes = chem::hoseCodes(boc);
+    REQUIRE(codes.size() == 2);
+    CHECK(codes[0][0] == "C-4;N(//)");
+    CHECK(codes[0][1].starts_with("C-4;N(C/"));
+}
+
+TEST_CASE("predicted 13C and 1H shifts: benzene, ethanol (#403)") {
+    auto benzene = chem::predictShifts(*chem::fromSmiles("c1ccccc1"));
+    REQUIRE(benzene.size() == 6);
+    for (const auto& s : benzene) {
+        CHECK(s.carbon == Catch::Approx(128.5).margin(2));
+        CHECK(s.carbonSpheres == 4);
+        CHECK(s.proton == Catch::Approx(7.3).margin(0.3));
+    }
+    auto ethanol = chem::predictShifts(*chem::fromSmiles("CCO"));
+    REQUIRE(ethanol.size() == 3);
+    CHECK(ethanol[0].carbon == Catch::Approx(18).margin(3));  // CH3
+    CHECK(ethanol[1].carbon == Catch::Approx(58).margin(3));  // CH2
+    CHECK(ethanol[0].proton == Catch::Approx(1.2).margin(0.3));
+    CHECK(ethanol[1].proton == Catch::Approx(3.7).margin(0.3));
+    CHECK(ethanol[2].carbonSpheres == 0);  // O: 1H only
+    CHECK(ethanol[2].protonSpheres > 0);
+}
