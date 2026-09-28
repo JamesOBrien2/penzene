@@ -13,3 +13,6 @@ normally supplies, e.g. `c_stdlib` on macOS):
 ```sh
 pixi exec rattler-build build -r packaging/conda-forge/recipe.yaml -c conda-forge -m variants.yaml
 ```
+
+Code signing for the macOS and Windows release packages, the secrets it needs and the
+Windows alternatives (Azure Trusted Signing, SignPath): [SIGNING.md](SIGNING.md).

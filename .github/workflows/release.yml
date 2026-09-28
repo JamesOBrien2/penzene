@@ -19,7 +19,15 @@ jobs:
           - {runner: macos-15-intel, arch: x86_64}   # Intel
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150   # 45 once RDKit comes from the cache
-    env: {RDKit_ROOT: '${{ github.workspace }}/rdkit-prefix'}
+    env:
+      RDKit_ROOT: '${{ github.workspace }}/rdkit-prefix'
+      # Signing and notarizing run only once these secrets exist (packaging/SIGNING.md);
+      # without them the app stays ad-hoc signed, as before.
+      MACOS_CERTIFICATE: '${{ secrets.MACOS_CERTIFICATE }}'
+      MACOS_CERTIFICATE_PASSWORD: '${{ secrets.MACOS_CERTIFICATE_PASSWORD }}'
+      NOTARY_KEY: '${{ secrets.NOTARY_KEY }}'
+      NOTARY_KEY_ID: '${{ secrets.NOTARY_KEY_ID }}'
+      NOTARY_ISSUER_ID: '${{ secrets.NOTARY_ISSUER_ID }}'
     steps:
       - uses: actions/checkout@v5
       - uses: prefix-dev/setup-pixi@v0.10.0
@@ -40,6 +48,28 @@ jobs:
           test -d dist/penzene.app/Contents/PlugIns/tls   # HTTPS for the PubChem lookups
           bash cmake/check-no-chemdraw.sh dist/penzene.app
           codesign --force --deep --sign - dist/penzene.app
+      - name: Sign (Developer ID)
+        if: env.MACOS_CERTIFICATE != ''
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          pass=$(uuidgen)
+          security create-keychain -p "$pass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$pass" "$keychain"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$pass" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity=$(security find-identity -v -p codesigning "$keychain" | grep -m1 'Developer ID Application' | awk '{print $2}')
+          [ -n "$identity" ] || { echo "no Developer ID Application identity in MACOS_CERTIFICATE"; exit 1; }
+          echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          # Hardened runtime, which notarization requires. No entitlements: nothing here JITs,
+          # and every bundled library is signed with the same identity.
+          codesign --force --deep --options runtime --timestamp --sign "$identity" dist/penzene.app
+          codesign --verify --deep --strict --verbose=2 dist/penzene.app
+      - name: Smoke test and dmg
+        run: |
           mv .pixi .pixi-hidden   # prove the bundle doesn't need the build env
           dist/penzene.app/Contents/MacOS/penzene --version
           dist/penzene.app/Contents/MacOS/penzene --render 'c1ccccc1O' smoke.svg
@@ -50,13 +80,36 @@ jobs:
             [ $i = 5 ] && exit 1
             sleep $((i * 10))
           done
+      - name: Sign and notarize the dmg
+        if: env.MACOS_CERTIFICATE != '' && env.NOTARY_KEY != ''
+        run: |
+          dmg=penzene-macos-${{ matrix.arch }}.dmg
+          codesign --force --timestamp --sign "$SIGN_IDENTITY" "$dmg"
+          echo "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          auth=(--key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID")
+          xcrun notarytool submit "$dmg" "${auth[@]}" --wait --timeout 1h --output-format json | tee notary.json || true
+          id=$(jq -r .id notary.json)
+          if [ "$(jq -r .status notary.json)" != Accepted ]; then
+            xcrun notarytool log "$id" "${auth[@]}"
+            exit 1
+          fi
+          xcrun stapler staple "$dmg"
+          xcrun stapler validate "$dmg"
+          spctl -a -vv -t open --context context:primary-signature "$dmg"
+      - name: Remove the signing keychain
+        if: always() && env.MACOS_CERTIFICATE != ''
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
       - uses: actions/upload-artifact@v4
         with: {name: 'macos-${{ matrix.arch }}', path: 'penzene-macos-${{ matrix.arch }}.dmg'}
 
   windows:
     runs-on: windows-2022
     timeout-minutes: 150   # 45 once RDKit comes from the cache
-    env: {RDKit_ROOT: '${{ github.workspace }}/rdkit-prefix'}
+    env:
+      RDKit_ROOT: '${{ github.workspace }}/rdkit-prefix'
+      # Signing runs only once these secrets exist (packaging/SIGNING.md).
+      WINDOWS_CERTIFICATE: '${{ secrets.WINDOWS_CERTIFICATE }}'
+      WINDOWS_CERTIFICATE_PASSWORD: '${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}'
     steps:
       - uses: actions/checkout@v5
       - uses: prefix-dev/setup-pixi@v0.10.0
@@ -82,6 +135,21 @@ jobs:
           if (!(Test-Path dist/penzene/tls)) { throw "windeployqt did not bundle a TLS backend" }
           pixi run pwsh -NoProfile -File cmake/deploy-deps.ps1 -Dest "$PWD/dist/penzene" -Search "$PWD/rdkit-prefix/lib;$PWD/.pixi/envs/default/Library/bin"
           if (Get-ChildItem dist/penzene -Recurse -Filter "*chemdraw*") { throw "RDKit's ChemDraw library is in the package (#233)" }
+      - name: Sign penzene.exe
+        if: env.WINDOWS_CERTIFICATE != ''
+        shell: pwsh
+        run: |
+          $signtool = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1).FullName
+          $pfx = "$env:RUNNER_TEMP\cert.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          & $signtool sign /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 dist/penzene/penzene.exe
+          if ($LASTEXITCODE) { throw "signtool sign failed" }
+          Remove-Item $pfx
+          & $signtool verify /pa dist/penzene/penzene.exe
+          if ($LASTEXITCODE) { throw "signtool verify failed" }
+      - name: Smoke test and zip
+        shell: pwsh
+        run: |
           Rename-Item .pixi .pixi-hidden
           dist/penzene/penzene.exe --version
           $p = Start-Process dist/penzene/penzene.exe -ArgumentList "--render","c1ccccc1O","smoke.svg" -NoNewWindow -PassThru
@@ -97,6 +165,21 @@ jobs:
           & "${env:ProgramFiles(x86)}\Inno Setup 6\iscc.exe" /Q "/DVersion=$version" "/DSource=$PWD\dist\penzene" cmake/penzene.iss
           if ($LASTEXITCODE) { throw "iscc failed" }
           Move-Item cmake/penzene-windows-x64-setup.exe .
+      - name: Sign the installer
+        if: env.WINDOWS_CERTIFICATE != ''
+        shell: pwsh
+        run: |
+          $signtool = (Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe" | Sort-Object FullName | Select-Object -Last 1).FullName
+          $pfx = "$env:RUNNER_TEMP\cert.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          & $signtool sign /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 penzene-windows-x64-setup.exe
+          if ($LASTEXITCODE) { throw "signtool sign failed" }
+          Remove-Item $pfx
+          & $signtool verify /pa penzene-windows-x64-setup.exe
+          if ($LASTEXITCODE) { throw "signtool verify failed" }
+      - name: Test the installer
+        shell: pwsh
+        run: |
           # Silent install to a temp dir, then run the installed copy.
           $p = Start-Process ./penzene-windows-x64-setup.exe -ArgumentList "/VERYSILENT","/CURRENTUSER","/DIR=$PWD\installed" -PassThru
           if (!$p.WaitForExit(300000)) { throw "installer hung" }
