@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- The nmrshiftdb2 Database License for the built-in NMR shift table is now in the bundled third-party notices, so About → Third-party licenses shows it.
 - **Predicted NMR shifts**: View → Predicted NMR Shifts writes each carbon's ¹³C shift, and the ¹H shift of atoms with hydrogens, beside the structure, looked up by HOSE code in data from nmrshiftdb2 (about 2.4 ppm ¹³C and 0.27 ppm ¹H mean error). <!-- icon: atom -->
 - Copy pastes into Word and PowerPoint as a picture with a plain ⌘V or Ctrl+V (it no longer carries the SMILES as text; Copy as SMILES does), and the copied PNG keeps the drawing inside it on every platform, so pasting it back into Penzene gives the editable structure (not from Office, which re-renders pictures it copies).
 - A reaction scheme that wraps onto a new row keeps the link between rows: the last product of one row is the next row's reactant when exported.
