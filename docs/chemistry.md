@@ -71,6 +71,13 @@ The View menu draws benzene-like rings with a circle, for the whole drawing or f
 goes into SMILES and MOL.
 ```
 
+```{feature} atom
+:title: Predicted NMR shifts
+**View → Predicted NMR Shifts** writes each carbon's predicted ¹³C shift beside it, and the ¹H shift
+of any atom with hydrogens in brackets, in ppm. A `~` marks a weaker match. See
+[NMR prediction](#nmr-prediction).
+```
+
 ```{feature} world-search
 :title: Names (online)
 **File → Import Name from PubChem** turns a name into a structure, and **Structure → Name from
@@ -88,4 +95,34 @@ SMILES, InChI, InChIKey and reaction SMILES (Edit menu).
 :::{note}
 **What isn't chemistry.** Interaction and partial bonds, lone pairs, δ, brackets, arrows, shapes and
 text are drawn only. Free-text labels are generic atoms (`*` in SMILES).
+:::
+
+## NMR prediction
+
+Shifts are looked up by HOSE code in a table built from [nmrshiftdb2](https://nmrshiftdb.nmr.uni-koeln.de),
+an open database of assigned spectra. A HOSE code describes an atom's surroundings sphere by sphere
+(Bremser's scheme, written as the CDK writes it). Penzene uses up to four spheres. When the table has
+no match at four, it tries three, then two, then one. The shift given is the median of every shift
+recorded for that code. A `~` marks a match of two spheres or fewer.
+
+¹H shifts are averaged over an atom's hydrogens, so diastereotopic CH₂ protons show as one value.
+Solvent and stereochemistry aren't taken into account.
+
+On one compound in ten held out of the table (by InChIKey), the mean absolute errors were:
+
+| Spheres matched | ¹³C (ppm) | ¹H (ppm) | Share of ¹³C shifts |
+|---|---|---|---|
+| 4 | 1.1 | 0.15 | 54% |
+| 3 | 2.5 | 0.31 | 24% |
+| 2 | 4.9 | 0.53 | 19% |
+| 1 | 10.8 | 0.94 | 3% |
+| All | 2.4 | 0.27 | |
+
+:::{note}
+**Data licence.** Contains information from nmrshiftdb2 (www.nmrshiftdb.org), which is made available
+here under the [nmrshiftdb2 Database License](https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/nmrshiftdb2datalicense.txt).
+The table (`resources/nmr/hose.tar.xz`) is a derivative database under that licence, not Penzene's
+GPL-3, and a copy of the licence ships beside it. `cmake/nmr-table.py` rebuilds the table from
+nmrshiftdb2's public export using Penzene's own HOSE codes. Drawings and exports that show predicted
+shifts carry this notice under the structure.
 :::

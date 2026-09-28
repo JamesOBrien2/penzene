@@ -175,6 +175,9 @@ NB_MODULE(_penzene, m) {
     m.def("read", &readPath, "path"_a,
           "Open a file: .penz, MOL, ChemDraw .cdxml/.cdx, .rxn, a Penzene SVG/PNG, or every record of an "
           "SDF, .smi or .inchi file laid out as a grid. (since 0.4)");
+    // Private: cmake/nmr-table.py builds the NMR shift table with the app's own HOSE codes (#403).
+    m.def("_hose_codes", [](const std::string& molblock, int spheres) { return chem::hoseCodes(molblock, spheres); },
+          "molblock"_a, "spheres"_a = 4);
     m.def("drawing_styles", [] {
         std::vector<std::string> out;
         for (const auto& s : drawingStyles()) out.push_back(s.name.toStdString());

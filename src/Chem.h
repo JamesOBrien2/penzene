@@ -134,6 +134,19 @@ Document expanded(const Document& doc);  // abbreviations drawn out in full
 // Fischer crossings and Haworth rings redrawn with the wedges they mean (chemistry uses this).
 Document projectionsAsWedges(const Document& doc);
 
+// NMR (#403). HOSE codes (Bremser, written as CDK writes them), H-suppressed: codes[atom][s - 1] is
+// the atom's code to s spheres, s = 1…maxSpheres; hydrogens get none. Empty if the MOL block can't be read.
+std::vector<std::vector<std::string>> hoseCodes(const std::string& molBlock, int maxSpheres = 4);
+std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSpheres = 4);
+// Predicted 13C (carbons) and 1H (H-bearing atoms) shifts in ppm, looked up by HOSE code in a table built
+// from nmrshiftdb2 (resources/nmr). spheres: how many spheres matched (4 best, 1 worst); 0 = no prediction.
+struct Shift {
+    int atom = -1;
+    double carbon = 0, proton = 0;
+    int carbonSpheres = 0, protonSpheres = 0;
+};
+std::vector<Shift> predictShifts(const Document& doc);  // one per atom with a prediction, in atom order
+
 std::string symbol(int z);
 std::string elementName(int z);  // "Carbon"
 int atomicNumber(const std::string& symbol);  // 0 if unknown

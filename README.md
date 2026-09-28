@@ -86,6 +86,10 @@ UX and tool set inspired by [Ketcher](https://github.com/epam/ketcher) (Apache-2
 Chemistry by RDKit (BSD-3). GUI by Qt (LGPL-3.0).
 ChemDraw file support uses Revvity's [ChemDraw library](third_party/chemdraw) (BSD-3).
 
+Predicted NMR shifts use data from [nmrshiftdb2](https://nmrshiftdb.nmr.uni-koeln.de) under the
+[nmrshiftdb2 Database License](https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/nmrshiftdb2datalicense.txt)
+(the table in `resources/nmr` keeps that licence).
+
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).

@@ -857,6 +857,58 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             drawText(p, s, at - QPointF(fm.horizontalAdvance(s) / 2, -fm.capHeight() / 2), f);
         }
     }
+    if (doc.showShifts) {  // predicted 13C (1H) beside each atom (#403), with the notice nmrshiftdb2's licence asks for
+        const auto shifts = chem::predictShifts(doc);
+        QSet<int> labelled;  // stereocentres with an (R)/(S) drawn: past it
+        if (doc.showStereo)
+            for (const auto& l : chem::stereoLabels(doc)) labelled.insert(l.atom);
+        const QFont f = labelFont(st, 0.55);
+        QFontMetricsF fm(f);
+        p.setPen(QPen(style.ink, lineWidth));
+        auto value = [](double v, int spheres, int decimals) { return (spheres < 3 ? "~" : "") + QString::number(v, 'f', decimals); };
+        // The widest gap between the atom's bonds; at a branch or ring fusion, the gap facing out of the molecule.
+        QPointF middle;
+        for (const Atom& a : doc.atoms) middle += a.pos / double(doc.atoms.size());
+        auto shiftDirection = [&](int i) {
+            const auto nbs = neighbors(doc, bondsAt, i);
+            if (nbs.size() < 3) return doc.awayDirection(i);
+            std::vector<double> ang;
+            for (int nb : nbs) ang.push_back(std::atan2(doc.atoms[nb].pos.y() - doc.atoms[i].pos.y(), doc.atoms[nb].pos.x() - doc.atoms[i].pos.x()));
+            std::sort(ang.begin(), ang.end());
+            const QPointF out = doc.atoms[i].pos - middle;
+            QPointF best = doc.awayDirection(i);
+            double bestScore = -1e9;
+            for (size_t k = 0; k < ang.size(); ++k) {
+                const double next = k + 1 < ang.size() ? ang[k + 1] : ang[0] + 2 * std::numbers::pi, mid = (ang[k] + next) / 2;
+                const QPointF d(std::cos(mid), std::sin(mid));
+                const double score = (next - ang[k]) * kBondLength + QPointF::dotProduct(d, out);  // wide, and outward
+                if (score > bestScore) bestScore = score, best = d;
+            }
+            return best;
+        };
+        for (const auto& s : shifts) {
+            QStringList parts;
+            if (s.carbonSpheres) parts << value(s.carbon, s.carbonSpheres, 1);
+            if (s.protonSpheres) parts << "(" + value(s.proton, s.protonSpheres, 2) + ")";
+            const QString text = parts.join(' ');
+            const double further = (doc.atoms[s.atom].stereoGroup != StereoGroup::None ? 0.7 : 0) + (labelled.contains(s.atom) ? 0.9 : 0) +
+                                   (doc.showAtomNumbers || doc.atoms[s.atom].map ? 0.6 : 0);
+            // The text's near edge clear of the atom: pushed out by half its size along the way out.
+            const QPointF d = shiftDirection(s.atom), w(fm.horizontalAdvance(text) / 2, fm.capHeight() / 2);
+            const QPointF centre = doc.atoms[s.atom].pos + d * ((labeled[s.atom] ? 0.6 : 0.3) + further) * kBondLength + QPointF(d.x() * w.x(), d.y() * w.y());
+            drawText(p, text, centre - QPointF(w.x(), -w.y()), f);
+        }
+        if (!shifts.empty()) {
+            QPointF at(documentBounds(doc).left(), documentBounds(doc).bottom() + 1.2 * fm.height());
+            for (const QString& line : {QObject::tr("Predicted shifts in ppm: 13C (1H); ~ marks a weaker match."),
+                                        QObject::tr("Contains information from nmrshiftdb2 (www.nmrshiftdb.org), which is made available here"),
+                                        QObject::tr("under the nmrshiftdb2 Database License (%1).")
+                                            .arg("https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/nmrshiftdb2datalicense.txt")}) {
+                drawText(p, line, at, f);
+                at.ry() += 1.2 * fm.height();
+            }
+        }
+    }
     p.restore();
 }
 

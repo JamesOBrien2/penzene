@@ -102,6 +102,7 @@ QByteArray Document::toJson() const {
     if (labelRatio > 0) root["labelRatio"] = labelRatio;
     if (showStereo) root["showStereo"] = true;
     if (showAtomNumbers) root["showAtomNumbers"] = true;
+    if (showShifts) root["showShifts"] = true;
     if (aromaticCircles) root["aromaticCircles"] = true;
     if (!page.isEmpty()) root["page"] = QJsonObject{{"name", page}, {"x", pageOrigin.x()}, {"y", pageOrigin.y()}};
     QJsonArray circleOverrides;
@@ -162,6 +163,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
     doc.labelRatio = std::max(0.0, root["labelRatio"].toDouble());
     doc.showStereo = root["showStereo"].toBool();
     doc.showAtomNumbers = root["showAtomNumbers"].toBool();
+    doc.showShifts = root["showShifts"].toBool();
     doc.aromaticCircles = root["aromaticCircles"].toBool();
     const auto page = root["page"].toObject();
     doc.page = page["name"].toString();

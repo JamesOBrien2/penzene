@@ -2094,6 +2094,19 @@ void MainWindow::buildMenus() {
         QSignalBlocker quiet(numbers);
         numbers->setChecked(canvas_->document().showAtomNumbers);
     });
+    auto* shifts = view->addAction(tr("Predicted N&MR Shifts"));
+    shifts->setCheckable(true);
+    shifts->setStatusTip(tr("13C and 1H shifts beside each atom, looked up in nmrshiftdb2 by HOSE code"));
+    connect(shifts, &QAction::toggled, this, [this](bool on) {
+        if (canvas_->document().showShifts == on) return;
+        Document next = canvas_->document();
+        next.showShifts = on;
+        canvas_->commit(next, on ? tr("Show predicted NMR shifts") : tr("Hide predicted NMR shifts"));
+    });
+    connect(canvas_, &Canvas::documentChanged, shifts, [this, shifts] {
+        QSignalBlocker quiet(shifts);
+        shifts->setChecked(canvas_->document().showShifts);
+    });
     auto* circles = view->addAction(tr("&Aromatic Circles"));
     circles->setCheckable(true);
     connect(circles, &QAction::toggled, this, [this](bool on) {

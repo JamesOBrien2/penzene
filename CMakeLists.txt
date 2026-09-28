@@ -68,6 +68,10 @@ else()
     target_compile_options(penzene_chemdraw PRIVATE -w)
 endif()
 
+# The NMR shift table (#403; nmrshiftdb2 data, its own licence in resources/nmr), unpacked for rcc.
+file(ARCHIVE_EXTRACT INPUT ${CMAKE_SOURCE_DIR}/resources/nmr/hose.tar.xz DESTINATION ${CMAKE_BINARY_DIR}/nmr)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS resources/nmr/hose.tar.xz)
+qt_add_resources(penzene_core "nmr" PREFIX "/nmr" BASE ${CMAKE_BINARY_DIR}/nmr FILES ${CMAKE_BINARY_DIR}/nmr/hose.tsv)
 target_link_libraries(penzene_core PUBLIC
     Qt6::Gui Qt6::Svg
     RDKit::SmilesParse RDKit::FileParsers RDKit::Depictor RDKit::GraphMol
