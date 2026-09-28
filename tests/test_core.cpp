@@ -579,6 +579,24 @@ TEST_CASE("reactions: reaction SMILES and RXN, both ways (#101)") {
     CHECK_FALSE(chem::fromRxn("not an rxn"));
 }
 
+TEST_CASE("an RD file opens as one scheme (#387)") {
+    // Ethanol -> acetaldehyde -> acetic acid, written as two Rxnfiles.
+    auto mol = [](const char* s) { return *chem::fromSmiles(s); };
+    const std::vector<chem::Reaction> steps{{{mol("CCO")}, {}, {mol("CC=O")}}, {{mol("CC=O")}, {}, {mol("CC(=O)O")}}};
+    QTemporaryDir dir;
+    const QString path = dir.filePath("scheme.rdf");
+    QFile f(path);
+    REQUIRE(f.open(QIODevice::WriteOnly));
+    f.write(QByteArray::fromStdString(chem::toRdf(steps)));
+    f.close();
+    auto doc = chem::readFile(path);
+    REQUIRE(doc);
+    CHECK(doc->arrows.size() == 2);
+    CHECK(chem::molecules(*doc).size() == 3);  // the aldehyde once, shared by both steps
+    CHECK(chem::toReactionSmiles(chem::reactionsOf(*doc)) == chem::toReactionSmiles(steps));
+    CHECK_FALSE(chem::fromRdf("$RDFILE 1\n"));
+}
+
 TEST_CASE("a multi-step scheme exports every step (#334)") {
     // Ethanol -> acetaldehyde -> acetic acid, in a row.
     Document doc = *chem::fromReactionSmiles("CCO>>CC=O");

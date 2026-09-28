@@ -1146,7 +1146,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Structures (*.penz *.mol *.sdf *.smi *.inchi *.rxn *.cdxml *.cdx);;Penzene figures (*.svg *.png *.pdf);;All files (*)</source>
+        <source>Structures (*.penz *.mol *.sdf *.smi *.inchi *.rxn *.rdf *.cdxml *.cdx);;Penzene figures (*.svg *.png *.pdf);;All files (*)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

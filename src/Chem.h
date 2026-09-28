@@ -56,9 +56,10 @@ std::string toReactionSmiles(const Reaction& r);           // reactants>agents>p
 std::string toReactionSmiles(const std::vector<Reaction>& steps);  // one line per step
 std::string toRxn(const Reaction& r);                      // MDL Rxnfile (V2000)
 std::string toRdf(const std::vector<Reaction>& steps);     // MDL RD file: one Rxnfile per step
-Document layoutReaction(const Reaction& r);
+Document layoutReaction(const std::vector<Reaction>& steps);  // the steps left to right, as one scheme
 std::optional<Document> fromReactionSmiles(const std::string& smiles);
 std::optional<Document> fromRxn(const std::string& text);
+std::optional<Document> fromRdf(const std::string& text);
 // New layout, same atom order; each molecule keeps its centroid. With `only`,
 // just the molecules containing those atoms are touched.
 Document clean2D(const Document& doc, const std::vector<int>& only = {});

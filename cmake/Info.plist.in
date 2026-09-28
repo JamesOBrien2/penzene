@@ -56,6 +56,7 @@
 				<string>sdf</string>
 				<string>smi</string>
 				<string>rxn</string>
+				<string>rdf</string>
 				<string>cdxml</string>
 				<string>cdx</string>
 			</array>
