@@ -2769,3 +2769,16 @@ TEST_CASE("orbital tools are named alike: s orbital, p orbital, lobe, hybrid orb
     names.sort();
     CHECK(names == QStringList{"hybrid orbital", "lobe", "p orbital", "s orbital"});
 }
+
+TEST_CASE("a stereocentre's menu tags it And 1, then offers And 2 (#389)") {
+    Fixture f;
+    auto d = chem::fromSmiles("C[C@H](N)C(=O)O");  // alanine
+    REQUIRE(d);
+    f.canvas.setDocumentSilently(*d);
+    CHECK_FALSE(findAction(f.canvas.contextMenuAt(f.doc().atoms[0].pos), "And 1"));  // not a stereocentre
+    findAction(f.canvas.contextMenuAt(f.doc().atoms[1].pos), "And 1")->trigger();
+    CHECK(stereoGroupTag(f.doc().atoms[1]) == "&1");
+    CHECK(findAction(f.canvas.contextMenuAt(f.doc().atoms[1].pos), "And 2"));
+    findAction(f.canvas.contextMenuAt(f.doc().atoms[1].pos), "None")->trigger();
+    CHECK(f.doc().atoms[1].stereoGroup == StereoGroup::None);
+}

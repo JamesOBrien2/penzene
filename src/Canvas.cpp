@@ -1379,6 +1379,33 @@ QMenu* Canvas::contextMenuAt(QPointF at) {
             if (applyLabel(next, atom, text)) commit(next, tr("Set atom"));
         };
     };
+    // Stereo Group, for the stereocentres (a wedge or hash starts there) or tagged atoms among `atoms`.
+    auto stereoGroups = [this, menu](std::vector<int> atoms) {
+        std::erase_if(atoms, [this](int i) {
+            if (doc_.atoms[i].stereoGroup != StereoGroup::None) return false;
+            for (const Bond& b : doc_.bonds)
+                if (b.a == i && (b.stereo == BondStereo::Wedge || b.stereo == BondStereo::Hash)) return false;
+            return true;
+        });
+        if (atoms.empty()) return;
+        auto* sub = menu->addMenu(tr("Stereo Group"));
+        auto set = [this, atoms](StereoGroup g, int n) {
+            return [this, atoms, g, n] {
+                Document next = doc_;
+                for (int i : atoms) next.atoms[i].stereoGroup = g, next.atoms[i].stereoGroupNumber = n;
+                commit(next, tr("Stereo group"));
+            };
+        };
+        sub->addAction(tr("Absolute"), this, set(StereoGroup::Abs, 0));
+        for (StereoGroup g : {StereoGroup::And, StereoGroup::Or}) {  // each group in use, then the next free number
+            int last = 0;
+            for (const Atom& a : doc_.atoms)
+                if (a.stereoGroup == g) last = std::max(last, a.stereoGroupNumber);
+            for (int n = 1; n <= last + 1; ++n)
+                sub->addAction((g == StereoGroup::And ? tr("And %1") : tr("Or %1")).arg(n), this, set(g, n));
+        }
+        sub->addAction(tr("None"), this, set(StereoGroup::None, 0));
+    };
     const int atom = atomAt(at), bond = atom < 0 ? bondAt(at) : -1;
     const bool onSelection = (atom >= 0 && selectedAtoms_.contains(atom)) ||
                              (bond >= 0 && selectedAtoms_.contains(doc_.bonds[bond].a) &&
@@ -1390,6 +1417,7 @@ QMenu* Canvas::contextMenuAt(QPointF at) {
         menu->addAction(tr("Flip Horizontal"), this, [this] { flipSelection(true); });
         menu->addAction(tr("Flip Vertical"), this, [this] { flipSelection(false); });
         menu->addAction(tr("Rotate 90°"), this, [this] { rotateSelection(90); });
+        stereoGroups({selectedAtoms_.begin(), selectedAtoms_.end()});
         menu->addSeparator();
         menu->addAction(tr("Copy as SMILES"), this, [this] {
             QApplication::clipboard()->setText(QString::fromStdString(chem::toSmiles(selectedSubset())));
@@ -1427,6 +1455,7 @@ QMenu* Canvas::contextMenuAt(QPointF at) {
                 next.atoms[atom].partial = d;
                 commit(next, tr("Partial charge"));
             });
+        stereoGroups({atom});
         menu->addSeparator();
         menu->addAction(tr("Delete Atom"), this, [this, atom] {
             Document next = doc_;

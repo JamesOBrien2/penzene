@@ -1293,3 +1293,32 @@ TEST_CASE("a lone abbreviation comes back from ChemDraw as a labelled atom (#384
         CHECK(chem::properties(*back)->formula == chem::properties(d)->formula);
     }
 }
+
+TEST_CASE("a racemic (&1) centre keeps its stereo group through .penz, MOL V3000 and CDXML (#389)") {
+    auto doc = chem::fromSmiles("C[C@H](N)C(=O)O |&1:1|");  // alanine, racemic, read from CXSMILES
+    REQUIRE(doc);
+    auto tagged = [](const Document& d) {
+        std::vector<Atom> out;
+        for (const Atom& a : d.atoms)
+            if (a.stereoGroup != StereoGroup::None) out.push_back(a);
+        return out;
+    };
+    auto isAnd1 = [&](const std::optional<Document>& d) {
+        REQUIRE(d);
+        const auto t = tagged(*d);
+        REQUIRE(t.size() == 1);
+        CHECK(t[0].stereoGroup == StereoGroup::And);
+        CHECK(t[0].stereoGroupNumber == 1);
+        CHECK(stereoGroupTag(t[0]) == "&1");
+    };
+    isAnd1(doc);
+    isAnd1(Document::fromJson(doc->toJson()));
+    isAnd1(chem::clean2D(*doc));
+    const std::string mol = chem::toMolBlock(*doc, true);
+    CHECK(mol.find("MDLV30/STERAC1") != std::string::npos);
+    isAnd1(chem::fromMolBlock(mol));
+    CHECK(chem::toMolBlock(*doc).find("V3000") == std::string::npos);  // V2000 stays V2000, without the group
+    const QByteArray cdxml = chem::toCdxml(*doc);
+    CHECK(cdxml.contains(R"(EnhancedStereoType="And")"));
+    isAnd1(chem::fromChemDraw(cdxml));
+}

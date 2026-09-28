@@ -18,6 +18,24 @@ static const char* kArrow[] = {"reaction", "equilibrium", "resonance", "retro", 
                                "s-orbital", "p-orbital", "lobe", "hybrid-orbital"};
 static const char* kLook[] = {"outline", "shaded", "gradient"};
 
+QString stereoGroupTag(const Atom& a) {
+    switch (a.stereoGroup) {
+    case StereoGroup::Abs: return "abs";
+    case StereoGroup::And: return "&" + QString::number(a.stereoGroupNumber);
+    case StereoGroup::Or: return "or" + QString::number(a.stereoGroupNumber);
+    default: return {};
+    }
+}
+
+static void setStereoGroupTag(Atom& a, const QString& tag) {  // anything else: none
+    static const QRegularExpression re("^(abs|&|or)([1-9][0-9]{0,3})?$");
+    const auto m = re.match(tag);
+    const bool numbered = m.captured(1) != "abs";
+    if (!m.hasMatch() || numbered == m.captured(2).isEmpty()) return;
+    a.stereoGroup = !numbered ? StereoGroup::Abs : m.captured(1) == "&" ? StereoGroup::And : StereoGroup::Or;
+    a.stereoGroupNumber = m.captured(2).toInt();
+}
+
 QByteArray Document::toJson() const {
     QJsonArray as, bs;
     for (const auto& a : atoms) {
@@ -30,6 +48,7 @@ QByteArray Document::toJson() const {
         if (a.radicals) o["radicals"] = a.radicals;
         if (a.partial) o["partial"] = a.partial;
         if (a.isotope) o["isotope"] = a.isotope;
+        if (a.stereoGroup != StereoGroup::None) o["stereoGroup"] = stereoGroupTag(a);
         as.append(o);
     }
     for (const auto& b : bonds) {
@@ -159,6 +178,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         Atom& a = doc.atoms.back();
         if (a.z < 0 || a.z > 118 || !std::isfinite(a.pos.x()) || !std::isfinite(a.pos.y())) return std::nullopt;
         if (a.isotope < a.z) a.isotope = 0;  // lighter than its protons: no such isotope, as a typed label (#368)
+        setStereoGroupTag(a, o["stereoGroup"].toString());
     }
     const int n = int(doc.atoms.size());
     for (const auto& v : root["bonds"].toArray()) {

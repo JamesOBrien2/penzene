@@ -17,6 +17,9 @@ constexpr double kBondLength = 14.4;
 // double it was, so hydrogens (and the formula) stay those of the reactants.
 enum class BondStereo { None, Wedge, Hash, Bold, Dashed, Wavy, Interaction, Partial };
 enum class BondPosition { Auto, Left, Centre, Right };  // double bond's second line, seen from a to b
+// Enhanced stereo (MDL/ChemDraw): a stereocentre as drawn (abs), or one of a group
+// whose centres are all as drawn or all inverted, as a mixture (&n) or unknown which (orn).
+enum class StereoGroup { None, Abs, And, Or };
 
 struct Atom {
     QPointF pos;
@@ -30,6 +33,8 @@ struct Atom {
     int lonePairs = 0, radicals = 0;
     int partial = 0;  // +1 δ+, −1 δ−
     int isotope = 0;  // mass number (13 for ¹³C, 2 for D); 0 = natural abundance
+    StereoGroup stereoGroup = StereoGroup::None;
+    int stereoGroupNumber = 0;  // n of &n / orn
 };
 
 struct Bond {
@@ -39,6 +44,8 @@ struct Bond {
     BondPosition position = BondPosition::Auto;
     QColor color;
 };
+
+QString stereoGroupTag(const Atom& a);  // as drawn and saved: "abs", "&1", "or2"; "" for none
 
 // The order chemistry sees: 0 for an interaction or a partial single bond.
 inline int chemicalOrder(const Bond& b) {
@@ -151,7 +158,7 @@ std::vector<Sheet> sheetsFromJson(const QByteArray& data);  // empty if it isn't
 inline bool operator==(const Atom& x, const Atom& y) {
     return x.pos == y.pos && x.z == y.z && x.charge == y.charge && x.label == y.label && x.color == y.color &&
            x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial &&
-           x.isotope == y.isotope;
+           x.isotope == y.isotope && x.stereoGroup == y.stereoGroup && x.stereoGroupNumber == y.stereoGroupNumber;
 }
 inline bool operator==(const Bond& x, const Bond& y) {
     return x.a == y.a && x.b == y.b && x.order == y.order && x.stereo == y.stereo &&

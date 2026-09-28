@@ -53,7 +53,8 @@
         "lonePairs": {"type": "integer", "minimum": 0, "maximum": 4},
         "radicals": {"type": "integer", "minimum": 0, "maximum": 2},
         "isotope": {"type": "integer", "minimum": 0, "maximum": 300, "description": "Mass number (13 for carbon-13, 2 for deuterium); 0 or left out for natural abundance."},
-        "partial": {"enum": [-1, 0, 1], "description": "Partial charge mark: δ− or δ+."}
+        "partial": {"enum": [-1, 0, 1], "description": "Partial charge mark: δ− or δ+."},
+        "stereoGroup": {"type": "string", "pattern": "^(abs|&[1-9][0-9]{0,3}|or[1-9][0-9]{0,3})$", "description": "Enhanced stereo group of a stereocentre: abs (as drawn), &n (a mixture of it and its mirror image) or orn (one of the two, unknown which)."}
       }
     },
     "bond": {
