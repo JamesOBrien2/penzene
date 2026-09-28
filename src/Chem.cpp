@@ -236,6 +236,20 @@ static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
                           b.stereo == BondStereo::Wedge ? 1u : b.stereo == BondStereo::Hash ? 6u : 4u);
         }
     }
+    // Stereo groups: all abs centres in one, each &n and orn its own, n kept as the group's id.
+    std::map<std::pair<StereoGroup, int>, std::vector<RDKit::Atom*>> groups;
+    for (size_t i = 0; i < in.atoms.size(); ++i)
+        if (const Atom& a = in.atoms[i]; a.stereoGroup != StereoGroup::None)
+            groups[{a.stereoGroup, a.stereoGroup == StereoGroup::Abs ? 0 : a.stereoGroupNumber}].push_back(mol->getAtomWithIdx(i));
+    std::vector<RDKit::StereoGroup> stereoGroups;
+    for (auto& [key, atoms] : groups) {
+        const auto type = key.first == StereoGroup::Abs  ? RDKit::StereoGroupType::STEREO_ABSOLUTE
+                          : key.first == StereoGroup::And ? RDKit::StereoGroupType::STEREO_AND
+                                                          : RDKit::StereoGroupType::STEREO_OR;
+        stereoGroups.emplace_back(type, atoms, std::vector<RDKit::Bond*>{}, unsigned(key.second));
+        stereoGroups.back().setWriteId(key.second);
+    }
+    mol->setStereoGroups(std::move(stereoGroups));
     conf->set3D(false);
     mol->addConformer(conf, true);
     return mol;
@@ -308,6 +322,18 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
                      : b->getBondDir() == RDKit::Bond::UNKNOWN   ? BondStereo::Wavy
                                                                  : BondStereo::None;
         doc.bonds.push_back(out);
+    }
+    auto groups = mol.getStereoGroups();
+    RDKit::assignStereoGroupIds(groups);  // numbers for groups the source left unnumbered
+    for (const auto& g : groups) {
+        const auto type = g.getGroupType();
+        for (const auto* a : g.getAtoms()) {
+            Atom& out = doc.atoms[a->getIdx()];
+            out.stereoGroup = type == RDKit::StereoGroupType::STEREO_ABSOLUTE ? StereoGroup::Abs
+                              : type == RDKit::StereoGroupType::STEREO_AND    ? StereoGroup::And
+                                                                             : StereoGroup::Or;
+            out.stereoGroupNumber = type == RDKit::StereoGroupType::STEREO_ABSOLUTE ? 0 : int(g.getWriteId());
+        }
     }
     return doc;
 }
@@ -1085,6 +1111,10 @@ QByteArray toCdxml(const Document& doc) {
             if (a.charge) w.writeAttribute("Charge", QString::number(a.charge));
             if (a.radicals) w.writeAttribute("Radical", a.radicals == 1 ? "Doublet" : "Triplet");
             if (a.isotope && a.z > 0) w.writeAttribute("Isotope", QString::number(a.isotope));
+            if (a.stereoGroup != StereoGroup::None) {
+                w.writeAttribute("EnhancedStereoType", QStringList{"", "Absolute", "And", "Or"}[int(a.stereoGroup)]);
+                if (a.stereoGroupNumber) w.writeAttribute("EnhancedStereoGroupNum", QString::number(a.stereoGroupNumber));
+            }
         };
         for (size_t i = 0; i < doc.atoms.size(); ++i) {
             const Atom& a = doc.atoms[i];
@@ -1224,6 +1254,7 @@ std::string toMolBlock(const Document& doc, bool v3000) {
     auto mol = toRDKit(doc);
     perceive(*mol, false);  // the drawn Kekulé bonds, not aromatic type 4, a query-only type (#321)
     RDKit::Chirality::reapplyMolBlockWedging(*mol);  // keep the user's wedges
+    if (!v3000) mol->setStereoGroups({});  // V2000 has no place for them; RDKit would switch to V3000 (and RXN files are V2000)
     return RDKit::MolToMolBlock(*mol, true, -1, false, v3000);
 }
 

@@ -43,6 +43,11 @@ Space select.
   state). Neither counts as a covalent bond, so a drawn transition state keeps its reactants'
   formula.
 - `f` brings a bond to the front: bonds it crosses are drawn with a gap.
+- **Stereo groups** (enhanced stereo): right-click a stereocentre (or a selection) and pick
+  **Stereo Group → Absolute**, **And n** or **Or n**. `&1` marks centres drawn as one of a mixture
+  with their mirror image (racemic), `or1` centres that are one or the other, unknown which; centres
+  sharing a number go together. The tag is drawn beside the centre and kept in MOL V3000 and ChemDraw
+  files, and read from CXSMILES (`C[C@H](N)C(=O)O |&1:1|`).
 
 ## Rings and templates
 

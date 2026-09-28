@@ -204,6 +204,30 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Stereo Group</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Stereo group</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Absolute</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>And %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Or %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Clean</source>
         <translation type="unfinished"></translation>
     </message>

@@ -819,17 +819,29 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         p.setPen(QPen(ink(a.color), lineWidth));
         drawText(p, s, at - QPointF(fm.horizontalAdvance(s) / 2, -fm.capHeight() / 2), f);
     }
+    // Beside a stereocentre, clear of its bonds, and past the atom's number (#325); `further` stacks a second mark.
+    auto besideCentre = [&](int i, double further) {
+        if (doc.showAtomNumbers || doc.atoms[i].map) {
+            const double number = (labeled[i] ? 0.8 : 0.4) * kBondLength;
+            return doc.atoms[i].pos + numberDirection(i) * (number + (0.6 + further) * kBondLength);
+        }
+        return doc.atoms[i].pos + doc.awayDirection(i) * ((0.55 + further) * kBondLength);
+    };
+    for (size_t i = 0; i < doc.atoms.size(); ++i) {  // stereo groups, small and upright as ChemDraw sets them: abs, &1, or1
+        const QString s = stereoGroupTag(doc.atoms[i]);
+        if (s.isEmpty()) continue;
+        const QFont f = labelFont(st, 0.6);
+        QFontMetricsF fm(f);
+        p.setPen(QPen(ink(doc.atoms[i].color), lineWidth));
+        drawText(p, s, besideCentre(int(i), 0) - QPointF(fm.horizontalAdvance(s) / 2, -fm.capHeight() / 2), f);
+    }
     if (doc.showStereo) {  // small italic (R)/(E), clear of the atom's bonds or the double bond's second line
         QFont f = labelFont(st, 0.7);
         f.setItalic(true);
-        const double off = 0.55 * kBondLength;
         for (const auto& l : chem::stereoLabels(doc)) {
             QPointF at;
-            if (l.atom >= 0 && (doc.showAtomNumbers || doc.atoms[l.atom].map)) {  // past the atom's number (#325)
-                const double number = (labeled[l.atom] ? 0.8 : 0.4) * kBondLength;
-                at = doc.atoms[l.atom].pos + numberDirection(l.atom) * (number + 0.6 * kBondLength);
-            } else if (l.atom >= 0) {
-                at = doc.atoms[l.atom].pos + doc.awayDirection(l.atom) * off;
+            if (l.atom >= 0) {
+                at = besideCentre(l.atom, doc.atoms[l.atom].stereoGroup != StereoGroup::None ? 0.7 : 0);
             } else {
                 const Bond& b = doc.bonds[l.bond];
                 const QPointF a = doc.atoms[b.a].pos, e = doc.atoms[b.b].pos, n = perp(unit(e - a));
