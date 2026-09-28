@@ -1086,6 +1086,59 @@ TEST_CASE("Check Structure dialog selects the problem's atoms (#95)") {
     dialog->close();
 }
 
+TEST_CASE("export checks the structure first, when turned on in Preferences (#390)") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    QAction* exportAction = nullptr;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "&Export…") exportAction = a;
+    REQUIRE(exportAction);
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);  // a native dialog can't be answered from here
+    // Exports and says which modal came up first: the warning (cancelled) or the file dialog (dismissed).
+    auto firstDialog = [&] {
+        QString seen;
+        QTimer::singleShot(0, &w, [&] {
+            QWidget* modal = QApplication::activeModalWidget();
+            if (auto* box = qobject_cast<QMessageBox*>(modal)) {
+                seen = box->informativeText();
+                if (auto out = qgetenv("PENZENE_EXPORT_CHECK_SHOT"); !out.isEmpty()) box->grab().save(out);
+                box->button(QMessageBox::Cancel)->click();
+            } else if (auto* files = qobject_cast<QFileDialog*>(modal)) {
+                seen = "file dialog";
+                files->reject();
+            }
+        });
+        exportAction->trigger();
+        return seen;
+    };
+
+    // The preference, off by default, is a checkbox in Preferences.
+    QSettings().remove("checkBeforeExport");
+    QTimer::singleShot(0, &w, [] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        REQUIRE(dialog);
+        auto* check = dialog->findChild<QCheckBox*>("checkBeforeExport");
+        REQUIRE(check);
+        CHECK_FALSE(check->isChecked());
+        check->setChecked(true);
+        if (auto out = qgetenv("PENZENE_PREFS_SHOT"); !out.isEmpty()) dialog->grab().save(out);
+        dialog->accept();
+    });
+    w.showPreferences();
+    CHECK(QSettings().value("checkBeforeExport").toBool());
+
+    canvas->setDocumentSilently(*chem::fromSmiles("CC(O)CC"));  // an unassigned stereocentre
+    CHECK(firstDialog().contains("Stereocentre"));
+    canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));  // aspirin: nothing to report
+    CHECK(firstDialog() == "file dialog");
+    QSettings().setValue("checkBeforeExport", false);
+    canvas->setDocumentSilently(*chem::fromSmiles("CC(O)CC"));
+    CHECK(firstDialog() == "file dialog");
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs, false);
+    QSettings().remove("checkBeforeExport");
+}
+
 TEST_CASE("selected aromatic rings can use circles independently (#98)") {
     App app;
     MainWindow w;

@@ -694,6 +694,14 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Check structures before export and copy</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lists what Check Structure finds (valence errors, stereocentres without a wedge…) first</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Check for a new version once a week (asks GitHub)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -754,7 +762,15 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Check Structure found problems in this drawing:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Export</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Export Anyway</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -799,6 +815,14 @@
     </message>
     <message>
         <source>Could not look up “%1”: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy Anyway</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

@@ -67,6 +67,8 @@ private:
     bool save();
     bool saveAs();
     bool maybeSave();
+    // With the preference on: lists doc's problems (Check Structure's) and asks whether to go on.
+    bool confirmStructure(const Document& doc, const QString& title, const QString& proceed);
     void exportImage();
     void exportDescriptors();
     void importSmiles();

@@ -7,6 +7,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 ## Unreleased
 
 - Structure → Invert Stereochemistry turns every wedge into a hash and every hash into a wedge, giving the enantiomer without redrawing it (the selection's molecules, or the whole drawing).
+- Preferences can check structures before export and copy: unassigned stereocentres and valence errors are listed first, with Export Anyway or Cancel.
 
 ## 1.4.0 (2026-09-28)
 

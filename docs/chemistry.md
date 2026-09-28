@@ -37,7 +37,8 @@ shows CIP (R)/(S) and (E)/(Z).
 ```{feature} checklist
 :title: Check Structure
 The Structure menu lists valence errors, unknown labels, overlapping atoms, stereocentres without a
-wedge, and wedges on atoms that aren't stereocentres. Click one to select it.
+wedge, and wedges on atoms that aren't stereocentres. Click one to select it. Turn on **Check structures
+before export and copy** in Preferences to see the list, with Export Anyway or Cancel, before a figure goes out.
 ```
 
 ```{feature} wand
