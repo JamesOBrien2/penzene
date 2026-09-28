@@ -832,6 +832,11 @@ void MainWindow::showPreferences() {
     marginBox->setValue(int(exportOptions().margin));
     form->addRow(tr("Export and copy scale:"), scaleBox);
     form->addRow(tr("Margin around exports:"), marginBox);
+    auto* checkBefore = new QCheckBox(tr("Check structures before export and copy"));
+    checkBefore->setObjectName("checkBeforeExport");
+    checkBefore->setChecked(QSettings().value("checkBeforeExport", false).toBool());
+    checkBefore->setToolTip(tr("Lists what Check Structure finds (valence errors, stereocentres without a wedge…) first"));
+    form->addRow(QString(), checkBefore);
     auto* updates = new QCheckBox(tr("Check for a new version once a week (asks GitHub)"));
     updates->setObjectName("autoUpdates");
     updates->setChecked(QSettings().value("updates/auto", false).toBool());
@@ -848,6 +853,7 @@ void MainWindow::showPreferences() {
     settings.setValue("exportBackground", backgroundBox->currentIndex() ? "white" : "clear");
     settings.setValue("exportScale", scaleBox->value());
     settings.setValue("exportMargin", marginBox->value());
+    settings.setValue("checkBeforeExport", checkBefore->isChecked());
     settings.setValue("updates/auto", updates->isChecked());
     settings.setValue("language", languageBox->currentData().toString());
     applyTheme(themeBox->currentText());
@@ -1007,7 +1013,21 @@ void MainWindow::print() {
         QMessageBox::warning(this, tr("Print"), tr("Nothing to print."));
 }
 
+bool MainWindow::confirmStructure(const Document& doc, const QString& title, const QString& proceed) {
+    if (!QSettings().value("checkBeforeExport", false).toBool()) return true;
+    QStringList messages;
+    for (const auto& p : chem::checkStructure(doc)) messages << p.message;
+    if (messages.isEmpty()) return true;
+    QMessageBox box(QMessageBox::Warning, title, tr("Check Structure found problems in this drawing:"),
+                    QMessageBox::Cancel, this);
+    box.setInformativeText(messages.join('\n'));
+    box.setDefaultButton(box.addButton(proceed, QMessageBox::AcceptRole));
+    box.exec();
+    return box.buttonRole(box.clickedButton()) == QMessageBox::AcceptRole;
+}
+
 void MainWindow::exportImage() {
+    if (!confirmStructure(canvas_->selectedSubset(), tr("Export"), tr("Export Anyway"))) return;
     QString base = path_.isEmpty() ? QString("structure") : QFileInfo(path_).completeBaseName();
     QString path = QFileDialog::getSaveFileName(this, tr("Export"), base + ".svg",
                                                 tr("SVG (*.svg);;PNG image (*.png);;PDF (*.pdf)"));
@@ -1055,7 +1075,7 @@ void MainWindow::importName() {
 
 void MainWindow::copy() {
     Document doc = canvas_->selectedSubset();
-    if (doc.empty()) return;
+    if (doc.empty() || !confirmStructure(doc, tr("Copy"), tr("Copy Anyway"))) return;
     auto* mime = new QMimeData;
     mime->setImageData(renderImage(doc, exportOptions()));
     mime->setData("image/svg+xml", renderSvg(doc, exportOptions()));
