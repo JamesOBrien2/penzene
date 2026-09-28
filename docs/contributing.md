@@ -74,9 +74,9 @@ same as the app.
 6. Save a drawing with the new version as `tests/data/penz/vX.Y.Z.penz`, so later releases are
    tested against it (see [the .penz format](files.md)).
 7. Merge that, then tag it: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-8. Check the release once the workflows finish:
-   - It has 9 assets: 2 macOS `.dmg`, the Windows `.zip` and installer, the Linux AppImage, and
-     4 wheels.
-   - The new version is on [PyPI](https://pypi.org/project/penzene/).
-   - The documentation built on Read the Docs.
+8. Run `python3 cmake/check-release.py vX.Y.Z` once the workflows finish; it checks:
+   - The release has 9 assets: 2 macOS `.dmg`, the Windows `.zip` and installer, the Linux
+     AppImage, and 4 wheels.
+   - The new version is on [PyPI](https://pypi.org/project/penzene/) with its 4 wheels.
+   - Read the Docs "stable" was built from the tag's commit.
 9. Close the milestone and update the project board.
