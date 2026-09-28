@@ -4,6 +4,10 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
+## Unreleased
+
+- Structure → Invert Stereochemistry turns every wedge into a hash and every hash into a wedge, giving the enantiomer without redrawing it (the selection's molecules, or the whole drawing).
+
 ## 1.4.0 (2026-09-28)
 
 - ChemDraw text opens with a ^ only where it keeps a charge raised: Cu²⁺ comes in as Cu2+, not Cu^2+.

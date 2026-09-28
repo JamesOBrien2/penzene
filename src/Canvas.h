@@ -49,6 +49,7 @@ public:
     void transformSelection(const QTransform& t, const QString& what);
     void duplicateSelection(QPointF dir);
     void flipSelection(bool horizontal);  // mirror image, as ChemDraw's flip
+    void invertStereo();  // wedges become hashes and hashes wedges: the enantiomer, not redrawn
     enum class Align { Left, HCentre, Right, Top, VCentre, Bottom };
     void alignSelection(Align edge);
     void distributeSelection(bool horizontal);

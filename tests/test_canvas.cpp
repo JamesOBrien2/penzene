@@ -753,6 +753,31 @@ TEST_CASE("flip mirrors (enantiomer with wedges kept), align and distribute (#87
     CHECK(std::abs(f.doc().atoms[4].pos.x() - 100) < 1e-9);
 }
 
+TEST_CASE("invert stereochemistry swaps wedges and hashes in place (#374)") {
+    Fixture f;
+    auto d = chem::fromSmiles("C[C@@H](N)C(=O)O.C/C=C/C");  // (R)-alanine and (E)-but-2-ene
+    REQUIRE(d);
+    f.canvas.setDocumentSilently(*d);
+    auto labels = [&] {
+        QStringList out;
+        for (const auto& l : chem::stereoLabels(f.doc())) out << l.text;
+        out.sort();
+        return out;
+    };
+    const QStringList before = labels();
+    REQUIRE(before.join(' ').contains('R'));
+    REQUIRE(before.join(' ').contains('E'));
+    f.canvas.invertStereo();
+    QStringList after = labels();
+    CHECK(after.join(' ').contains('S'));
+    CHECK_FALSE(after.join(' ').contains('R'));
+    CHECK(after.join(' ').contains('E'));  // the double bond is untouched
+    for (size_t i = 0; i < d->atoms.size(); ++i) CHECK(f.doc().atoms[i].pos == d->atoms[i].pos);
+    CHECK(f.undo.count() == 1);
+    f.undo.undo();
+    CHECK(labels() == before);
+}
+
 TEST_CASE("exports come out at the drawing style's own bond length (#92)") {
     App app;
     auto d = chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");

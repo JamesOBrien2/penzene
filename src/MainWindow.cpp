@@ -1805,6 +1805,7 @@ void MainWindow::buildMenus() {
     });
     structure->addAction(tr("Flip &Vertical"), QKeySequence(tr("Ctrl+Shift+V")), this,
                          [this] { canvas_->flipSelection(false); });
+    structure->addAction(tr("&Invert Stereochemistry"), this, [this] { canvas_->invertStereo(); });
     auto* arrange = structure->addMenu(tr("&Align and Distribute"));
     using A = Canvas::Align;
     for (auto [label, edge] : {std::pair{tr("Align &Left"), A::Left}, {tr("Align &Centres"), A::HCentre},
