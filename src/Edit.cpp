@@ -122,35 +122,30 @@ void ringOnBond(Document& doc, int bond, int n, bool aromatic) {
     addRing(doc, verts, aromatic);
 }
 
-// Chair cyclohexane fused onto the bond, built on template edge `edge` (0 or 1,
-// the ChemDraw 9 / 0 keys), mirrored to the side away from the other neighbours.
+// Chair cyclohexane fused onto the bond, on the side away from the other neighbours. The bond is
+// one end of the chair, whose other atoms all lie on one side of it: a long edge has atoms on both
+// sides, so they reached back over a ring already there (#417). `edge` (0 or 1, the ChemDraw 9 / 0
+// keys) picks the mirror image: the chair's pointed end at one atom of the bond or the other.
 void chairOnBond(Document& doc, int bond, int edge) {
-    // Opposite edges parallel; roughly unit bonds.
+    // Opposite edges parallel; roughly unit bonds. The other atoms are all left of 2 -> 3.
     static const QPointF chair[6] = {{0, 0}, {0.95, 0.35}, {1.95, 0.05}, {2.55, 0.75}, {1.6, 0.4}, {0.6, 0.7}};
     const Bond& b = doc.bonds[bond];
-    QPointF pa = doc.atoms[b.a].pos, pb = doc.atoms[b.b].pos, d = pb - pa;
+    QPointF pa = doc.atoms[b.a].pos, pb = doc.atoms[b.b].pos;
     double side = 0;
     for (int end : {b.a, b.b})
         for (int nb : doc.neighbors(end))
-            if (nb != b.a && nb != b.b) side += cross(d, doc.atoms[nb].pos - pa);
-    QPointF t0 = chair[edge], t1 = chair[edge + 1], td = t1 - t0;
-    const double scale = len(d) / len(td);
-    std::vector<QPointF> best;
-    for (int mirror : {1, -1}) {
-        std::vector<QPointF> verts;
-        for (int k = 0; k < 6; ++k) {
-            QPointF r = chair[(edge + k) % 6] - t0;
-            r.setY(r.y() * mirror);
-            QPointF td2(td.x(), td.y() * mirror);
-            double rr = std::atan2(d.y(), d.x()) - std::atan2(td2.y(), td2.x());
-            verts.push_back(pa + QPointF(r.x() * std::cos(rr) - r.y() * std::sin(rr),
-                                         r.x() * std::sin(rr) + r.y() * std::cos(rr)) * scale);
-        }
-        QPointF c;
-        for (QPointF v : verts) c += v / 6;
-        if (best.empty() || (cross(d, c - pa) > 0) != (side > 0)) best = verts;
-    }
-    addRing(doc, best, false);
+            if (nb != b.a && nb != b.b) side += cross(pb - pa, doc.atoms[nb].pos - pa);
+    if (side > 0) std::swap(pa, pb);  // the neighbours on the right, the chair on the left
+    const int step = edge == 0 ? 1 : -1, first = edge == 0 ? 2 : 3;  // 0: mirrored, 3 -> 2
+    auto t = [&](int k) {
+        QPointF p = chair[(first + step * k + 6) % 6];
+        return QPointF(p.x(), p.y() * step);
+    };
+    const QPointF d = pb - pa, td = t(1) - t(0);
+    const double turn = qRadiansToDegrees(std::atan2(d.y(), d.x()) - std::atan2(td.y(), td.x()));
+    std::vector<QPointF> verts;
+    for (int k = 0; k < 6; ++k) verts.push_back(pa + rotated(t(k) - t(0), turn) * (len(d) / len(td)));
+    addRing(doc, verts, false);
 }
 
 // After a bond order change: if an end became an sp centre with two neighbours,
