@@ -14,3 +14,7 @@ records, for every assigned 13C and 1H shift, the HOSE code of its atom at 1 to 
 Penzene computes them. Each line is `<spheres> <code>`, then the median 13C shift and its count,
 then the median 1H shift (the atom's H, averaged per spectrum) and its count. Run the script again
 to rebuild it from a newer export.
+
+This table: nmrshiftdb2withsignals.sd downloaded 2026-09-28, SHA-256
+0e86688360e23c88ccf0eb82a1251315fa57ec6f5b376dc8886f3311793a0afe, 43,502 compounds with 13C or
+1H spectra, 363,296 codes (the same notice and provenance head hose.tsv).

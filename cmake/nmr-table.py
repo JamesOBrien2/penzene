@@ -134,8 +134,10 @@ def main():
     if "--evaluate" in sys.argv:
         evaluate(data)
     fmt = lambda values: (f"{statistics.median(values):.2f}", str(len(values))) if values else ("", "")
-    lines = [f"# nmrshiftdb2 HOSE code shift table; nmrshiftdb2 Database License (LICENSE beside it). "
-             f"Built by cmake/nmr-table.py from {len(data)} compounds."]
+    sha = hashlib.sha256(sd.read_bytes()).hexdigest()
+    lines = ["# Contains information from nmrshiftdb2 (www.nmrshiftdb.org), which is made available here under the "
+             "nmrshiftdb2 Database License (https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/nmrshiftdb2datalicense.txt).",
+             f"# Built by Penzene's cmake/nmr-table.py from {sd.name} (SHA-256 {sha}, {len(data)} compounds with 13C or 1H)."]
     table = build(data)
     lines += ["\t".join((key, *fmt(table[key][0]), *fmt(table[key][1]))) for key in sorted(table)]
     tsv = ("\n".join(lines) + "\n").encode()

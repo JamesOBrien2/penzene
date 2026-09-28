@@ -1448,7 +1448,7 @@ TEST_CASE("HOSE codes match CDK's reference codes (#403)") {
 }
 
 TEST_CASE("HOSE codes are the same from a drawing and from its MOL block, H drawn or not (#403)") {
-    for (const char* smiles : {"c1ccccc1O", "C[N+](C)(C)CC(=O)[O-]", "CC(=O)Oc1ccccc1C(=O)O", "[H]OC([H])([H])C"}) {
+    for (const char* smiles : {"c1ccccc1O", "C[N+](C)(C)CC(=O)[O-]", "CC(=O)Oc1ccccc1C(=O)O", "[H]OC([H])([H])C", "c1cc[nH]c1", "c1ccc2[nH]ccc2c1"}) {
         auto doc = chem::fromSmiles(smiles);
         REQUIRE(doc);
         const auto drawn = chem::hoseCodes(*doc);
