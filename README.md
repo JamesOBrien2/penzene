@@ -73,7 +73,7 @@ Requires [pixi](https://pixi.sh). It fetches Qt, RDKit and the toolchain from co
 pixi run build   # build/bin/penzene
 pixi run test
 pixi run run     # launch the app
-pixi run install-app   # macOS: self-contained app in ~/Applications
+pixi run install-app   # macOS: self-contained app in /Applications
 ```
 
 ## Roadmap

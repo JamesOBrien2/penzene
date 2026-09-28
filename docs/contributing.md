@@ -8,7 +8,7 @@ Requires [pixi](https://pixi.sh), which fetches Qt, RDKit and the toolchain from
 pixi run build         # build/bin/penzene
 pixi run test          # C++ tests, the CLI and the Python package
 pixi run run           # launch the app
-pixi run install-app   # macOS: a self-contained app in ~/Applications
+pixi run install-app   # macOS: a self-contained app in /Applications
 ```
 
 `python docs/generate.py` rebuilds the generated reference pages (keys, Python API); a test fails
