@@ -229,7 +229,8 @@ TEST_CASE("chair hotkey on two bonds of one ring fuses cleanly (#417)") {
             INFO(key.toStdString() << " then bond " << second);
             REQUIRE(doc.atoms.size() == 10);
             clean(doc);
-            for (const Atom& a : doc.atoms) firstChair[k].push_back(a.pos);
+            if (second == 1)
+                for (const Atom& a : doc.atoms) firstChair[k].push_back(a.pos);
             edit::hotkey(doc, {-1, second}, key);
             CHECK(doc.atoms.size() == 14);
             clean(doc);
