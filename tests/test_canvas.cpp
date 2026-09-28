@@ -2732,7 +2732,8 @@ TEST_CASE("About opens bundled third-party license notices (#451)") {
             auto* text = dialog->findChild<QTextBrowser*>();
             REQUIRE(text);
             opened = text->toPlainText().contains("Revvity ChemDraw file library") &&
-                     text->toPlainText().contains("GNU Lesser General Public License");
+                     text->toPlainText().contains("GNU Lesser General Public License") &&
+                     text->toPlainText().contains("nmrshiftdb2 Database License");
             dialog->accept();
         });
         licenses->click();
