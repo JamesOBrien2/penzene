@@ -6,6 +6,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QPainter>
 #include <QSet>
 #include <QPainterPath>
@@ -15,24 +17,32 @@
 #include <limits>
 #include <numbers>
 
-// Presets. Values come from the ChemDraw stationery (.cds) of the same name;
-// wedge width, hash spacing and label gap keep ACS's proportions to ours.
-// Model units per point for a style's native values (bond length / 14.4 undone).
-constexpr double kJdp = kBondLength / 14.17, kRsc = kBondLength / 12.2;
-
+// Presets. Values come from the publisher's ChemDraw stationery (.cds) or written
+// instructions; wedge width, hash spacing and label gap keep ACS's proportions to ours.
 const std::vector<DrawingStyle>& drawingStyles() {
-    // Wedge width and hash spacing keep ACS's proportion to the bold width and
-    // hash setting (4.5/2.0 and 2.2/2.5); label radius is half a glyph plus the margin.
+    // A style from its native values in points (bond length, line, bold, hash, label margin,
+    // font size), scaled to our bond length. Wedge width and hash spacing keep ACS's
+    // proportion to the bold width and hash setting (4.5/2.0 and 2.2/2.5); label radius is half a glyph plus the margin.
+    auto style = [](QString name, double bond, double line, double bold, double hash, double margin, double spacing,
+                    QString font, QFont::Weight weight, double size) {
+        const double k = kBondLength / bond;
+        return DrawingStyle{name,         bond,    line * k, bold * k, 4.5 * bold / 2.0 * k, 2.2 * hash / 2.5 * k,
+                            spacing,      (3.9 * size / 10 + margin) * k, font, weight, size * k};
+    };
+    // Nature, Angewandte and Thieme: as extracted in ReShiki's presets/drawing (sources.json
+    // there names each publisher file and its hash).
     static const std::vector<DrawingStyle> styles{
         {"ACS 1996", 14.4, 0.6, 2.0, 4.5, 2.2, 0.18, 5.5, "Arial", QFont::Normal, 10},
-        // JDPReport.cds: bond 14.17 (0.5 cm), line 0.879, bold 1.814, hash 1.814, margin 1.162,
-        // IBM Plex Sans Light 10 pt.
-        {"JDP", 14.17, 0.879 * kJdp, 1.814 * kJdp, 4.5 * 1.814 / 2.0 * kJdp, 2.2 * 1.814 / 2.5 * kJdp, 0.18,
-         (3.9 + 1.162) * kJdp, "IBM Plex Sans", QFont::Light, 10 * kJdp},
-        // RSC (1 Column).cds (2 Column only differs in page size): bond 12.2, line 0.449, bold 1.602,
-        // hash 1.75, margin 1.25, spacing 20%, Helvetica 7 pt.
-        {"RSC", 12.2, 0.449 * kRsc, 1.602 * kRsc, 4.5 * 1.602 / 2.0 * kRsc, 2.2 * 1.75 / 2.5 * kRsc, 0.20,
-         (3.9 * 0.7 + 1.25) * kRsc, "Helvetica", QFont::Normal, 7 * kRsc},
+        // JDPReport.cds: bond 0.5 cm, IBM Plex Sans Light 10 pt.
+        style("JDP", 14.17, 0.879, 1.814, 1.814, 1.162, 0.18, "IBM Plex Sans", QFont::Light, 10),
+        // RSC (1 Column).cds (2 Column only differs in page size).
+        style("RSC", 12.2, 0.449, 1.602, 1.75, 1.25, 0.20, "Helvetica", QFont::Normal, 7),
+        // nr-chemdraw-stylesheet.cds (nature.com/documents).
+        style("Nature", 10.7988, 0.59526, 1.55905, 1.70078, 1.19054, 0.18, "Helvetica", QFont::Normal, 6),
+        // Angewandte's angew-cds.zip stationery (Wiley).
+        style("Angewandte", 17, 0.75, 2.6016, 2.6016, 2, 0.18, "Arial", QFont::Normal, 12),
+        // Thieme's instructions (Feb 2026), final size: 0.357 cm bonds, 0.02 cm lines.
+        style("SYNLETT / SYNTHESIS", 10.1197, 0.56693, 1.38898, 1.75748, 0.90709, 0.18, "Arial", QFont::Normal, 6),
     };
     return styles;
 }
@@ -486,7 +496,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
     // Electron marks and δ±, each in the widest gap left by the bonds, the H and the charge.
     for (size_t i = 0; i < doc.atoms.size(); ++i) {
         const Atom& a = doc.atoms[i];
-        const int marks = a.lonePairs + a.radicals + (a.partial ? 1 : 0);
+        const int marks = a.lonePairs + a.radicals + (a.partial ? 1 : 0) + !a.stereoGroup.isEmpty();
         if (!marks) continue;
         std::vector<double> taken;
         for (int nb : doc.neighbors(int(i)))
@@ -524,9 +534,16 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             const QFont f = labelFont(st, 0.7);
             const QString s = a.partial > 0 ? "δ+" : "δ−";
             QFontMetricsF fm(f);
-            const QPointF at = a.pos + dirs[k] * (r + 2.5);
+            const QPointF at = a.pos + dirs[k++] * (r + 2.5);
             p.setPen(QPen(ink(a.color), lineWidth));
             drawText(p, s, at - QPointF(fm.horizontalAdvance(s) / 2, -fm.capHeight() / 2), f);
+        }
+        if (!a.stereoGroup.isEmpty()) {  // "&1", "or1" as ChemDraw puts it, beside the centre
+            const QFont f = labelFont(st, 0.7);
+            QFontMetricsF fm(f);
+            const QPointF at = a.pos + dirs[k] * (r + 0.5 * fm.horizontalAdvance(a.stereoGroup));
+            p.setPen(QPen(ink(a.color), lineWidth));
+            drawText(p, a.stereoGroup, at - QPointF(fm.horizontalAdvance(a.stereoGroup) / 2, -fm.capHeight() / 2), f);
         }
     }
     // Brackets: a pair of [ ] or ( ) just outside their atoms, the label at the bottom right.
@@ -708,13 +725,13 @@ bool exportDocument(const Document& doc, const QString& path, const ExportOption
     return false;
 }
 
-const std::vector<Theme>& themes() {
+static std::vector<Theme>& allThemes() {
     auto cat = [](const char* name, bool dark, const char* base, const char* mantle, const char* surface,
                   const char* text, const char* red, const char* blue, const char* green) {
         return Theme{name, dark, QColor(base), QColor(text), QColor(red), QColor(blue), QColor(green),
                      QColor(mantle), QColor(surface), QColor(text)};
     };
-    static const std::vector<Theme> t{
+    static std::vector<Theme> t{
         {"System"},
         {"Light"},
         {"Dark", true, QColor(0x1e, 0x1e, 0x1e), QColor(0xe6, 0xe6, 0xe6), QColor(255, 105, 97),
@@ -726,6 +743,41 @@ const std::vector<Theme>& themes() {
         cat("Catppuccin Mocha", true, "#1e1e2e", "#181825", "#313244", "#cdd6f4", "#f38ba8", "#89b4fa", "#a6e3a1"),
     };
     return t;
+}
+
+static const size_t kBuiltinThemes = allThemes().size();
+
+const std::vector<Theme>& themes() { return allThemes(); }
+
+static const char* kThemeColours[] = {"paper", "ink", "error", "accent", "hotspot", "window", "surface", "text"};
+static QColor Theme::*const kThemeFields[] = {&Theme::paper, &Theme::ink,     &Theme::error,   &Theme::accent,
+                                              &Theme::hotspot, &Theme::window, &Theme::surface, &Theme::text};
+
+QByteArray themeToJson(const Theme& t) {
+    QJsonObject o{{"format", "penzene-theme"}, {"name", t.name}, {"dark", t.dark}};
+    for (size_t k = 0; k < std::size(kThemeColours); ++k)
+        if ((t.*kThemeFields[k]).isValid()) o[kThemeColours[k]] = (t.*kThemeFields[k]).name();
+    return QJsonDocument(o).toJson();
+}
+
+std::optional<Theme> themeFromJson(const QByteArray& json) {
+    const QJsonObject o = QJsonDocument::fromJson(json).object();
+    const QString name = o["name"].toString().trimmed().left(60);
+    if (o["format"].toString() != "penzene-theme" || name.isEmpty()) return std::nullopt;
+    Theme t = theme(o["dark"].toBool() ? "Dark" : "Light");
+    t.name = name, t.dark = o["dark"].toBool();
+    for (size_t k = 0; k < std::size(kThemeColours); ++k)
+        if (const QColor c(o[kThemeColours[k]].toString()); c.isValid()) t.*kThemeFields[k] = c;
+    return t;
+}
+
+bool addTheme(const Theme& t) {
+    auto& all = allThemes();
+    const auto same = std::find_if(all.begin(), all.end(), [&](const Theme& x) { return x.name == t.name; });
+    if (same - all.begin() < std::ptrdiff_t(kBuiltinThemes)) return false;
+    if (same != all.end()) *same = t;
+    else all.push_back(t);
+    return true;
 }
 
 const Theme& theme(const QString& name) {

@@ -222,6 +222,15 @@ static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
     }
     conf->set3D(false);
     mol->addConformer(conf, true);
+    // Enhanced stereo: atoms sharing a tag ("&1", "or2") make one group.
+    std::map<QString, std::vector<RDKit::Atom*>> tagged;
+    for (size_t i = 0; i < doc.atoms.size(); ++i)
+        if (!doc.atoms[i].stereoGroup.isEmpty()) tagged[doc.atoms[i].stereoGroup].push_back(mol->getAtomWithIdx(i));
+    std::vector<RDKit::StereoGroup> groups;
+    for (auto& [tag, atoms] : tagged)
+        groups.emplace_back(tag.startsWith('&') ? RDKit::StereoGroupType::STEREO_AND : RDKit::StereoGroupType::STEREO_OR,
+                            atoms, std::vector<RDKit::Bond*>{}, tag.mid(tag.startsWith('&') ? 1 : 2).toUInt());
+    if (!groups.empty()) mol->setStereoGroups(std::move(groups));
     return mol;
 }
 
@@ -292,6 +301,15 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
                                                                  : BondStereo::None;
         doc.bonds.push_back(out);
     }
+    std::map<RDKit::StereoGroupType, unsigned> used;  // numbers for groups read without one
+    for (const auto& g : mol.getStereoGroups())
+        if (g.getGroupType() != RDKit::StereoGroupType::STEREO_ABSOLUTE) used[g.getGroupType()] = std::max(used[g.getGroupType()], g.getReadId());
+    for (const auto& g : mol.getStereoGroups()) {
+        if (g.getGroupType() == RDKit::StereoGroupType::STEREO_ABSOLUTE) continue;
+        const unsigned n = g.getReadId() ? g.getReadId() : ++used[g.getGroupType()];
+        const QString tag = (g.getGroupType() == RDKit::StereoGroupType::STEREO_AND ? "&" : "or") + QString::number(n);
+        for (const auto* a : g.getAtoms()) doc.atoms[a->getIdx()].stereoGroup = tag;
+    }
     return doc;
 }
 
@@ -346,7 +364,8 @@ struct LabelNode {
 };
 
 // Arrows, free text and label nodes from the CDXML itself; RDKit only reads the
-// molecules. Returns the label nodes and how many bonds each node id has.
+// molecules. Returns the label nodes and how many bonds each node id has; bonds
+// drawn wavy, bold or dashed come back in doc.bonds between atoms at their ends.
 // ponytail: plain lines, brackets, shapes and binary .cdx graphics are skipped.
 static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& doc, QHash<int, int>& bondCount,
                                                std::vector<QPointF>& lonePairs) {
@@ -355,6 +374,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     struct Open { QString tag; int label = -1; };  // label: index into `labels` for label <n>s
     std::vector<Open> stack;
     std::vector<LabelNode> labels;
+    QHash<int, QPointF> nodePos;
     auto point = [&](QStringView s) {
         auto v = s.split(' ');
         return v.size() >= 2 ? QPointF(v[0].toDouble(), v[1].toDouble()) * scale : QPointF();
@@ -388,8 +408,17 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             scale = kBondLength / std::max(1.0, at.value("BondLength").toDouble());
         } else if (tag == "b") {
             ++bondCount[at.value("B").toInt()], ++bondCount[at.value("E").toInt()];
+            static const QHash<QString, BondStereo> styles{
+                {"Wavy", BondStereo::Wavy}, {"Bold", BondStereo::Bold}, {"Dash", BondStereo::Dashed}};
+            const QString display = at.value("Display").toString(), order = at.value("Order").toString();
+            if (styles.contains(display) && !order.contains('.') && order != "hydrogen") {  // not partial or H-bond
+                const QPointF from = nodePos.value(at.value("B").toInt()), to = nodePos.value(at.value("E").toInt());
+                doc.atoms.push_back({from}), doc.atoms.push_back({to});
+                doc.bonds.push_back({int(doc.atoms.size()) - 2, int(doc.atoms.size()) - 1, 1, styles[display]});
+            }
         } else if (tag == "n") {
             const int id = at.value("id").toInt();
+            nodePos[id] = point(at.value("p"));
             for (const Open& o : stack)  // an atom inside a label's fragment
                 if (o.label >= 0) labels[o.label].inner.push_back(point(at.value("p")));
             if (labelTypes.contains(at.value("NodeType").toString())) {
@@ -556,7 +585,17 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         Document graphics;
         QHash<int, int> bondCount;
         std::vector<QPointF> lonePairs;
-        placeLabels(doc, nodeOf, chemDrawGraphics(data, graphics, bondCount, lonePairs), bondCount);
+        const auto labels = chemDrawGraphics(data, graphics, bondCount, lonePairs);
+        auto at = [](QPointF a, QPointF b) { return std::abs(a.x() - b.x()) < 0.6 && std::abs(a.y() - b.y()) < 0.6; };
+        for (const Bond& g : graphics.bonds)  // styles RDKit drops
+            for (Bond& b : doc.bonds) {
+                const QPointF p = doc.atoms[b.a].pos, q = doc.atoms[b.b].pos, x = graphics.atoms[g.a].pos, y = graphics.atoms[g.b].pos;
+                if (b.stereo == BondStereo::Wedge || b.stereo == BondStereo::Hash) continue;
+                if (at(p, y) && at(q, x)) std::swap(b.a, b.b);  // a wavy bond starts at its stereocentre
+                else if (!(at(p, x) && at(q, y))) continue;
+                b.stereo = g.stereo;
+            }
+        placeLabels(doc, nodeOf, labels, bondCount);
         for (QPointF lp : lonePairs) {  // onto the nearest atom
             int best = -1;
             double bestDist = 1.4 * kBondLength;
@@ -807,6 +846,11 @@ QByteArray toCdxml(const Document& in) {
                 w.writeAttribute("Element", QString::number(a.z));
             }
             if (a.charge) w.writeAttribute("Charge", QString::number(a.charge));
+            if (!a.stereoGroup.isEmpty()) {
+                const bool andGroup = a.stereoGroup.startsWith('&');
+                w.writeAttribute("EnhancedStereoType", andGroup ? "And" : "Or");
+                w.writeAttribute("EnhancedStereoGroupNum", a.stereoGroup.mid(andGroup ? 1 : 2));
+            }
             w.writeEndElement();
         }
         static const char* display[] = {nullptr, "WedgeBegin", "WedgedHashBegin", "Bold", "Dash", "Wavy", nullptr, "Dash"};
@@ -1156,6 +1200,9 @@ std::vector<Problem> checkStructure(const Document& doc) {
             if ((b.stereo == BondStereo::Wedge || b.stereo == BondStereo::Hash) && !centres.contains(b.a))
                 out.push_back({QObject::tr("Wedge or hash starts at %1, which is not a stereocentre").arg(name(b.a)),
                                {b.a, b.b}});
+        for (int i = 0; i < n; ++i)
+            if (!doc.atoms[i].stereoGroup.isEmpty() && !centres.contains(i))
+                out.push_back({QObject::tr("Stereo group %1 on %2, which is not a stereocentre").arg(doc.atoms[i].stereoGroup, name(i)), {i}});
     }
     return out;
 }

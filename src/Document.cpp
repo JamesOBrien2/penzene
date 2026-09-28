@@ -25,6 +25,7 @@ QByteArray Document::toJson() const {
         if (a.lonePairs) o["lonePairs"] = a.lonePairs;
         if (a.radicals) o["radicals"] = a.radicals;
         if (a.partial) o["partial"] = a.partial;
+        if (!a.stereoGroup.isEmpty()) o["stereoGroup"] = a.stereoGroup;
         as.append(o);
     }
     for (const auto& b : bonds) {
@@ -118,6 +119,8 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
                              QColor(o["color"].toString()), std::max(0, o["map"].toInt()),
                              std::clamp(o["lonePairs"].toInt(), 0, 4), std::clamp(o["radicals"].toInt(), 0, 2),
                              std::clamp(o["partial"].toInt(), -1, 1)});
+        static const QRegularExpression group("^(&|or)[1-9]\\d{0,2}$");
+        if (const QString g = o["stereoGroup"].toString(); group.match(g).hasMatch()) doc.atoms.back().stereoGroup = g;
     }
     const int n = int(doc.atoms.size());
     for (const auto& v : root["bonds"].toArray()) {

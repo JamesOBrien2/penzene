@@ -35,7 +35,7 @@ int render(const QStringList& args) {
     p.addOption({{"o", "out"}, "Directory for the rendered files.", "dir"});
     p.addOption({"format", "svg, png or pdf (default svg) when writing to --out.", "ext", "svg"});
     // Not --style: QApplication claims that for widget styles.
-    p.addOption({"drawing-style", "ACS 1996 (default), JDP or RSC.", "name"});
+    p.addOption({"drawing-style", "ACS 1996 (default), JDP, RSC, Nature, Angewandte or \"SYNLETT / SYNTHESIS\".", "name"});
     p.addOption({"clean", "Lay out each structure afresh with RDKit."});
     p.addPositionalArgument("inputs", "SMILES, .smi, .sdf, .inchi, .mol, .penz or .cdxml");
     if (!p.parse(args)) {

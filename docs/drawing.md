@@ -2,8 +2,8 @@
 
 ## Tools and the hotspot
 
-The palette on the left holds the tools: select, eraser, bonds (single, double, triple, wedge,
-hash, interaction, partial), chain, rings, atoms, charges, colour, arrows, lines and shapes, and
+The palette on the left holds the tools: select, eraser (click one thing, or drag across
+several), bonds (single, double, triple, wedge, hash, wavy, interaction, partial), chain, rings, atoms, charges, colour, arrows, lines and shapes, and
 text. Hover over a tool to see its key.
 
 Point at an atom or bond and it becomes the **hotspot**, marked in green. It stays put when the mouse
@@ -32,7 +32,13 @@ Space select.
 
 - `1 2 3` set the order; `2` on a double bond moves its second line to the other side, and `l c r`
   place it left, centred or right.
-- `w` / `h` wedge and hash (again to flip); `b` bold, `d` dashed, `y` wavy.
+- `w` / `h` wedge and hash (again to flip); `b` bold, `d` dashed, `y` wavy (stereo
+  mixed or unknown: an epimer mixture or E/Z mixture; also on the toolbar).
+- **Structure → Stereo Group** keeps the wedges but qualifies them, as ChemDraw and MDL V3000 do:
+  **And** (`&1`) means the selected stereocentres as drawn *and* all inverted, a mixture such as a
+  racemate; **Or** (`or1`) means one of the two, not known which (relative stereo). Each use starts a
+  new group; **Absolute** clears it. The tag is drawn beside the centre and kept in `.penz`, MOL
+  (V3000), CDXML and CXSMILES input; plain SMILES drops it.
 - `i` makes a bond an **interaction** (dotted: hydrogen bonds, contacts, coordination), and `p` / `P`
   a **partial** bond (dashed single or solid + dashed: bonds forming or breaking in a transition
   state). Neither counts as a covalent bond, so a drawn transition state keeps its reactants'
@@ -44,14 +50,15 @@ Space select.
 Ring tools draw 3- to 8-membered rings and benzene: click empty space, an atom (spiro or attached),
 or a bond (fused). On a bond, `a z v 4–8 9 0` fuse rings, `9` and `0` chair cyclohexanes.
 
-**View → Templates** opens the template library: amino acids, sugars, nucleobases, common scaffolds,
-and Haworth, Fischer and Newman projections. Haworth and Fischer drawings give the right stereo
+**View → Templates** opens the template library: amino acids, sugars, nucleobases, rings and
+heterocycles, macrocycles, ligands (bipy, BINAP, salen…), common reagents (DMAP, DBU, NBS, DMP…) and Haworth, Fischer and Newman projections. Haworth and Fischer drawings give the right stereo
 when converted to SMILES. **Structure → Save Selection as Template** adds your own.
 
 ## Selecting and arranging
 
 - Drag to select; double-click selects a whole molecule. Drag a selection to move it, and drop an
-  atom on another to merge them.
+  atom on another to merge them. Hold Cmd (Ctrl on Windows and Linux) while dragging an end atom or
+  a substituent and it swings on its bond instead, keeping the bond's length, in 15° steps.
 - The arrow keys nudge a selection (Shift for 10 points). Ctrl+arrow duplicates it across the next
   reaction arrow.
 - **Rotate:** Alt+drag, or Alt+←/→ in 15° steps. **Out of the page:** Shift+Alt+drag or

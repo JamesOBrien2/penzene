@@ -29,6 +29,9 @@ struct Atom {
     // show; radical electrons are chemistry (one fewer H each).
     int lonePairs = 0, radicals = 0;
     int partial = 0;  // +1 δ+, −1 δ−
+    // Enhanced stereo (MDL V3000, ChemDraw): "&1" a mixture of this centre (with the rest of
+    // group 1) as drawn and inverted, "or1" one of the two, unknown which; empty: absolute.
+    QString stereoGroup;
 };
 
 struct Bond {
@@ -124,7 +127,8 @@ struct Document {
 
 inline bool operator==(const Atom& x, const Atom& y) {
     return x.pos == y.pos && x.z == y.z && x.charge == y.charge && x.label == y.label && x.color == y.color &&
-           x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial;
+           x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial &&
+           x.stereoGroup == y.stereoGroup;
 }
 inline bool operator==(const Bond& x, const Bond& y) {
     return x.a == y.a && x.b == y.b && x.order == y.order && x.stereo == y.stereo &&

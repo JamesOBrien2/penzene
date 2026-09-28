@@ -17,7 +17,7 @@ paths written are printed one per line.
 |---|---|
 | `--out DIR` | write into this folder (otherwise give one input and one output path) |
 | `--format svg\|png\|pdf` | with `--out` (default svg) |
-| `--drawing-style NAME` | `ACS 1996`, `JDP` or `RSC` |
+| `--drawing-style NAME` | `ACS 1996`, `JDP`, `RSC`, `Nature`, `Angewandte` or `SYNLETT / SYNTHESIS` |
 | `--clean` | lay each structure out afresh |
 | `--version`, `--help` | |
 

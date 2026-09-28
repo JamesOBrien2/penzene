@@ -3,13 +3,17 @@
 ## Drawing styles
 
 **Structure → Drawing Style** sets a document's style. Exports
-come out at the style's real size.
+come out at the style's real size. Values come from each publisher's ChemDraw stationery
+or author instructions.
 
 | Style | Bond length | Line | Bold | Double-bond gap | Font |
 |---|---|---|---|---|---|
 | ACS 1996 (default) | 14.4 pt | 0.6 pt | 2.0 pt | 18% | Arial 10 pt |
 | JDP | 14.17 pt (0.5 cm) | 0.879 pt | 1.814 pt | 18% | IBM Plex Sans Light 10 pt |
 | RSC | 12.2 pt | 0.449 pt | 1.602 pt | 20% | Helvetica 7 pt |
+| Nature | 10.8 pt | 0.595 pt | 1.559 pt | 18% | Helvetica 6 pt |
+| Angewandte | 17 pt | 0.75 pt | 2.6 pt | 18% | Arial 12 pt |
+| SYNLETT / SYNTHESIS | 10.12 pt (0.357 cm) | 0.567 pt | 1.389 pt | 18% | Arial 6 pt |
 
 Preferences sets the style for new documents.
 
@@ -24,7 +28,9 @@ Preferences sets the style for new documents.
   journal column) and a margin.
 - **File → Print** prints at the same size as an export, centred on the page.
 - The canvas can follow the system's light or dark mode or use a theme (View → Theme). Exports are
-  always black on clear or white.
+  always black on clear or white. **Export Theme** saves the current one as a small JSON file (paper,
+  ink, accent, hotspot, error and window colours) to edit or share; **Import Theme** adds one to
+  the menu, and it is remembered.
 
 ## Page mode
 

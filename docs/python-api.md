@@ -75,7 +75,7 @@ Write .penz (full fidelity) or MOL for any other extension.
 
 ### `Document.style`
 
-Drawing style: 'ACS 1996' (default), 'JDP' or 'RSC'
+Drawing style: 'ACS 1996' (default), 'JDP', 'RSC', 'Nature', 'Angewandte' or 'SYNLETT / SYNTHESIS'
 
 ### `to_inchi(self) -> str`
 

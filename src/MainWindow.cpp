@@ -57,6 +57,7 @@
 #include <QRegularExpression>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QBuffer>
 #include <QMimeData>
 #include <QStatusBar>
 #include <QToolBar>
@@ -67,7 +68,7 @@ static const char* kPenzMime = "application/x-penzene";  // full fidelity: arrow
 
 MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_, this)) {
 #ifdef Q_OS_MACOS
-    static ChemDrawPasteboard chemDraw;  // registers itself with Qt, once
+    static RawPasteboard raw;  // registers itself with Qt, once
 #endif
     setCentralWidget(canvas_);
     setWindowTitle("Penzene " PENZENE_BUILD);
@@ -564,10 +565,20 @@ void MainWindow::copy() {
     Document doc = canvas_->selectedSubset();
     if (doc.empty()) return;
     auto* mime = new QMimeData;
-    mime->setImageData(renderImage(doc, exportOptions()));
+    const QImage image = renderImage(doc, exportOptions());
+#ifdef Q_OS_MACOS
+    QByteArray png;  // as the PNG file, whose text chunk holds the drawing (Qt's own image conversion drops it)
+    QBuffer buffer(&png);
+    buffer.open(QIODevice::WriteOnly);
+    image.save(&buffer, "PNG");
+    mime->setData("image/png", png);
+#else
+    // ponytail: Windows/Linux get Qt's image conversion, which drops the embedded drawing; untested there.
+    mime->setImageData(image);
+#endif
     mime->setData("image/svg+xml", renderSvg(doc, exportOptions()));
     mime->setData(kPenzMime, doc.toJson());
-    // For pasting into ChemDraw (macOS maps this to its pasteboard type through ChemDrawPasteboard).
+    // For pasting into ChemDraw (macOS maps this to its pasteboard type through RawPasteboard).
     if (const QByteArray cdx = doc.atoms.empty() ? QByteArray() : chem::toCdx(doc); !cdx.isEmpty())
         mime->setData("chemical/x-cdx", cdx);
     if (!doc.atoms.empty()) {
@@ -580,25 +591,31 @@ void MainWindow::copy() {
 
 #ifdef Q_OS_MACOS
 // Qt only shows pasteboard types it has a converter for: ChemDraw's copies
-// carry binary CDX under this UTI.
-ChemDrawPasteboard::ChemDrawPasteboard() = default;
-QString ChemDrawPasteboard::mimeForUti(const QString& uti) const {
-    return uti == "com.perkinelmer.chemdraw.cdx-clipboard" ? "chemical/x-cdx" : QString();
+// carry binary CDX under its own UTI.
+static const std::pair<const char*, const char*> kRawTypes[] = {
+    {"chemical/x-cdx", "com.perkinelmer.chemdraw.cdx-clipboard"}, {"image/png", "public.png"}, {"image/svg+xml", "public.svg-image"}};
+RawPasteboard::RawPasteboard() = default;
+QString RawPasteboard::mimeForUti(const QString& uti) const {
+    for (auto [mime, u] : kRawTypes)
+        if (uti == u) return mime;
+    return {};
 }
-QString ChemDrawPasteboard::utiForMime(const QString& mime) const {
-    return mime == "chemical/x-cdx" ? "com.perkinelmer.chemdraw.cdx-clipboard" : QString();
+QString RawPasteboard::utiForMime(const QString& mime) const {
+    for (auto [m, uti] : kRawTypes)
+        if (mime == m) return uti;
+    return {};
 }
-QVariant ChemDrawPasteboard::convertToMime(const QString&, const QList<QByteArray>& data, const QString&) const {
+QVariant RawPasteboard::convertToMime(const QString&, const QList<QByteArray>& data, const QString&) const {
     return data.value(0);
 }
-QList<QByteArray> ChemDrawPasteboard::convertFromMime(const QString&, const QVariant& data, const QString&) const {
+QList<QByteArray> RawPasteboard::convertFromMime(const QString&, const QVariant& data, const QString&) const {
     return {data.toByteArray()};
 }
 #endif
 
 void MainWindow::paste() {
     const QMimeData* mime = QApplication::clipboard()->mimeData();
-    // ChemDraw: CDX as chemical/x-cdx (macOS, via ChemDrawPasteboard) or its
+    // ChemDraw: CDX as chemical/x-cdx (macOS, via RawPasteboard) or its
     // Windows clipboard format; CDXML where an app offers that.
     for (const QString& type : mime->formats())
         if (type == "chemical/x-cdx" || type == "chemical/x-cdxml" || type.contains("ChemDraw Interchange Format"))
@@ -812,7 +829,7 @@ void MainWindow::buildTools() {
         p.setPen(QPen(ink, 1.2, Qt::DashLine));
         p.drawRect(QRectF(4.5, 5.5, 15, 13));
     });
-    keys[" "] = add(select, tr("Select (drag to move, Alt+drag to rotate, double-click for fragment) — Space"),
+    keys[" "] = add(select, tr("Select (drag to move, Cmd/Ctrl+drag to swing on its bond, Alt+drag to rotate, double-click for fragment) — Space"),
                     tool(T::Select));
     const IconMaker eraser = paintedIcon([](QPainter& p, QColor ink) {
         p.translate(12, 12);
@@ -821,7 +838,7 @@ void MainWindow::buildTools() {
         p.drawRoundedRect(QRectF(-8, -4, 16, 8), 1.5, 1.5);
         p.drawLine(QPointF(-2, -4), QPointF(-2, 4));
     });
-    add(eraser, tr("Eraser (click an atom, bond, arrow or text)"), tool(T::Erase));
+    add(eraser, tr("Eraser: click an atom, bond, arrow or text, or drag across several"), tool(T::Erase));
     section();
     const QPointF bondPts[] = {{0, 0}, {0.87, -0.5}};
     auto bondIcon = [&](int order, BondStereo st = BondStereo::None) {
@@ -836,6 +853,8 @@ void MainWindow::buildTools() {
     auto styled = [this](int order, BondStereo style) {
         return [this, order, style] { canvas_->setTool(T::Bond), canvas_->setBondOrder(order, style); };
     };
+    add(bondIcon(1, BondStereo::Wavy), tr("Wavy bond: stereochemistry mixed or unknown (a mixture of epimers or E/Z) — y on a bond"),
+        styled(1, BondStereo::Wavy));
     add(bondIcon(1, BondStereo::Interaction),
         tr("Interaction bond (H-bond, contact, coordination): dotted, not a covalent bond — i on a bond. "
            "Drag between atoms, also of different molecules"),
@@ -1117,6 +1136,13 @@ void MainWindow::buildMenus() {
                                 if (ok) canvas_->bracketSelection(square, label.trimmed());
                             });
     brackets->addAction(tr("Remove &Brackets"), this, [this] { canvas_->removeBrackets(); });
+    auto* groups = structure->addMenu(tr("Stereo &Group"));
+    groups->setToolTipsVisible(true);
+    groups->addAction(tr("&And (&&1): a mixture of both"), this, [this] { canvas_->stereoGroupSelection("&"); })
+        ->setToolTip(tr("The selected stereocentres as drawn and all inverted, together (e.g. a racemate)"));
+    groups->addAction(tr("&Or (or1): one of the two"), this, [this] { canvas_->stereoGroupSelection("or"); })
+        ->setToolTip(tr("As drawn or all inverted, not known which (relative stereochemistry)"));
+    groups->addAction(tr("A&bsolute (as drawn)"), this, [this] { canvas_->stereoGroupSelection(""); });
     structure->addAction(tr("Save Selection as T&emplate…"), this, &MainWindow::saveTemplate);
     structure->addAction(tr("&Transform…"), this, [this] {
         QDialog dialog(this);
@@ -1331,14 +1357,53 @@ void MainWindow::buildMenus() {
     });
     auto* themeMenu = view->addMenu(tr("&Theme"));
     auto* themeGroup = themeGroup_ = new QActionGroup(this);
+    for (const QString& json : QSettings().value("themes").toStringList())  // imported ones
+        if (auto t = themeFromJson(json.toUtf8())) addTheme(*t);
     const QString current = QSettings().value("theme", "System").toString();
-    for (const auto& t : themes()) {
-        auto* a = themeMenu->addAction(t.name, this, [this, n = t.name] { applyTheme(n); });
+    auto* themeFiles = new QAction(this);  // the separator before Import/Export; themes go above it
+    auto themeAction = [this, themeMenu, themeGroup, themeFiles](const QString& name) {
+        for (auto* a : themeGroup->actions())
+            if (a->text() == name) return a;
+        auto* a = new QAction(name, themeGroup);
         a->setCheckable(true);
-        a->setChecked(t.name == theme(current).name);
-        themeGroup->addAction(a);
-        if (t.name == "Dark") themeMenu->addSeparator();
+        connect(a, &QAction::triggered, this, [this, name] { applyTheme(name); });
+        themeMenu->insertAction(themeFiles, a);
+        return a;
+    };
+    themeMenu->addAction(themeFiles);
+    themeFiles->setSeparator(true);
+    for (const auto& t : themes()) {
+        themeAction(t.name)->setChecked(t.name == theme(current).name);
+        if (t.name == "Dark") themeMenu->insertSeparator(themeFiles);
     }
+    themeMenu->addAction(tr("&Import Theme…"), this, [this, themeAction] {
+        const QString path = QFileDialog::getOpenFileName(this, tr("Import theme"), {}, tr("Penzene theme (*.json)"));
+        if (path.isEmpty()) return;
+        QFile f(path);
+        const auto t = f.open(QIODevice::ReadOnly) ? themeFromJson(f.readAll()) : std::nullopt;
+        if (!t || !addTheme(*t)) {
+            QMessageBox::warning(this, tr("Import theme"),
+                                 t ? tr("\"%1\" is a built-in theme's name.").arg(t->name) : tr("Not a Penzene theme file."));
+            return;
+        }
+        QStringList saved;
+        for (const QString& json : QSettings().value("themes").toStringList())
+            if (auto old = themeFromJson(json.toUtf8()); old && old->name != t->name) saved << json;
+        QSettings().setValue("themes", saved << QString::fromUtf8(themeToJson(*t)));
+        themeAction(t->name)->setChecked(true);
+        applyTheme(t->name);
+    });
+    themeMenu->addAction(tr("&Export Theme…"), this, [this] {
+        Theme t = theme(QSettings().value("theme", "System").toString());
+        if (t.name == "System")
+            t = theme(QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark ? "Dark" : "Light");
+        if (!addTheme(t)) t.name += tr(" (copy)");  // a built-in: imported back, it must not clash
+        const QString path = QFileDialog::getSaveFileName(this, tr("Export theme"), t.name + ".json", tr("Penzene theme (*.json)"));
+        if (path.isEmpty()) return;
+        QFile f(path);
+        if (!f.open(QIODevice::WriteOnly) || f.write(themeToJson(t)) < 0)
+            QMessageBox::warning(this, tr("Export theme"), tr("Could not write %1.").arg(path));
+    });
     applyTheme(current);
     // Following the OS: repaint the canvas and icons when it switches.
     connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this] {

@@ -5,9 +5,11 @@
 
 #ifdef Q_OS_MACOS
 #include <QUtiMimeConverter>
-// ChemDraw's pasteboard type (binary CDX) as chemical/x-cdx.
-struct ChemDrawPasteboard : QUtiMimeConverter {
-    ChemDrawPasteboard();
+// Pasteboard types Qt keeps to itself otherwise, passed through byte for byte:
+// ChemDraw's (binary CDX) as chemical/x-cdx, and PNG and SVG as the standard types,
+// so an exported picture keeps its embedded drawing on the way to Office and back.
+struct RawPasteboard : QUtiMimeConverter {
+    RawPasteboard();
     QString mimeForUti(const QString& uti) const override;
     QString utiForMime(const QString& mime) const override;
     QVariant convertToMime(const QString&, const QList<QByteArray>& data, const QString&) const override;

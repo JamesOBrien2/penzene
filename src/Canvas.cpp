@@ -23,6 +23,7 @@
 #include <QPicture>
 #include <QPlainTextEdit>
 #include <QRegularExpression>
+#include <QRegularExpressionValidator>
 #include <QScrollBar>
 #include <QUndoStack>
 #include <QtMath>
@@ -242,6 +243,17 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
         p->drawLine(doc_.atoms[b.a].pos, doc_.atoms[b.b].pos);
     }
 
+    if (drag_ == Drag::Erase) {  // about to go
+        QColor gone = theme_.error;
+        gone.setAlpha(110);
+        p->setPen(QPen(gone, 5, Qt::SolidLine, Qt::RoundCap));
+        for (int k : sweep_.bonds) p->drawLine(doc_.atoms[doc_.bonds[k].a].pos, doc_.atoms[doc_.bonds[k].b].pos);
+        for (int k : sweep_.arrows) p->strokePath(arrowPath(doc_.arrows[k]), p->pen());
+        p->setPen(Qt::NoPen);
+        p->setBrush(gone);
+        for (int k : sweep_.atoms) p->drawEllipse(doc_.atoms[k].pos, 5, 5);
+        for (int k : sweep_.texts) p->drawRect(textPath(doc_.texts[k], drawingStyle(doc_.style)).boundingRect().adjusted(-1.5, -1.5, 1.5, 1.5));
+    }
     if (tool_ == Tool::Select && (drag_ == Drag::None || drag_ == Drag::Scale)) {
         if (const QRectF box = selectionBox(); !box.isNull()) {
             p->setBrush(Qt::NoBrush);
@@ -413,6 +425,10 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
     case Tool::Ring:  // a click adds the chosen ring; a drag sizes one
         drag_ = Drag::Ring;
         break;
+    case Tool::Erase:  // a click erases what it hits; a drag, all it crosses
+        drag_ = Drag::Erase, sweep_ = {};
+        sweep_.last = pressPos_;
+        break;
     default:
         drag_ = Drag::None;  // click tools act on release
     }
@@ -433,6 +449,26 @@ void Canvas::mouseMoveEvent(QMouseEvent* e) {
     if (drag_ == Drag::Move && shift_) {  // Shift: along whichever axis the drag mostly follows
         QPointF d = curPos_ - pressPos_;
         curPos_ = pressPos_ + (std::abs(d.x()) >= std::abs(d.y()) ? QPointF(d.x(), 0) : QPointF(0, d.y()));
+    }
+    if (drag_ == Drag::Move && (e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier))) {
+        // Ctrl/Cmd: what is dragged swings on its one bond to the rest, which keeps its
+        // length, in 15° steps. Joined by no bond or by several, it just moves.
+        const Bond* link = nullptr;
+        int links = 0;
+        for (const auto& b : beforeDrag_.bonds)
+            if (selectedAtoms_.contains(b.a) != selectedAtoms_.contains(b.b)) link = &b, ++links;
+        if (links == 1) {
+            const int fixed = selectedAtoms_.contains(link->a) ? link->b : link->a, moving = link->a + link->b - fixed;
+            const QPointF f = beforeDrag_.atoms[fixed].pos, from = beforeDrag_.atoms[moving].pos - f, to = curPos_ - f;
+            auto degrees = [](QPointF v) { return qRadiansToDegrees(std::atan2(v.y(), v.x())); };
+            const double turn = std::round(degrees(to) / 15) * 15 - degrees(from);
+            Document next = beforeDrag_;
+            applyTransform(next, selectedAtoms_, selectedArrows_, selectedTexts_,
+                           QTransform::fromTranslate(-f.x(), -f.y()) * QTransform().rotate(turn) * QTransform::fromTranslate(f.x(), f.y()));
+            doc_ = next;
+            refresh();
+            return;
+        }
     }
     if (drag_ == Drag::Move || drag_ == Drag::Rotate) {
         Document next = beforeDrag_;
@@ -485,6 +521,17 @@ void Canvas::mouseMoveEvent(QMouseEvent* e) {
         return;
     }
     if (drag_ == Drag::Bond || drag_ == Drag::Chain) preview_ = dragPath();
+    if (drag_ == Drag::Erase) {  // every point along the stroke, so a quick sweep misses nothing
+        const int steps = std::max(1, int(len(curPos_ - sweep_.last) / 2));
+        for (int k = 1; k <= steps; ++k) {
+            const QPointF q = sweep_.last + (curPos_ - sweep_.last) * (double(k) / steps);
+            if (int a = atomAt(q); a >= 0) sweep_.atoms.insert(a);
+            else if (int b = bondAt(q); b >= 0) sweep_.bonds.insert(b);
+            else if (int r = arrowAt(q); r >= 0) sweep_.arrows.insert(r);
+            else if (int t = textAt(q); t >= 0) sweep_.texts.insert(t);
+        }
+        sweep_.last = curPos_;
+    }
     if (drag_ == Drag::None) {
         // The hotspot sticks until the cursor reaches another atom or bond, so
         // hotkeys and arrow keys keep working after the mouse drifts off.
@@ -599,6 +646,26 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
     } else if (drag == Drag::Ring && !click) {
         addDraggedRing(next);
         what = tr("Add ring");
+    } else if (drag == Drag::Erase && !click) {
+        // A bond's end goes with it when that was its last bond, as with a single erase.
+        std::vector<int> bonds(sweep_.bonds.begin(), sweep_.bonds.end()), atoms(sweep_.atoms.begin(), sweep_.atoms.end());
+        std::vector<int> left(next.atoms.size(), 0);
+        for (int k = 0; k < int(next.bonds.size()); ++k)
+            if (!sweep_.bonds.contains(k)) ++left[next.bonds[k].a], ++left[next.bonds[k].b];
+        for (int k : bonds)
+            for (int end : {next.bonds[k].a, next.bonds[k].b})
+                if (!left[end]) atoms.push_back(end);
+        std::sort(bonds.rbegin(), bonds.rend());
+        for (int k : bonds) next.bonds.erase(next.bonds.begin() + k);
+        next.removeAtoms(atoms);
+        auto dropAll = [](auto& items, const QSet<int>& which) {
+            std::vector<int> idx(which.begin(), which.end());
+            std::sort(idx.rbegin(), idx.rend());
+            for (int k : idx) items.erase(items.begin() + k);
+        };
+        dropAll(next.arrows, sweep_.arrows), dropAll(next.texts, sweep_.texts);
+        sweep_ = {}, hoverAtom_ = hoverBond_ = -1;  // renumbered
+        what = tr("Erase");
     } else if (click) {
         switch (tool_) {
         case Tool::Atom:
@@ -1035,6 +1102,10 @@ void Canvas::editAtomProperties(int at) {
     form->addRow(tr("Lone pairs:"), pairs);
     form->addRow(tr("Radical electrons:"), radicals);
     form->addRow(tr("Partial charge:"), partial);
+    auto* group = new QLineEdit(a.stereoGroup);
+    group->setPlaceholderText(tr("absolute"));
+    group->setValidator(new QRegularExpressionValidator(QRegularExpression("(&|or)[1-9]\\d{0,2}"), group));
+    form->addRow(tr("Stereo group (&&1, or1):"), group);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     form->addRow(buttons);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -1046,6 +1117,7 @@ void Canvas::editAtomProperties(int at) {
     Atom& out = next.atoms[at];
     out.charge = charge->value(), out.map = map->value(), out.lonePairs = pairs->value(), out.radicals = radicals->value();
     out.partial = partial->currentIndex() == 1 ? 1 : partial->currentIndex() == 2 ? -1 : 0;
+    if (group->text().isEmpty() || group->hasAcceptableInput()) out.stereoGroup = group->text();
     if (!(next == doc_)) commit(next, tr("Atom properties"));
 }
 
@@ -1079,6 +1151,19 @@ void Canvas::duplicateSelection(QPointF dir) {
     setSelection(range(int(doc_.atoms.size() - copy.atoms.size()), int(doc_.atoms.size())),
                  range(int(doc_.arrows.size() - copy.arrows.size()), int(doc_.arrows.size())),
                  range(int(doc_.texts.size() - copy.texts.size()), int(doc_.texts.size())));
+}
+
+void Canvas::stereoGroupSelection(const QString& kind) {
+    Document next = doc_;
+    int n = 0;
+    for (const auto& a : doc_.atoms)
+        if (!kind.isEmpty() && a.stereoGroup.startsWith(kind)) n = std::max(n, a.stereoGroup.mid(kind.size()).toInt());
+    QSet<int> centres;
+    for (const auto& l : chem::stereoLabels(doc_))
+        if (l.atom >= 0 && selectedAtoms_.contains(l.atom)) centres.insert(l.atom);
+    for (int i : centres.isEmpty() ? selectedAtoms_ : centres)
+        next.atoms[i].stereoGroup = kind.isEmpty() ? QString() : kind + QString::number(n + 1);
+    if (!(next == doc_)) commit(next, tr("Stereo group"));
 }
 
 void Canvas::colourSelection() {

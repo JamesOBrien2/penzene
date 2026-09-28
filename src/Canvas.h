@@ -39,6 +39,8 @@ public:
     void rotate3D(double aboutX, double aboutY);
     // Brackets around the selected atoms (square or round, with a subscript such as "n"); none removes theirs.
     void bracketSelection(bool square, const QString& label);
+    // Enhanced stereo: the selected stereocentres become a new "&n" or "or" group ("": absolute).
+    void stereoGroupSelection(const QString& kind);
     void removeBrackets();
     void arrangeScheme();  // the selection (or everything) as a tidy reaction scheme
     // `t` (rotate, scale, stretch) about the selection's centre; everything if nothing is selected.
@@ -121,7 +123,8 @@ private:
     int hoverAtom_ = -1, hoverBond_ = -1;
 
     // Drag state
-    enum class Drag { None, Bond, Chain, Arrow, Ring, Move, Rotate, Rubber, Pan, Scale, Rotate3D } drag_ = Drag::None;
+    enum class Drag { None, Bond, Chain, Arrow, Ring, Move, Rotate, Rubber, Pan, Scale, Rotate3D, Erase } drag_ = Drag::None;
+    struct { QSet<int> atoms, bonds, arrows, texts; QPointF last; } sweep_;  // what an eraser drag has crossed
     std::vector<int> moleculesOfSelection() const;  // whole molecules; all atoms if none selected
     std::optional<chem::Pose3D> pose_;  // during a 3D rotation drag
     // Scale handles around the selection: corners scale, edges stretch along one axis.

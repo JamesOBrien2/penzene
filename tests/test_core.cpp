@@ -301,6 +301,22 @@ TEST_CASE("check structure finds valence, stereo, label and overlap problems (#9
     REQUIRE(butanol);
     auto ps = chem::checkStructure(*butanol);
     CHECK(has(ps, "no wedge"));
+    Document mixed = *butanol;  // a wavy bond says the centre is deliberately mixed
+    for (auto& b : mixed.bonds)
+        if (b.a == 2 || b.b == 2) {
+            if (b.b == 2) std::swap(b.a, b.b);
+            b.stereo = BondStereo::Wavy;
+            break;
+        }
+    CHECK_FALSE(has(chem::checkStructure(mixed), "no wedge"));
+    auto wavies = [](const std::optional<Document>& x) {
+        return x ? std::count_if(x->bonds.begin(), x->bonds.end(), [](auto& b) { return b.stereo == BondStereo::Wavy; }) : -1;
+    };
+    CHECK(wavies(chem::fromMolBlock(chem::toMolBlock(mixed))) == 1);
+    CHECK(wavies(chem::fromChemDraw(chem::toCdxml(mixed))) == 1);
+    mixed.bonds[0].stereo = BondStereo::Bold;
+    const auto cdxml = chem::fromChemDraw(chem::toCdxml(mixed));
+    CHECK((cdxml && cdxml->bonds[0].stereo == BondStereo::Bold));
 
     Document d;  // ethane with a wedge (not a stereocentre), a bad label, overlapping atoms
     d.atoms = {{{0, 0}}, {{kBondLength, 0}}, {{40, 0}}, {{40.5, 0}}};
@@ -695,4 +711,55 @@ TEST_CASE("CDXML: superseded graphics aren't doubled; lone-pair symbols land on 
     int pairs = 0;
     for (const auto& a : doc->atoms) pairs += a.z == 8 ? a.lonePairs : 0;
     CHECK(pairs == 1);
+}
+
+
+TEST_CASE("themes export and import as files") {
+    Theme t = theme("Catppuccin Mocha");
+    t.name = "My Mocha";
+    const auto back = themeFromJson(themeToJson(t));
+    REQUIRE(back);
+    CHECK(back->name == "My Mocha");
+    CHECK(back->dark);
+    CHECK(back->accent == t.accent);
+    CHECK(back->window == t.window);
+    CHECK_FALSE(themeFromJson("{\"name\": \"x\"}"));  // not a theme file
+    CHECK_FALSE(themeFromJson("not json"));
+    const auto partial = themeFromJson(R"({"format": "penzene-theme", "name": "Just blue", "accent": "#0000ff"})");
+    REQUIRE(partial);
+    CHECK(partial->paper == theme("Light").paper);  // the rest from Light
+    CHECK(partial->accent == QColor("#0000ff"));
+    CHECK_FALSE(addTheme(Theme{"Dark"}));  // built-in names are kept
+    CHECK(addTheme(*back));
+    CHECK(theme("My Mocha").accent == t.accent);
+}
+
+TEST_CASE("clean and hydrogens keep wavy bonds and stereo groups") {
+    auto d = chem::fromSmiles("C[C@H](O)[C@@H](C)N");
+    REQUIRE(d);
+    std::vector<int> centres;
+    for (const auto& l : chem::stereoLabels(*d))
+        if (l.atom >= 0) centres.push_back(l.atom);
+    REQUIRE(centres.size() == 2);
+    for (int c : centres) d->atoms[c].stereoGroup = "&1";
+    auto wavy = chem::fromSmiles("CCC(C)O");
+    for (auto& b : wavy->bonds)
+        if (b.a == 2 || b.b == 2) {
+            if (b.b == 2) std::swap(b.a, b.b);
+            b.stereo = BondStereo::Wavy;
+            break;
+        }
+    auto count = [](const Document& x, auto pred) { return std::count_if(x.atoms.begin(), x.atoms.end(), pred); };
+    auto wavies = [](const Document& x) {
+        return std::count_if(x.bonds.begin(), x.bonds.end(), [&](const Bond& b) { return b.stereo == BondStereo::Wavy; });
+    };
+    auto amp = [](const Atom& a) { return a.stereoGroup == "&1"; };
+    for (auto transform : {+[](const Document& x) { return chem::clean2D(x, {}); }, &chem::addHydrogens, &chem::removeHydrogens}) {
+        CHECK(count(transform(*d), amp) == 2);
+        const Document w = transform(*wavy);
+        REQUIRE(wavies(w) == 1);
+        const Bond& b = *std::find_if(w.bonds.begin(), w.bonds.end(), [](const Bond& b) { return b.stereo == BondStereo::Wavy; });
+        const auto nb = w.neighbors(b.a);
+        CHECK(std::count_if(nb.begin(), nb.end(), [&](int j) { return w.atoms[j].z != 1; }) == 3);  // from the centre
+    }
 }

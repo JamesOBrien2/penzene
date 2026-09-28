@@ -1129,7 +1129,7 @@ TEST_CASE("paste from ChemDraw: CDX/CDXML clipboard formats (#104)") {
     const QByteArray cdxml = f.readAll();
     const auto expected = chem::readFile(path);
     REQUIRE(expected);
-    // macOS (through ChemDrawPasteboard) and Windows name the format differently.
+    // macOS (through RawPasteboard) and Windows name the format differently.
     for (const char* type : {"chemical/x-cdx", "application/x-qt-windows-mime;value=\"ChemDraw Interchange Format\""}) {
         INFO(type);
         MainWindow w;
@@ -1142,11 +1142,32 @@ TEST_CASE("paste from ChemDraw: CDX/CDXML clipboard formats (#104)") {
         CHECK(w.findChild<Canvas*>()->document().atoms.size() == expected->atoms.size());
     }
 #ifdef Q_OS_MACOS
-    ChemDrawPasteboard uti;
+    RawPasteboard uti;
     CHECK(uti.mimeForUti("com.perkinelmer.chemdraw.cdx-clipboard") == "chemical/x-cdx");
+    CHECK(uti.mimeForUti("public.png") == "image/png");
+    CHECK(uti.utiForMime("image/svg+xml") == "public.svg-image");
     CHECK(uti.mimeForUti("public.utf8-plain-text").isEmpty());
     CHECK(uti.convertToMime("chemical/x-cdx", {cdxml}, {}).toByteArray() == cdxml);
 #endif
+}
+
+TEST_CASE("a copied picture carries the drawing, so it pastes back editable from Office") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)O"));
+    canvas->selectAll();
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->shortcut() == QKeySequence::Copy) a->trigger();
+    const QMimeData* mime = QApplication::clipboard()->mimeData();
+#ifdef Q_OS_MACOS
+    const auto fromPng = Document::fromEmbedded(mime->data("image/png"));
+    REQUIRE(fromPng);
+    CHECK(fromPng->atoms.size() == 4);
+#endif
+    const auto fromSvg = Document::fromEmbedded(mime->data("image/svg+xml"));
+    REQUIRE(fromSvg);
+    CHECK(fromSvg->atoms.size() == 4);
 }
 
 TEST_CASE("export scale and margin (#103)") {
@@ -1582,4 +1603,32 @@ TEST_CASE("the colour swatch opens CPK colours; the pick paints atoms and bonds 
     click((canvas->document().atoms[0].pos + canvas->document().atoms[1].pos) / 2);
     CHECK(canvas->document().atoms[1].color == blue);
     CHECK(canvas->document().bonds[0].color == blue);
+}
+
+
+TEST_CASE("the eraser dragged across bonds erases all it crosses") {
+    Fixture f;
+    Document d;  // three stacked bonds; one quick stroke across the top two
+    for (double y : {0.0, 30.0, 60.0}) edit::link(d, d.addAtom({0, y}), d.addAtom({kBondLength, y}));
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Erase);
+    f.drag({7, -8}, {7, 38});
+    REQUIRE(f.doc().bonds.size() == 1);
+    CHECK(f.doc().atoms.size() == 2);  // their ends went with them
+    CHECK(f.doc().atoms[0].pos.y() == 60);
+}
+
+TEST_CASE("Ctrl/Cmd-dragging an end atom swings it at its bond length, in 15 degree steps") {
+    Fixture f;
+    Document d;
+    edit::link(d, d.addAtom({0, 0}), d.addAtom({kBondLength, 0}));
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Select);
+    QTest::mousePress(f.canvas.viewport(), Qt::LeftButton, {}, f.at({kBondLength, 0}));
+    const QPoint to = f.at({3, 40});  // about 86°: snaps to 90°
+    QMouseEvent move(QEvent::MouseMove, to, f.canvas.viewport()->mapToGlobal(to), Qt::NoButton, Qt::LeftButton, Qt::ControlModifier);
+    QApplication::sendEvent(f.canvas.viewport(), &move);
+    QTest::mouseRelease(f.canvas.viewport(), Qt::LeftButton, Qt::ControlModifier, to);
+    CHECK(QLineF(f.doc().atoms[1].pos, QPointF(0, kBondLength)).length() < 1e-6);
+    CHECK(f.doc().atoms[0].pos == QPointF(0, 0));
 }

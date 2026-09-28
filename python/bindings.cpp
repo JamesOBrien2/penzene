@@ -86,7 +86,7 @@ NB_MODULE(_penzene, m) {
                 if (s.name != qs(name)) throw nb::value_error(("unknown drawing style: " + name).c_str());
                 d.style = s.name == drawingStyles()[0].name ? QString() : s.name;
             },
-            "Drawing style: 'ACS 1996' (default), 'JDP' or 'RSC'")
+            "Drawing style: 'ACS 1996' (default), 'JDP', 'RSC', 'Nature', 'Angewandte' or 'SYNLETT / SYNTHESIS'")
         .def(
             "add_atom",
             [](Document& d, const std::string& label, double x, double y) {

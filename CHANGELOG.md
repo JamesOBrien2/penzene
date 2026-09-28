@@ -11,6 +11,14 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - **ChemDraw files everywhere**: binary .cdx opens and saves on Windows too, and keeps arrows and text. <!-- icon: file-import -->
 - The What's New window highlights main additions with icons and lists smaller changes below.
 - ChemDraw files: plain lines are no longer imported twice; lone pairs come through.
+- **Stereo groups**: mark stereocentres `&1` (a mixture) or `or1` (one, unknown which), kept in MOL and ChemDraw files. <!-- icon: hexagons -->
+- **More templates**: 52 new, among them heterocycles, crown ethers and azamacrocycles, ligands, and common reagents. <!-- icon: books -->
+- Cmd/Ctrl+drag swings an end atom or substituent on its bond, keeping the bond length.
+- On macOS, a copied picture now keeps the Penzene drawing inside it (the PNG and SVG reach other apps as they are), so it can be pasted back as an editable structure.
+- Themes can be exported to a file, edited, shared and imported (View → Theme).
+- The eraser erases everything a drag crosses.
+- Wavy bonds (mixed or unknown stereo) have a toolbar button, and survive ChemDraw files, as do bold and dashed bonds.
+- Nature, Angewandte and SYNLETT / SYNTHESIS drawing styles, from the publishers' own stationery and instructions.
 - The colour tool offers the CPK atom colours; click its swatch to pick one, then click atoms and bonds.
 
 ## 0.8.0 (2026-09-25)

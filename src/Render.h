@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QImage>
 #include <QPainterPath>
+#include <optional>
 #include <vector>
 
 class QPainter;
@@ -28,6 +29,12 @@ struct Theme {
 };
 const std::vector<Theme>& themes();  // "System" first; "System" follows the OS light/dark
 const Theme& theme(const QString& name);
+// Shared theme files (JSON). Reading gives nothing unless it is a theme with a name;
+// a colour it leaves out keeps Light's (or Dark's).
+QByteArray themeToJson(const Theme& t);
+std::optional<Theme> themeFromJson(const QByteArray& json);
+// A user theme, after the built-in ones; one of the same name is replaced. False for a built-in name.
+bool addTheme(const Theme& t);
 
 // A document style preset, like ChemDraw stationery. Lengths in points.
 // Geometry is always drawn with 14.4 pt bonds, so every length here is in
