@@ -75,6 +75,9 @@ target_link_libraries(penzene_core PUBLIC
 # Whole: RDKit's shared ChemDraw library (macOS, Linux) defines the same functions, and a
 # plain archive link would take RDKit's copies instead of these (which carry Penzene's fixes).
 target_link_libraries(penzene_core PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,penzene_chemdraw>")
+if(WIN32)  # the Enhanced Metafile copy (#394)
+    target_link_libraries(penzene_core PRIVATE gdi32)
+endif()
 
 if(PENZENE_APP)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network PrintSupport Test)
