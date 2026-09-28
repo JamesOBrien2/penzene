@@ -2160,10 +2160,30 @@ moves off, so you can keep typing.</p>
     help->addAction(tr("&What's New"), this, &MainWindow::showWhatsNew);
     help->addAction(tr("Check for &Updates…"), this, [this] { checkForUpdates(false); });
     help->addAction(tr("&About Penzene"), this, [this] {
-        QMessageBox::about(this, tr("About Penzene"),
-                           tr("<h3>Penzene %1</h3><p>An open-source chemical structure editor.</p>"
-                              "<p>GPL-3.0 • <a href='https://github.com/JamesOBrien2/penzene'>GitHub</a></p>"
-                              "<p>Chemistry by RDKit. GUI by Qt.</p>").arg(PENZENE_BUILD));
+        QMessageBox about(this);
+        about.setWindowTitle(tr("About Penzene"));
+        about.setText(tr("<h3>Penzene %1</h3><p>An open-source chemical structure editor.</p>"
+                         "<p>GPL-3.0 • <a href='https://github.com/JamesOBrien2/penzene'>GitHub</a></p>"
+                         "<p>Chemistry by RDKit. GUI by Qt.</p>").arg(PENZENE_BUILD));
+        auto* licenses = about.addButton(tr("Third-party licenses…"), QMessageBox::ActionRole);
+        about.addButton(QMessageBox::Close);
+        about.exec();
+        if (about.clickedButton() != licenses) return;
+
+        QFile file(":/THIRD_PARTY_LICENSES.md");
+        if (!file.open(QIODevice::ReadOnly)) return;
+        QDialog dialog(this);
+        dialog.setWindowTitle(tr("Third-party licenses"));
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* text = new QTextBrowser;
+        text->setMarkdown(QString::fromUtf8(file.readAll()));
+        text->setOpenExternalLinks(true);
+        layout->addWidget(text);
+        auto* close = new QDialogButtonBox(QDialogButtonBox::Close);
+        connect(close, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addWidget(close);
+        dialog.resize(700, 550);
+        dialog.exec();
     });
 }
 

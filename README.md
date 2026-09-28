@@ -84,7 +84,9 @@ Plans and progress are on the [project board](https://github.com/users/JamesOBri
 
 UX and tool set inspired by [Ketcher](https://github.com/epam/ketcher) (Apache-2.0).
 Chemistry by RDKit (BSD-3). GUI by Qt (LGPL-3.0).
+ChemDraw file support uses Revvity's [ChemDraw library](third_party/chemdraw) (BSD-3).
 
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
+Dependency notices and license texts are in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).

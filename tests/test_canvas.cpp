@@ -52,6 +52,7 @@
 #include <QMenu>
 #include <QTabBar>
 #include <QToolButton>
+#include <QTextBrowser>
 #include <QWidgetAction>
 #include <QUndoStack>
 #include <catch2/catch_test_macros.hpp>
@@ -2674,6 +2675,33 @@ TEST_CASE("Save after opening an SDF doesn't overwrite it, and never writes MOL 
     CHECK(back.readAll() == library);
     REQUIRE_FALSE(image.isEmpty());
     CHECK_FALSE(QFile::exists(image));
+}
+
+TEST_CASE("About opens bundled third-party license notices (#451)") {
+    App app;
+    MainWindow w;
+    bool opened = false;
+    QTimer::singleShot(0, &w, [&] {
+        auto* about = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        REQUIRE(about);
+        QPushButton* licenses = nullptr;
+        for (auto* button : about->findChildren<QPushButton*>())
+            if (button->text().contains("Third-party licenses")) licenses = button;
+        REQUIRE(licenses);
+        QTimer::singleShot(0, &w, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            REQUIRE(dialog);
+            auto* text = dialog->findChild<QTextBrowser*>();
+            REQUIRE(text);
+            opened = text->toPlainText().contains("Revvity ChemDraw file library") &&
+                     text->toPlainText().contains("GNU Lesser General Public License");
+            dialog->accept();
+        });
+        licenses->click();
+    });
+    for (auto* action : w.findChildren<QAction*>())
+        if (action->text() == "&About Penzene") action->trigger();
+    CHECK(opened);
 }
 
 TEST_CASE("another running Penzene's autosave is neither offered nor removed (#318)") {
