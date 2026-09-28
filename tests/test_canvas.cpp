@@ -15,6 +15,9 @@
 
 #include <QLockFile>
 #include <QMessageBox>
+#include <QPainter>
+#include <QStyle>
+#include <memory>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QListWidget>
@@ -580,6 +583,32 @@ TEST_CASE("themes: Catppuccin palettes; exports stay black") {
         for (int x = 0; x < img.width(); ++x)
             if (QColor c = img.pixelColor(x, y); c.alpha() > 200 && c.lightness() < 60) dark = true;
     CHECK(dark);  // black ink, not the theme's pale text
+}
+
+TEST_CASE("message box icons: a black glyph takes the theme's text colour (#418)") {
+    App app;
+    const QColor text = theme("Catppuccin Mocha").text;
+    QPixmap glyph(32, 32);  // like macOS's question mark: black on clear
+    glyph.fill(Qt::transparent);
+    QPainter(&glyph).fillRect(12, 4, 8, 24, Qt::black);
+    const QImage inked = inkGlyph(glyph, text).toImage();
+    CHECK(inked.pixelColor(16, 16) == text);
+    CHECK(inked.pixelColor(2, 2).alpha() == 0);
+    QPixmap coloured = glyph;  // Fusion's blue circle keeps its own colours
+    QPainter(&coloured).fillRect(0, 0, 8, 8, QColor(40, 120, 255));
+    CHECK(inkGlyph(coloured, text).toImage() == coloured.toImage());
+    QPixmap light = glyph;  // macOS's grey-and-white information bubble
+    light.fill(Qt::lightGray);
+    CHECK(inkGlyph(light, text).toImage() == light.toImage());
+    std::unique_ptr<QStyle> style(themedStyle());
+    QMessageBox box;
+    QPalette pal = box.palette();
+    pal.setColor(QPalette::WindowText, text);
+    box.setPalette(pal);
+    box.setIconPixmap(glyph);
+    box.setStyle(style.get());
+    box.ensurePolished();  // as showing it does
+    CHECK(box.iconPixmap().toImage().pixelColor(16, 16) == text);
 }
 
 TEST_CASE("ring fill: click inside toggles; survives delete, copy and save") {

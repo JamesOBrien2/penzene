@@ -57,6 +57,7 @@
 #include <algorithm>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QProxyStyle>
 #include <QStyle>
 #include <QStyleHints>
 #include <QtMath>
@@ -1175,6 +1176,32 @@ static IconMaker paintedIcon(std::function<void(QPainter&, QColor)> paint) {
     paint(p, QApplication::palette().color(QPalette::WindowText));
     return QIcon(pm);
     };
+}
+
+QPixmap inkGlyph(const QPixmap& icon, const QColor& ink) {
+    const QImage img = icon.toImage();
+    for (int y = 0; y < img.height(); ++y)
+        for (int x = 0; x < img.width(); ++x)
+            if (const QColor c = img.pixelColor(x, y); c.alpha() > 200 && c.value() > 100)
+                return icon;  // coloured or light: it shows on a dark theme as it is
+    QPixmap pm = icon;  // same alpha and anti-aliasing, in the ink, like the tool icons
+    QPainter p(&pm);
+    p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    p.fillRect(pm.rect(), ink);
+    return pm;
+}
+
+QStyle* themedStyle() {
+    // QMessageBox takes its icon from the icon theme before the style, so fix the pixmap it chose.
+    struct Style : QProxyStyle {
+        using QProxyStyle::polish;
+        void polish(QWidget* w) override {
+            QProxyStyle::polish(w);
+            if (auto* box = qobject_cast<QMessageBox*>(w); box && !box->iconPixmap().isNull())
+                box->setIconPixmap(inkGlyph(box->iconPixmap(), box->palette().color(QPalette::WindowText)));
+        }
+    };
+    return new Style;
 }
 
 static IconMaker docIcon(const Document& d) {
