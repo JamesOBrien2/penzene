@@ -869,7 +869,10 @@ std::string toReactionSmiles(const std::vector<Reaction>& steps) {
 std::string toReactionSmiles(const Reaction& r) {
     auto side = [](const std::vector<Document>& ms) {
         std::string s;
-        for (const auto& m : ms) s += (s.empty() ? "" : ".") + toSmiles(m);
+        for (const auto& m : ms) {
+            const std::string smiles = toSmiles(m);
+            s += (s.empty() ? "" : ".") + smiles.substr(0, smiles.find(' '));  // no CXSMILES extension mid-reaction
+        }
         return s;
     };
     return side(r.reactants) + ">" + side(r.agents) + ">" + side(r.products);
@@ -1267,7 +1270,13 @@ std::string toSdf(const Document& doc, bool v3000) {
 std::string toSmiles(const Document& doc) {
     auto mol = toRDKit(doc);
     if (!perceive(*mol)) return "";
-    std::string smiles = RDKit::MolToSmiles(*mol);
+    // Stereo groups (&1, or1) have no place in plain SMILES: write CXSMILES with only them then (#402).
+    auto write = [](const RWMol& m) {
+        return m.getStereoGroups().empty()
+                   ? RDKit::MolToSmiles(m)
+                   : RDKit::MolToCXSmiles(m, RDKit::SmilesWriteParams(), RDKit::SmilesWrite::CXSmilesFields::CX_ENHANCEDSTEREO);
+    };
+    std::string smiles = write(*mol);
     auto parses = [](const std::string& s) {
         try {
             return std::unique_ptr<RWMol>(RDKit::SmilesToMol(s)) != nullptr;
@@ -1279,7 +1288,7 @@ std::string toSmiles(const Document& doc) {
     // read that SMILES back; write it in Kekulé form then.
     if (parses(smiles)) return smiles;
     mol = toRDKit(doc);  // as drawn, without aromaticity
-    if (perceive(*mol, false)) smiles = RDKit::MolToSmiles(*mol);
+    if (perceive(*mol, false)) smiles = write(*mol);
     return parses(smiles) ? smiles : "";  // e.g. a hydrogen with four bonds (#266)
 }
 

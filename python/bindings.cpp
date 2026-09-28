@@ -132,7 +132,7 @@ NB_MODULE(_penzene, m) {
         .def(
             "clean", [](Document& d, std::vector<int> atoms) { d = chem::clean2D(d, atoms); }, "atoms"_a = std::vector<int>{},
             "Lay out afresh with RDKit; with atoms, only the molecules containing them. (since 0.4)")
-        .def("to_smiles", [](const Document& d) { return chem::toSmiles(d); }, "Canonical SMILES (\"\" if the drawing isn't valid chemistry). (since 0.4)")
+        .def("to_smiles", [](const Document& d) { return chem::toSmiles(d); }, "Canonical SMILES (\"\" if the drawing isn't valid chemistry), as CXSMILES carrying only the stereo groups (&1, or1) when there are any. (since 0.4)")
         .def("to_molblock", [](const Document& d) { return chem::toMolBlock(d); }, "MDL MOL (V2000), with the drawing's wedges. (since 0.4)")
         .def("to_inchi", [](const Document& d) { return chem::toInchi(d); }, "Standard InChI. (since 0.4)")
         .def("to_inchikey", [](const Document& d) { return chem::toInchiKey(d); }, "Standard InChIKey. (since 0.4)")

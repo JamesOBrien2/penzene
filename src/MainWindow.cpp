@@ -1857,7 +1857,7 @@ void MainWindow::buildMenus() {
         if (doc.atoms.empty()) return;
         QString error;
         QApplication::setOverrideCursor(Qt::WaitCursor);
-        const QString smiles = QString::fromStdString(chem::toSmiles(doc));
+        const QString smiles = QString::fromStdString(chem::toSmiles(doc)).section(' ', 0, 0);  // plain SMILES, no CXSMILES extension
         const QString name = pubchem::fetch(pubchem::smilesToNameUrl(), "IUPACName", &error,
                                             pubchem::smilesToNameForm(smiles));
         QApplication::restoreOverrideCursor();
