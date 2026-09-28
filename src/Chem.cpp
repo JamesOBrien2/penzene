@@ -19,6 +19,7 @@
 #include <GraphMol/FileParsers/FileParsers.h>
 #include <GraphMol/FileParsers/FileWriters.h>
 #include <GraphMol/MolOps.h>
+#include <GraphMol/atomic_data.h>
 #include <GraphMol/SmilesParse/SmilesParse.h>
 #include <GraphMol/SmilesParse/SmilesWrite.h>
 
@@ -1331,6 +1332,99 @@ std::optional<Profile> profile(const Document& doc) {
     p.lipinskiViolations = (p.basic.mw > 500) + (p.logP > 5) + (p.hbd > 5) + (p.hba > 10);
     p.veber = p.rotatable <= 10 && p.tpsa <= 140;
     return p;
+}
+
+// Natural isotopes per atomic number: (mass, abundance as a fraction), from RDKit's isotope table.
+static const std::vector<std::vector<std::pair<double, double>>>& naturalIsotopes() {
+    static const auto table = [] {
+        std::vector<std::vector<std::pair<double, double>>> t(RDKit::elementNames.size() + 1);
+        QByteArray all;
+        for (int i = 0; RDKit::isotopesAtomData[i] != "EOS"; ++i) all += RDKit::isotopesAtomData[i];
+        for (const QByteArray& line : all.split('\n')) {
+            const auto f = line.simplified().split(' ');  // z, symbol, isotope, mass, abundance (%)
+            bool ok = f.size() >= 5;
+            const int z = ok ? f[0].toInt(&ok) : 0;
+            const double abundance = ok ? f[4].toDouble(&ok) : 0;  // C locale, whatever the user's
+            if (ok && abundance > 0 && z > 0 && z < int(t.size())) t[z].push_back({f[3].toDouble(), abundance});
+        }
+        for (auto& isotopes : t) {
+            double sum = 0;
+            for (const auto& [m, a] : isotopes) sum += a;
+            for (auto& [m, a] : isotopes) a /= sum;
+        }
+        return t;
+    }();
+    return table;
+}
+
+static double isotopeMass(int z, unsigned isotope) {
+    RDKit::Atom a(z);
+    a.setIsotope(isotope);
+    return a.getMass();
+}
+
+// Sticks closer than 0.001 Da become one, at their weighted mean; the faintest are dropped.
+static std::vector<Peak> merged(std::vector<Peak> peaks, double floor) {
+    std::sort(peaks.begin(), peaks.end(), [](const Peak& a, const Peak& b) { return a.mz < b.mz; });
+    double top = 0;
+    for (const Peak& p : peaks) top = std::max(top, p.intensity);
+    std::vector<Peak> out;
+    for (const Peak& p : peaks) {
+        if (!out.empty() && p.mz - out.back().mz < 0.001) {
+            Peak& q = out.back();
+            q.mz = (q.mz * q.intensity + p.mz * p.intensity) / (q.intensity + p.intensity);
+            q.intensity += p.intensity;
+        } else {
+            out.push_back(p);
+        }
+    }
+    std::erase_if(out, [&](const Peak& p) { return p.intensity < floor * top; });
+    return out;
+}
+
+static std::vector<Peak> convolve(const std::vector<Peak>& a, const std::vector<Peak>& b) {
+    std::vector<Peak> out;
+    for (const Peak& p : a)
+        for (const Peak& q : b) out.push_back({p.mz + q.mz, p.intensity * q.intensity});
+    return merged(std::move(out), 1e-7);  // pruned: the faint combinations never reach 0.1%
+}
+
+std::vector<Peak> isotopePattern(const Document& doc, Ion ion) {
+    if (doc.atoms.empty()) return {};
+    auto mol = toRDKit(doc);
+    if (!perceive(*mol)) return {};
+    std::map<int, int> natural;  // atomic number → count
+    std::vector<Peak> pattern{{0, 1}};
+    int charge = 0;
+    for (const auto* a : mol->atoms()) {
+        if (a->getAtomicNum() == 0) return {};  // R groups have no mass
+        charge += a->getFormalCharge();
+        natural[1] += int(a->getTotalNumHs());
+        if (a->getIsotope()) pattern[0].mz += isotopeMass(a->getAtomicNum(), a->getIsotope());
+        else ++natural[a->getAtomicNum()];
+    }
+    if (ion == Ion::MplusH) ++natural[1], ++charge;
+    if (ion == Ion::MplusNa) ++natural[11], ++charge;
+    if (ion == Ion::MminusH) --natural[1], --charge;
+    if (natural[1] < 0) return {};
+    // ponytail: one atom at a time; square-and-multiply if thousand-atom polymers get slow.
+    for (const auto& [z, n] : natural) {
+        if (n == 0) continue;
+        std::vector<Peak> one;
+        for (const auto& [m, a] : naturalIsotopes()[z]) one.push_back({m, a});
+        if (one.empty()) return {};  // no stable isotope (Tc, Pm…)
+        for (int i = 0; i < n; ++i) pattern = convolve(pattern, one);
+    }
+    constexpr double electron = 0.000548579909;
+    pattern = merged(std::move(pattern), 0.001);
+    const double top = std::max_element(pattern.begin(), pattern.end(), [](const Peak& a, const Peak& b) {
+                           return a.intensity < b.intensity;
+                       })->intensity;
+    for (Peak& p : pattern) {
+        p.mz = (p.mz - charge * electron) / std::max(1, std::abs(charge));
+        p.intensity *= 100 / top;
+    }
+    return pattern;
 }
 
 QStringList descriptorColumns() {

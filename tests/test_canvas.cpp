@@ -1240,6 +1240,44 @@ TEST_CASE("properties panel shows descriptors for the selection (#96)") {
     if (auto out = qgetenv("PENZENE_PANEL_SHOT"); !out.isEmpty()) w.grab().save(out);
 }
 
+TEST_CASE("mass spec panel shows the isotope pattern of the selection (#397)") {
+    App app;
+    for (QString t : {"Light", "Dark"}) {
+        QSettings().setValue("theme", t);
+        MainWindow w;
+        w.resize(1100, 700);
+        w.show();
+        auto* canvas = w.findChild<Canvas*>();
+        canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));
+        QAction* toggle = nullptr;
+        for (auto* a : w.findChildren<QAction*>())
+            if (a->text() == "&Mass Spec Panel") toggle = a;
+        REQUIRE(toggle);
+        toggle->trigger();
+        QApplication::processEvents();
+        auto* dock = w.findChild<QDockWidget*>("massSpec");
+        REQUIRE(dock);
+        QWidget* spectrum = nullptr;
+        for (auto* c : dock->findChildren<QWidget*>())
+            if (c->accessibleName() == "Isotope pattern") spectrum = c;
+        REQUIRE(spectrum);
+        CHECK(spectrum->accessibleDescription().startsWith("181.0495 (100.0%), 182.05"));
+        auto* ion = dock->findChild<QComboBox*>();
+        ion->setCurrentIndex(3);  // [M−H]⁻
+        CHECK(spectrum->accessibleDescription().startsWith("179.0350 (100.0%)"));
+        canvas->setDocumentSilently(*chem::fromSmiles("Clc1ccccc1"));
+        emit canvas->documentChanged();
+        CHECK(spectrum->accessibleDescription().contains("(32.0%)"));
+        ion->setCurrentIndex(1);
+        canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));
+        emit canvas->documentChanged();
+        QApplication::processEvents();
+        if (auto out = qEnvironmentVariable("PENZENE_MASS_SHOT"); !out.isEmpty())
+            w.grab().save(QString(out).replace(".png", "-" + t.toLower() + ".png"));
+    }
+    QSettings().remove("theme");
+}
+
 TEST_CASE("PubChem name lookup: URL and response parsing (#28)") {
     CHECK(pubchem::nameToSmilesUrl(" acetylsalicylic acid ").toString(QUrl::FullyEncoded) ==
           "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/acetylsalicylic%20acid/property/SMILES/JSON");
@@ -1910,7 +1948,7 @@ TEST_CASE("White and teal theme; tools on a rail whose groups open beside it (#2
     // Properties and Templates are in the View menu, not the palette.
     CHECK(w.findChild<QDockWidget*>("properties"));
     CHECK(w.findChild<QDockWidget*>("templates"));
-    CHECK(w.findChildren<QFrame*>("panelCard").size() == 2);
+    CHECK(w.findChildren<QFrame*>("panelCard").size() == 3);
     for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
         for (auto* b : f->findChildren<QToolButton*>()) CHECK(b->toolButtonStyle() != Qt::ToolButtonTextOnly);
 }

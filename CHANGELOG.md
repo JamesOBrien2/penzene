@@ -17,6 +17,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - The Python API reference gives the version that added each function, class, method and property, and the stability policy spells out that argument names, argument order and return types are stable while repr() strings and exact image bytes are not.
 - The question icon in prompts such as "Save changes to this document?" shows on dark themes like Catppuccin Mocha, where it was black on macOS.
 - The chair keys (9 and 0) fuse the chair onto the bond, pointing away from the ring, so it no longer overlaps the ring, even on a second bond of the same ring.
+- **Isotope patterns**: View → Mass Spec Panel draws the isotope pattern of the selection, or the whole drawing, as a stick spectrum for [M], [M+H]⁺, [M+Na]⁺ or [M−H]⁻, with the m/z of the main peaks. <!-- icon: chart-bar -->
 
 ## 1.4.0 (2026-09-28)
 

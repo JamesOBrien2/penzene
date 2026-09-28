@@ -102,6 +102,7 @@ private:
     void updateTitle();
     void updateInfo();
     void updateProfile();  // the Properties panel, while it's visible
+    void updateMassSpec();  // the Mass Spec panel, likewise
     void applyTheme(const QString& name);
     void remember(const QString& path);  // most recent first, at most 10
 
@@ -141,6 +142,9 @@ private:
     void saveTemplate();
     QLabel* profile_;
     QString profileText_;  // plain-text copy of the panel, for the Copy button
+    class QDockWidget* massDock_;
+    class QComboBox* ion_;
+    class SpectrumView* spectrum_;
     std::vector<std::pair<QAction*, std::function<QIcon()>>> icons_;
     std::vector<class QFrame*> flyouts_;  // the tool rail's group flyouts
 };

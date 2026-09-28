@@ -23,6 +23,14 @@ for a supporting-information table. **File → Export Descriptors…** writes th
 per molecule ([descriptor tables](cli.md#descriptor-tables)).
 ```
 
+```{feature} chart-bar
+:title: Isotope patterns
+**View → Mass Spec Panel** draws the isotope pattern of the selection, or of the whole drawing, as
+a stick spectrum for [M], [M+H]⁺, [M+Na]⁺ or [M−H]⁻, from natural isotope abundances. The main
+peaks are labelled with their m/z (aspirin [M+H]⁺ at 181.0495, with its ¹³C peak at 182.0529). A
+drawn isotope such as ¹³C counts as that isotope only.
+```
+
 ```{feature} atom
 :title: Implicit hydrogens and valence
 Labels get their hydrogens (OH, NH₂). An atom with too many bonds is drawn in red.

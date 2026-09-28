@@ -535,6 +535,48 @@ TEST_CASE("properties panel profile for aspirin (#96)") {
     CHECK_FALSE(chem::profile(Document{}));
 }
 
+TEST_CASE("isotope pattern: aspirin's ions and a chlorine M+2 (#397)") {
+    const Document aspirin = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
+    // Intensity summed per nominal mass above the monoisotopic peak (13C, 2H and 17O sticks apart).
+    auto bins = [](const std::vector<chem::Peak>& peaks) {
+        std::map<int, double> sum;
+        for (const auto& p : peaks) sum[int(std::lround(p.mz - peaks[0].mz))] += p.intensity;
+        return sum;
+    };
+    const auto m = chem::isotopePattern(aspirin, chem::Ion::M);
+    REQUIRE_FALSE(m.empty());
+    CHECK(std::abs(m[0].mz - chem::properties(aspirin)->exactMass) < 1e-6);
+
+    const auto mh = chem::isotopePattern(aspirin, chem::Ion::MplusH);
+    REQUIRE(mh.size() > 2);
+    CHECK(std::abs(mh[0].mz - 181.0495) < 0.0001);
+    CHECK(mh[0].intensity == 100);
+    // C9H9O4: M+1/M = Σ n·a(M+1)/a(M) over C, H and O.
+    const double theory = 9 * 1.07 / 98.93 + 9 * 0.0115 / 99.9885 + 4 * 0.038 / 99.757;
+    const double ratio = bins(mh)[1] / bins(mh)[0];
+    INFO("M+1/M " << ratio << " theory " << theory);
+    CHECK(std::abs(ratio / theory - 1) < 0.005);
+    for (const auto& p : mh) CHECK(p.intensity >= 0.1);
+
+    const auto mna = chem::isotopePattern(aspirin, chem::Ion::MplusNa);
+    REQUIRE_FALSE(mna.empty());
+    CHECK(std::abs(mna[0].mz - 203.0315) < 0.0001);
+    const auto deprotonated = chem::isotopePattern(aspirin, chem::Ion::MminusH);
+    REQUIRE_FALSE(deprotonated.empty());
+    CHECK(std::abs(deprotonated[0].mz - 179.0350) < 0.0001);
+
+    const auto cl = bins(chem::isotopePattern(*chem::fromSmiles("Clc1ccccc1"), chem::Ion::M));
+    INFO("M+2/M " << cl.at(2) / cl.at(0));
+    CHECK(std::abs(100 * cl.at(2) / cl.at(0) - 32) < 1);
+    // A drawn 13C is that isotope only: one mass unit up, and no more 13C to spread.
+    const auto labelled = chem::isotopePattern(*chem::fromSmiles("[13CH4]"), chem::Ion::M);
+    REQUIRE_FALSE(labelled.empty());
+    CHECK(std::abs(labelled[0].mz - 17.0347) < 0.0001);
+    CHECK(labelled.size() == 1);
+    CHECK(chem::isotopePattern(Document{}, chem::Ion::M).empty());
+    CHECK(chem::isotopePattern(*chem::fromSmiles("[Na+].[Cl-]"), chem::Ion::MminusH).empty());
+}
+
 TEST_CASE("atom-map numbers survive SMILES, .penz and the ' hotkey (#99)") {
     auto doc = chem::fromSmiles("[CH3:1][OH:2]");
     REQUIRE(doc);

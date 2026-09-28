@@ -634,6 +634,14 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Mass Spec</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Isotope pattern</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>A reaction file needs a reaction arrow in the drawing.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1633,6 +1641,10 @@
     </message>
     <message>
         <source>Ctrl+I</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Mass Spec Panel</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
