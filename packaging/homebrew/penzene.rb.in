@@ -1,0 +1,28 @@
+cask "penzene" do
+  arch arm: "arm64", intel: "x86_64"
+
+  version "@VERSION@"
+  sha256 arm:   "@SHA256_ARM64@",
+         intel: "@SHA256_X86_64@"
+
+  url "https://github.com/JamesOBrien2/penzene/releases/download/v#{version}/penzene-macos-#{arch}.dmg"
+  name "Penzene"
+  desc "Draw chemical structures and reaction schemes"
+  homepage "https://github.com/JamesOBrien2/penzene"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
+
+  depends_on macos: ">= :big_sur"
+
+  app "penzene.app"
+
+  zap trash: [
+    "~/Library/Application Support/Penzene",
+    "~/Library/Preferences/com.penzene.Penzene.plist",
+    "~/Library/Preferences/io.github.jamesobrien2.penzene.plist",
+    "~/Library/Saved Application State/io.github.jamesobrien2.penzene.savedState",
+  ]
+end
