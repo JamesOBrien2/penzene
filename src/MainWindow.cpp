@@ -75,6 +75,7 @@
 
 static const char* kMolMime = "chemical/x-mdl-molfile";
 static const char* kPenzMime = "application/x-penzene";  // full fidelity: arrows and text too
+static const char* kWinPngMime = "application/x-qt-windows-mime;value=\"PNG\"";  // the clipboard format Office reads
 static const char* kDocsUrl = "https://penzene.readthedocs.io/";
 static const QSize kExampleIcon(168, 84);
 
@@ -1077,7 +1078,14 @@ void MainWindow::copy() {
     Document doc = canvas_->selectedSubset();
     if (doc.empty() || !confirmStructure(doc, tr("Copy"), tr("Copy Anyway"))) return;
     auto* mime = new QMimeData;
-    mime->setImageData(renderImage(doc, exportOptions()));
+    // The PNG as exported, so the drawing in its text chunk survives: Qt re-encodes an image
+    // it converts itself and drops it. The image stays for apps that only read a bitmap.
+    const QByteArray png = renderPng(doc, exportOptions());
+    mime->setData("image/png", png);
+#ifdef Q_OS_WIN
+    mime->setData(kWinPngMime, png);  // Qt offers no "PNG" for an image; elsewhere image/png is enough
+#endif
+    mime->setImageData(QImage::fromData(png, "PNG"));
     mime->setData("image/svg+xml", renderSvg(doc, exportOptions()));
     mime->setData("application/pdf", renderPdf(doc, exportOptions()));  // vector, for Office and Keynote
     mime->setData(kPenzMime, doc.toJson());
@@ -1085,9 +1093,9 @@ void MainWindow::copy() {
     if (const QByteArray cdx = doc.atoms.empty() ? QByteArray() : chem::toCdx(doc); !cdx.isEmpty())
         mime->setData("chemical/x-cdx", cdx);
     if (!doc.atoms.empty()) {
-        std::string mol = chem::toMolBlock(doc), smi = chem::toSmiles(doc);
+        // No plain text: Office's ⌘V/Ctrl+V takes text over a picture (Copy as SMILES gives it).
+        const std::string mol = chem::toMolBlock(doc);
         mime->setData(kMolMime, QByteArray::fromStdString(mol));
-        mime->setText(QString::fromStdString(smi.empty() ? mol : smi));
     }
     QApplication::clipboard()->setMimeData(mime);
 }
@@ -1098,10 +1106,12 @@ void MainWindow::copy() {
 ChemDrawPasteboard::ChemDrawPasteboard() = default;
 QString ChemDrawPasteboard::mimeForUti(const QString& uti) const {
     if (uti == "com.adobe.pdf") return "application/pdf";
+    if (uti == "public.png") return "image/png";
     return uti == "com.perkinelmer.chemdraw.cdx-clipboard" ? "chemical/x-cdx" : QString();
 }
 QString ChemDrawPasteboard::utiForMime(const QString& mime) const {
     if (mime == "application/pdf") return "com.adobe.pdf";
+    if (mime == "image/png") return "public.png";
     return mime == "chemical/x-cdx" ? "com.perkinelmer.chemdraw.cdx-clipboard" : QString();
 }
 QVariant ChemDrawPasteboard::convertToMime(const QString&, const QList<QByteArray>& data, const QString&) const {
@@ -1123,7 +1133,7 @@ void MainWindow::paste() {
     if (auto doc = Document::fromJson(mime->data(kPenzMime)); doc && !doc->empty())
         return canvas_->insert(*doc, tr("Paste"));
     // A figure Penzene exported, copied from another app or as a file: the drawing inside it.
-    for (const char* type : {"image/svg+xml", "application/pdf", "image/png"})
+    for (const char* type : {"image/svg+xml", "application/pdf", "image/png", kWinPngMime})
         if (auto doc = Document::fromEmbedded(mime->data(type)); doc && !doc->empty())
             return canvas_->insert(*doc, tr("Paste"));
     for (const QUrl& url : mime->urls())

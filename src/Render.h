@@ -77,6 +77,7 @@ bool exportDocument(const Document& doc, const QString& path, const ExportOption
 // Replaces the file at `path` only once all of `data` is written.
 bool writeWhole(const QString& path, const QByteArray& data);
 QImage renderImage(const Document& doc, const ExportOptions& options = {});
+QByteArray renderPng(const Document& doc, const ExportOptions& options = {});  // drawing in a text chunk
 QByteArray renderSvg(const Document& doc, const ExportOptions& options = {});
 QByteArray renderPdf(const Document& doc, const ExportOptions& options = {});  // vector, drawing attached
 QPainterPath arrowPath(const Arrow& a);
