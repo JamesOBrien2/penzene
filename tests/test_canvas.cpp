@@ -2970,6 +2970,6 @@ TEST_CASE("the predicted shifts view is saved and drawn with its notice (#403)")
     doc.showShifts = true;
     CHECK(Document::fromJson(doc.toJson())->showShifts);
     const QRectF shown = outputBounds(doc);
-    CHECK(shown.bottom() > plain.bottom() + 20);  // the nmrshiftdb2 notice, under the drawing
+    CHECK(shown.bottom() > plain.bottom() + 12);  // the nmrshiftdb2 notice (three lines), under the drawing
     CHECK(shown.width() > plain.width());
 }
