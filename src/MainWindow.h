@@ -97,7 +97,7 @@ private:
     void importSmiles();
     void importName();
     void print();
-    void copy();
+    bool copy();  // false when nothing was copied (empty, or the structure warning cancelled)
     void paste();
     void updateTitle();
     void updateInfo();
