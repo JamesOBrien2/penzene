@@ -94,7 +94,7 @@ class Document:
 
     def to_smiles(self) -> str:
         """
-        Canonical SMILES ("" if the drawing isn't valid chemistry). (since 0.4)
+        Canonical SMILES ("" if the drawing isn't valid chemistry), as CXSMILES carrying only the stereo groups (&1, or1) when there are any. (since 0.4)
         """
 
     def to_molblock(self) -> str:

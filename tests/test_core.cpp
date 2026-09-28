@@ -1186,6 +1186,24 @@ TEST_CASE("a racemic (&1) centre keeps its stereo group through .penz, MOL V3000
     isAnd1(chem::fromChemDraw(chem::toCdx(*doc)));  // binary CDX
 }
 
+TEST_CASE("SMILES keeps stereo groups as CXSMILES, and only when there are some (#402)") {
+    auto doc = chem::fromSmiles("C[C@H](O)[C@@H](C)N |&1:1,3|");
+    REQUIRE(doc);
+    const std::string smiles = chem::toSmiles(*doc);
+    INFO(smiles);
+    CHECK(smiles.find("|&1:") != std::string::npos);
+    auto back = chem::fromSmiles(smiles);
+    REQUIRE(back);
+    int and1 = 0;
+    for (const Atom& a : back->atoms) and1 += stereoGroupTag(a) == "&1";
+    CHECK(and1 == 2);
+    CHECK(chem::toSmiles(*chem::fromSmiles("C[C@H](O)[C@@H](C)N")) == "C[C@H](O)[C@@H](C)N");  // no groups: plain, as before
+    chem::Reaction r;
+    r.reactants.push_back(*doc);
+    r.products.push_back(*doc);
+    CHECK(chem::toReactionSmiles(r).find('|') == std::string::npos);  // no extension mid-reaction
+}
+
 TEST_CASE("a typed charged label sets the element and charge (#324)") {
     for (auto [label, z, charge] : {std::tuple{"NH3+", 7, 1}, {"O-", 8, -1}, {"Na+", 11, 1}, {"Fe3+", 26, 3},
                                     {"O2-", 8, -2}, {"NH4+", 7, 1}, {"O−", 8, -1}, {"S+2", 16, 2}, {"15NH4+", 7, 1}}) {  // the last with an isotope too
