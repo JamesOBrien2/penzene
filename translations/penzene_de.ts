@@ -108,6 +108,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Invert Stereochemistry</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Align</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1311,6 +1315,10 @@
     </message>
     <message>
         <source>Ctrl+Shift+V</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Invert Stereochemistry</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

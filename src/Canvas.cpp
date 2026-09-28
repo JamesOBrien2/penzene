@@ -906,6 +906,18 @@ void Canvas::flipSelection(bool horizontal) {
     commit(next, horizontal ? tr("Flip Horizontal") : tr("Flip Vertical"));
 }
 
+void Canvas::invertStereo() {
+    QSet<int> atoms;
+    for (const Piece& p : pieces(doc_, selectedAtoms_, selectedArrows_, selectedTexts_)) atoms |= p.atoms;
+    Document next = doc_;
+    for (auto& b : next.bonds)
+        if (atoms.contains(b.a) && atoms.contains(b.b))
+            b.stereo = b.stereo == BondStereo::Wedge  ? BondStereo::Hash
+                       : b.stereo == BondStereo::Hash ? BondStereo::Wedge
+                                                      : b.stereo;
+    commit(next, tr("Invert Stereochemistry"));
+}
+
 void Canvas::alignSelection(Align edge) {
     const auto ps = pieces(doc_, selectedAtoms_, selectedArrows_, selectedTexts_);
     if (ps.size() < 2) return;
