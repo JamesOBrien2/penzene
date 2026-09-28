@@ -136,6 +136,7 @@ int main(int argc, char** argv) {
     QApplication::setApplicationName("Penzene");
     QApplication::setOrganizationName("Penzene");
     QApplication::setWindowIcon(QIcon(":/logo.svg"));
+    QApplication::setStyle(themedStyle());
     MainWindow::installTranslations(QSettings().value("language").toString());  // Preferences → Language
     MainWindow w;
     if (argc == 2) w.openFile(QString::fromLocal8Bit(argv[1]));

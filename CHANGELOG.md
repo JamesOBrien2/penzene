@@ -15,6 +15,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - On Windows, Copy also offers an Enhanced Metafile, so Word and PowerPoint paste a vector picture that stays sharp when scaled.
 - Preferences can check structures before export and copy: unassigned stereocentres and valence errors are listed first, with Export Anyway or Cancel.
 - The Python API reference gives the version that added each function, class, method and property, and the stability policy spells out that argument names, argument order and return types are stable while repr() strings and exact image bytes are not.
+- The question icon in prompts such as "Save changes to this document?" shows on dark themes like Catppuccin Mocha, where it was black on macOS.
 
 ## 1.4.0 (2026-09-28)
 

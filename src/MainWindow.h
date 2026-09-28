@@ -38,6 +38,15 @@ class QUndoStack;
 
 // The drawing at its export size, centred on the page; shrunk to fit if it's bigger.
 bool printDocument(QPrinter& printer, const Document& doc);
+
+class QColor;
+class QPixmap;
+class QStyle;
+// The platform style, with message box icons that show in every theme: a dark glyph (macOS's
+// question mark is black) is drawn in the palette's text colour (#418). Install it before the palette.
+QStyle* themedStyle();
+QPixmap inkGlyph(const QPixmap& icon, const QColor& ink);  // `icon` in `ink` if it's dark; a coloured or light one unchanged
+
 // RDKit's formula as HTML: counts subscripted, a trailing charge ("-2") superscripted as "2−".
 QString formulaHtml(const std::string& formula);
 
