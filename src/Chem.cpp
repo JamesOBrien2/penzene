@@ -780,9 +780,9 @@ std::vector<Document> molecules(const Document& doc) {
 // One reaction per straight reaction or equilibrium arrow, in reading order (#334).
 // A molecule nearer an arrow's line than any arrow's end is one of its agents; otherwise it's a reactant of
 // the arrow whose tail is nearest ahead of it, and a product of the arrow whose
-// head is nearest behind it, so B in A -> B -> C is both.
-// ponytail: a scheme that wraps to a new row loses the link between rows (B ends
-// one row, the next arrow starts far to its left); reactants would need arrow order.
+// head is nearest behind it, so B in A -> B -> C is both. A step with no reactants
+// takes the previous step's products, so a scheme that wraps (B ends one row, the
+// next arrow starts the next) keeps B as the link between rows (#388).
 std::vector<Reaction> reactionsOf(const Document& doc) {
     std::vector<const Arrow*> arrows;
     for (const Arrow& a : doc.arrows)
@@ -824,6 +824,8 @@ std::vector<Reaction> reactionsOf(const Document& doc) {
         if (reactantOf >= 0) out[reactantOf].reactants.push_back(m);
         if (productOf >= 0) out[productOf].products.push_back(m);
     }
+    for (size_t k = 1; k < out.size(); ++k)
+        if (out[k].reactants.empty()) out[k].reactants = out[k - 1].products;
     return out;
 }
 

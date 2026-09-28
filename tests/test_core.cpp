@@ -613,6 +613,23 @@ TEST_CASE("a multi-step scheme exports every step (#334)") {
     }
 }
 
+TEST_CASE("a scheme wrapped onto two rows keeps the link between them (#388)") {
+    // Ethanol -> acetaldehyde ending row 1; -> acetic acid starting row 2.
+    Document doc = *chem::fromReactionSmiles("CCO>>CC=O");
+    const double below = doc.arrows[0].from.y() + 6 * kBondLength;
+    doc.arrows.push_back({{0, below}, {3 * kBondLength, below}});
+    Document acid = *chem::fromSmiles("CC(=O)O");
+    double left = 1e9, y = 0;
+    for (const auto& a : acid.atoms) left = std::min(left, a.pos.x()), y += a.pos.y() / acid.atoms.size();
+    doc.append(acid, QPointF(4 * kBondLength - left, below - y));
+
+    const auto steps = chem::reactionsOf(doc);
+    REQUIRE(steps.size() == 2);
+    auto canon = [](const std::string& s) { return chem::toSmiles(*chem::fromSmiles(s)); };
+    CHECK(chem::toReactionSmiles(steps) ==
+          canon("CCO") + ">>" + canon("CC=O") + "\n" + canon("CC=O") + ">>" + canon("CC(=O)O"));  // the aldehyde is both
+}
+
 TEST_CASE("CDXML export reads back: molecules, wedges, arrows and text (#29)") {
     Document doc = *chem::fromSmiles("C[C@H](N)C(=O)O");  // L-alanine, wedged
     const std::string smiles = chem::toSmiles(doc);
