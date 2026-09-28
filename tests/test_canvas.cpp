@@ -1175,6 +1175,19 @@ TEST_CASE("export checks the structure first, when turned on in Preferences (#39
     CHECK(firstDialog().contains("Stereocentre"));
     canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));  // aspirin: nothing to report
     CHECK(firstDialog() == "file dialog");
+    // Cut is a copy first: cancelling the warning leaves the drawing where it was (#428).
+    QAction* cut = nullptr;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "Cu&t") cut = a;
+    REQUIRE(cut);
+    const Document butanol = *chem::fromSmiles("CC(O)CC");
+    canvas->setDocumentSilently(butanol);
+    canvas->selectAll();
+    QTimer::singleShot(0, &w, [] {
+        if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Cancel)->click();
+    });
+    cut->trigger();
+    CHECK(canvas->document() == butanol);
     QSettings().setValue("checkBeforeExport", false);
     canvas->setDocumentSilently(*chem::fromSmiles("CC(O)CC"));
     CHECK(firstDialog() == "file dialog");

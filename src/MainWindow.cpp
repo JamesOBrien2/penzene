@@ -1158,9 +1158,9 @@ void MainWindow::importName() {
         QMessageBox::warning(this, tr("Import Name"), tr("Could not look up “%1”: %2").arg(name.trimmed(), error));
 }
 
-void MainWindow::copy() {
+bool MainWindow::copy() {
     Document doc = canvas_->selectedSubset();
-    if (doc.empty() || !confirmStructure(doc, tr("Copy"), tr("Copy Anyway"))) return;
+    if (doc.empty() || !confirmStructure(doc, tr("Copy"), tr("Copy Anyway"))) return false;
     auto* mime = new QMimeData;
 #ifdef Q_OS_WIN
     mime->setData(kEmfMime, renderEmf(doc, exportOptions()));  // vector for Word and PowerPoint; first, ahead of the bitmap
@@ -1185,6 +1185,7 @@ void MainWindow::copy() {
         mime->setData(kMolMime, QByteArray::fromStdString(mol));
     }
     QApplication::clipboard()->setMimeData(mime);
+    return true;
 }
 
 #ifdef Q_OS_MACOS
@@ -1879,8 +1880,7 @@ void MainWindow::buildMenus() {
         if (moveTo->isEmpty()) moveTo->addAction(tr("(add a page first)"))->setEnabled(false);
     });
     edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] {
-        copy();
-        canvas_->deleteSelection();
+        if (copy()) canvas_->deleteSelection();  // a cancelled copy keeps the drawing
     });
     edit->addAction(tr("&Copy"), QKeySequence::Copy, this, &MainWindow::copy);
     edit->addAction(tr("Copy as S&MILES"), QKeySequence(tr("Ctrl+Alt+C")), this, [this] {
