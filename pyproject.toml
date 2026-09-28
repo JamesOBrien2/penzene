@@ -8,13 +8,13 @@ dynamic = ["version"]
 description = "Publication-quality 2D chemical structures from Python: the Penzene drawing engine"
 readme = "python/README.md"
 requires-python = ">=3.12"
-license = { file = "LICENSE" }
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "THIRD_PARTY_LICENSES.md"]
 keywords = ["chemistry", "cheminformatics", "chemdraw", "structure", "drawing", "rdkit", "svg"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: C++",
     "Topic :: Scientific/Engineering :: Chemistry",
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
 ]
 
 [project.urls]
