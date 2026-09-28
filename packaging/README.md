@@ -7,6 +7,7 @@ channel by hand, with the owner's approval.
 |---|---|---|
 | conda-forge | `conda-forge/recipe.yaml`: the Python module, built against conda-forge's RDKit and Qt | not yet |
 | Homebrew | `homebrew/penzene.rb.in`: a cask for the macOS disk images ([README](homebrew/README.md)) | not yet; needs notarization (#49) |
+| winget | `winget/*.yaml.in`: manifests for the Windows installer ([README](winget/README.md)) | not yet; ideally after signing (#110) |
 
 Test a recipe locally with rattler-build (a variants file gives what conda-forge's pinning
 normally supplies, e.g. `c_stdlib` on macOS):
