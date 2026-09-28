@@ -10,6 +10,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Structure → Invert Stereochemistry turns every wedge into a hash and every hash into a wedge, giving the enantiomer without redrawing it (the selection's molecules, or the whole drawing).
 - Open reads MDL RD files (.rdf): the steps open as one scheme, left to right, with a step's product carrying on as the next step's reactant.
 - Preferences can check structures before export and copy: unassigned stereocentres and valence errors are listed first, with Export Anyway or Cancel.
+- .penz files are now format version 2, with every page a document of its own and the shared drawing settings at the top. Version 1 files still open with all their pages, and Save As → Penzene 1 (single page) writes a file Penzene 1.x opens.
 
 ## 1.4.0 (2026-09-28)
 

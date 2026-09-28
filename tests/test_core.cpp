@@ -942,6 +942,10 @@ TEST_CASE(".penz files from every release still open, and save back the same (#1
         auto again = Document::fromJson(doc->toJson());
         REQUIRE(again);
         CHECK(again->toJson() == doc->toJson());
+        f.seek(0);
+        const auto sheets = sheetsFromJson(f.readAll());  // and every page, through this version's format
+        REQUIRE_FALSE(sheets.empty());
+        CHECK(sheetsFromJson(sheetsToJson(sheets)) == sheets);
     }
 }
 
@@ -1022,6 +1026,48 @@ TEST_CASE("a .penz file keeps its pages, and older versions still open the first
     pages[0] = second;
     root["pages"] = pages;
     CHECK(sheetsFromJson(QJsonDocument(root).toJson()).empty());
+}
+
+TEST_CASE(".penz version 2: pages as documents, shared settings at the top (#404)") {
+    Document a, b, c;
+    a.addAtom({0, 0}), b.addAtom({0, 0}, 8), c.addAtom({0, 0}, 7);
+    a.style = b.style = c.style = "RSC";
+    a.showStereo = b.showStereo = true;  // not c's: stays on the pages
+    c.page = "A4";
+    const std::vector<Sheet> sheets{{"One", a}, {"Two", b}, {"Three", c}};
+    const QByteArray json = sheetsToJson(sheets);
+    const QJsonObject root = QJsonDocument::fromJson(json).object();
+    CHECK(root["format"].toString() == "penzene");
+    CHECK(root["version"].toInt() == 2);
+    CHECK(root["style"].toString() == "RSC");
+    CHECK_FALSE(root.contains("showStereo"));
+    const QJsonArray pages = root["pages"].toArray();
+    REQUIRE(pages.size() == 3);
+    CHECK_FALSE(pages[0].toObject().contains("style"));
+    CHECK(pages[0].toObject()["showStereo"].toBool());
+    CHECK(pages[2].toObject()["name"].toString() == "Three");
+    CHECK(sheetsFromJson(json) == sheets);
+    CHECK(Document::fromJson(json) == a);  // a single document (pz.read, the command line) is page 1
+    CHECK(sheetsFromJson(R"({"format":"penzene","version":2,"pages":[]})").empty());
+    CHECK(sheetsFromJson(R"({"format":"penzene","version":3,"pages":[{}]})").empty());
+}
+
+TEST_CASE(".penz version 1 files open with every page, and save for Penzene 1 (#404)") {
+    QFile f(QString(PENZENE_TEST_DATA) + "/penz/v1.4.0.penz");  // two pages, the #219 layout
+    REQUIRE(f.open(QIODevice::ReadOnly));
+    const auto sheets = sheetsFromJson(f.readAll());
+    REQUIRE(sheets.size() == 2);
+    CHECK(sheets[0].name == "Aspirin");
+    CHECK(sheets[1].name == "Salicylic acid");
+    CHECK(sheets[0].doc.style == "ACS 1996");
+    CHECK(sheets[1].doc.atoms.size() == 11);
+
+    const QByteArray v1 = sheetsToJsonV1(sheets);
+    const QJsonObject root = QJsonDocument::fromJson(v1).object();
+    CHECK(root["version"].toInt() == 1);
+    for (const auto& p : root["pages"].toArray()) CHECK(p.toObject()["version"].toInt() == 1);
+    CHECK(Document::fromJson(v1) == sheets[0].doc);  // what Penzene before pages reads
+    CHECK(sheetsFromJson(v1) == sheets);             // and 1.2 to 1.4, every page
 }
 
 TEST_CASE("a ChemDraw text of size 0 saves a .penz that opens again (#316)") {

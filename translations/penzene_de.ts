@@ -602,10 +602,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Penzene document (*.penz);;MDL Molfile (*.mol);;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>An SD file holds molecules, and this page has none.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -619,6 +615,18 @@
     </message>
     <message>
         <source>Penzene can&apos;t save a drawing as .%1. Save as .penz, .mol, .sdf, .rxn, .rdf, .cdxml or .cdx, or use File → Export… for images.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Penzene 1 (single page) (*.penz)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Penzene document (*.penz);;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>;;MDL Molfile (*.mol);;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

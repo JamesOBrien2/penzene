@@ -120,7 +120,8 @@ struct Document {
     bool empty() const { return atoms.empty() && arrows.empty() && texts.empty(); }
     void append(const Document& other, QPointF shift = {});  // atom indices renumbered
 
-    // .penz: {"format":"penzene","version":1,"atoms":[...],"bonds":[...],"arrows":[...],"texts":[...]}
+    // .penz: {"format":"penzene","version":1,"atoms":[...],"bonds":[...],"arrows":[...],"texts":[...]};
+    // fromJson reads version 2's first page too (sheetsFromJson below).
     QByteArray toJson() const;
     static std::optional<Document> fromJson(const QByteArray& data);
     // The drawing Penzene embedded in an exported PNG (text chunk), SVG (<metadata>) or PDF (attachment).
@@ -137,15 +138,17 @@ struct Document {
     void removeAtoms(const std::vector<int>& atoms);  // also drops their bonds
 };
 
-// A file's pages, the tabs along the bottom of the window. The first page is the .penz
-// document itself (so a version without pages still opens it); the rest follow in its
-// "pages" array, each a .penz document of its own. Every page has a "name".
+// A file's pages, the tabs along the bottom of the window. Version 2 (#404):
+// {"format":"penzene","version":2,"pages":[...]}, each page a document without format and
+// version, with the settings every page shares ("style" and so on) at the top. Version 1 (#219)
+// is the first page's document with the rest in its "pages" array. Every page has a "name".
 struct Sheet {
     QString name;
     Document doc;
     bool operator==(const Sheet&) const = default;
 };
-QByteArray sheetsToJson(const std::vector<Sheet>& sheets);
+QByteArray sheetsToJson(const std::vector<Sheet>& sheets);    // version 2
+QByteArray sheetsToJsonV1(const std::vector<Sheet>& sheets);  // for Penzene 1.4 and earlier
 std::vector<Sheet> sheetsFromJson(const QByteArray& data);  // empty if it isn't a .penz file
 
 inline bool operator==(const Atom& x, const Atom& y) {

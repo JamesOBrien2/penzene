@@ -17,17 +17,24 @@ structure formats above.
 
 ## The .penz format
 
-A `.penz` file is JSON: `{"format": "penzene", "version": 1, "atoms": [...], "bonds": [...], ...}`,
-with arrows, texts, fills, brackets and drawing settings alongside. It's written to be read back
-exactly. The [JSON Schema](_static/penz.schema.json) describes every field. Here is the smallest
-drawing, a single bond:
+A `.penz` file is JSON: `{"format": "penzene", "version": 2, "pages": [...]}`, each page holding
+its `name`, `atoms`, `bonds`, arrows, texts, fills, brackets and page size. The drawing settings
+every page shares (`style`, `carbonLabels` and the like) sit at the top, beside `pages`; a page
+whose setting differs keeps its own. It's written to be read back exactly. The
+[JSON Schema](_static/penz.schema.json) describes every field. Here is the smallest drawing, a
+single bond:
 
 ```json
 {
     "format": "penzene",
-    "version": 1,
-    "atoms": [{"x": 0, "y": 0, "z": 6}, {"x": 14.4, "y": 0, "z": 8}],
-    "bonds": [{"a": 0, "b": 1, "order": 1}]
+    "version": 2,
+    "pages": [
+        {
+            "name": "Page 1",
+            "atoms": [{"x": 0, "y": 0, "z": 6}, {"x": 14.4, "y": 0, "z": 8}],
+            "bonds": [{"a": 0, "b": 1, "order": 1}]
+        }
+    ]
 }
 ```
 
@@ -35,9 +42,12 @@ Coordinates are points, x to the right and y down, with bonds 14.4 points long. 
 referred to by their index in `atoms`. A field left out takes its default: carbon, no charge,
 a single bond and so on. Two atoms share at most one bond.
 
-A file with several pages keeps the first page as the document itself, with its tab's `name`,
-and the others in order in `pages`: each one a `.penz` document of its own, with a `name`.
-Versions of Penzene from before pages open the first page.
+Version 1, which Penzene 1.x writes, is one page's drawing with the format, version and settings
+beside its atoms: `{"format": "penzene", "version": 1, "atoms": [...], "bonds": [...], ...}`. Its
+other pages (Penzene 1.2 on) follow in its `pages` array, each a version 1 document of its own.
+The clipboard and the drawing inside exported SVG, PNG and PDF files are still version 1.
+Penzene 1.4 and earlier can't open version 2, so Save As offers **Penzene 1 (single page)**: a
+version 1 file, which those versions open (before 1.2, the first page only).
 
 ### Versions
 
