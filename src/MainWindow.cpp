@@ -76,6 +76,9 @@
 static const char* kMolMime = "chemical/x-mdl-molfile";
 static const char* kPenzMime = "application/x-penzene";  // full fidelity: arrows and text too
 static const char* kWinPngMime = "application/x-qt-windows-mime;value=\"PNG\"";  // the clipboard format Office reads
+#ifdef Q_OS_WIN
+static const char* kEmfMime = "image/x-emf";  // offered to Office as CF_ENHMETAFILE by EmfClipboard
+#endif
 static const char* kDocsUrl = "https://penzene.readthedocs.io/";
 static const QSize kExampleIcon(168, 84);
 
@@ -142,6 +145,12 @@ static QString uiStyle(const Theme& t) {
 MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_, this)) {
 #ifdef Q_OS_MACOS
     static ChemDrawPasteboard chemDraw;  // registers itself with Qt, once
+#endif
+#ifdef Q_OS_WIN
+    // Registers itself with Qt's Windows plugin (only there: it asserts on any other), once. Never
+    // deleted: its destructor would look for the plugin after QApplication has gone.
+    static const bool emf = QGuiApplication::platformName() == "windows" && new EmfClipboard;
+    Q_UNUSED(emf);
 #endif
     undoGroup_ = new QUndoGroup(this);
     undoGroup_->addStack(undo_);
@@ -1078,6 +1087,9 @@ void MainWindow::copy() {
     Document doc = canvas_->selectedSubset();
     if (doc.empty() || !confirmStructure(doc, tr("Copy"), tr("Copy Anyway"))) return;
     auto* mime = new QMimeData;
+#ifdef Q_OS_WIN
+    mime->setData(kEmfMime, renderEmf(doc, exportOptions()));  // vector for Word and PowerPoint; first, ahead of the bitmap
+#endif
     // The PNG as exported, so the drawing in its text chunk survives: Qt re-encodes an image
     // it converts itself and drops it. The image stays for apps that only read a bitmap.
     const QByteArray png = renderPng(doc, exportOptions());
@@ -2127,3 +2139,30 @@ moves off, so you can keep typing.</p>
                               "<p>Chemistry by RDKit. GUI by Qt.</p>").arg(PENZENE_BUILD));
     });
 }
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+bool EmfClipboard::canConvertFromMime(const FORMATETC& format, const QMimeData* mime) const {
+    return format.cfFormat == CF_ENHMETAFILE && (format.tymed & TYMED_ENHMF) && mime->hasFormat(kEmfMime);
+}
+
+bool EmfClipboard::convertFromMime(const FORMATETC& format, const QMimeData* mime, STGMEDIUM* medium) const {
+    if (!canConvertFromMime(format, mime)) return false;
+    const QByteArray emf = mime->data(kEmfMime);
+    HENHMETAFILE handle = SetEnhMetaFileBits(UINT(emf.size()), reinterpret_cast<const BYTE*>(emf.constData()));
+    if (!handle) return false;
+    medium->tymed = TYMED_ENHMF;  // a fresh handle each time: the receiver frees it
+    medium->hEnhMetaFile = handle;
+    medium->pUnkForRelease = nullptr;
+    return true;
+}
+
+QList<FORMATETC> EmfClipboard::formatsForMime(const QString& type, const QMimeData*) const {
+    if (type != kEmfMime) return {};
+    return {FORMATETC{CF_ENHMETAFILE, nullptr, DVASPECT_CONTENT, -1, TYMED_ENHMF}};
+}
+#endif

@@ -80,6 +80,9 @@ QImage renderImage(const Document& doc, const ExportOptions& options = {});
 QByteArray renderPng(const Document& doc, const ExportOptions& options = {});  // drawing in a text chunk
 QByteArray renderSvg(const Document& doc, const ExportOptions& options = {});
 QByteArray renderPdf(const Document& doc, const ExportOptions& options = {});  // vector, drawing attached
+#ifdef Q_OS_WIN
+QByteArray renderEmf(const Document& doc, const ExportOptions& options = {});  // Enhanced Metafile, for Office
+#endif
 QPainterPath arrowPath(const Arrow& a);
 QFont labelFont(const DrawingStyle& s, double scale = 1);
 constexpr int kTabSpaces = 8;  // text tab stops, in spaces: the canvas and the text dialog agree

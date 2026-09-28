@@ -2823,3 +2823,47 @@ TEST_CASE("orbital tools are named alike: s orbital, p orbital, lobe, hybrid orb
     names.sort();
     CHECK(names == QStringList{"hybrid orbital", "lobe", "p orbital", "s orbital"});
 }
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+TEST_CASE("Windows copy offers an Enhanced Metafile for Office (#394)") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->shortcut() == QKeySequence::Copy) a->trigger();
+    const QMimeData* mime = QApplication::clipboard()->mimeData();
+    const QByteArray emf = mime->data("image/x-emf");
+    REQUIRE(emf.size() > qsizetype(sizeof(ENHMETAHEADER)));
+    HENHMETAFILE handle = SetEnhMetaFileBits(UINT(emf.size()), reinterpret_cast<const BYTE*>(emf.constData()));
+    REQUIRE(handle);
+    ENHMETAHEADER header{};
+    REQUIRE(GetEnhMetaFileHeader(handle, sizeof header, &header));
+    CHECK(header.iType == EMR_HEADER);
+    CHECK(header.dSignature == ENHMETA_SIGNATURE);
+    CHECK(header.nBytes == DWORD(emf.size()));
+    CHECK(header.rclBounds.right > header.rclBounds.left);  // something was drawn
+    CHECK(header.rclBounds.bottom > header.rclBounds.top);
+    CHECK(header.rclFrame.right > 0);
+    DeleteEnhMetaFile(handle);
+
+    // What Office asks the clipboard for: CF_ENHMETAFILE, handed over as a metafile handle.
+    // The converter needs Qt's Windows plugin, so this part is skipped offscreen (as on CI).
+    if (QGuiApplication::platformName() != "windows") return;
+    EmfClipboard converter;
+    const QList<FORMATETC> formats = converter.formatsForMime("image/x-emf", mime);
+    REQUIRE(formats.size() == 1);
+    CHECK(formats[0].cfFormat == CF_ENHMETAFILE);
+    CHECK(converter.canConvertFromMime(formats[0], mime));
+    STGMEDIUM medium{};
+    REQUIRE(converter.convertFromMime(formats[0], mime, &medium));
+    CHECK(medium.tymed == TYMED_ENHMF);
+    CHECK(GetEnhMetaFileBits(medium.hEnhMetaFile, 0, nullptr) == UINT(emf.size()));
+    DeleteEnhMetaFile(medium.hEnhMetaFile);
+}
+#endif

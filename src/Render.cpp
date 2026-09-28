@@ -19,6 +19,7 @@
 #include <limits>
 #include <numbers>
 #include <tuple>
+#include <utility>
 #include <numeric>
 
 // Presets. Values come from the ChemDraw stationery (.cds) of the same name;
@@ -422,6 +423,9 @@ static QColor mix(const QColor& c, double white) {
                             c.blueF() + (1 - c.blueF()) * white, c.alphaF());
 }
 
+// The Enhanced Metafile engine (Windows copy, #394); GDI has no gradients either.
+constexpr auto kEmfEngine = QPaintEngine::Type(QPaintEngine::User + 1);
+
 // Each phase filled for its look, then outlined.
 static void drawOrbital(QPainter& p, const Arrow& a, const QColor& color, double lineWidth) {
     QPainterPathStroker outline;
@@ -436,7 +440,7 @@ static void drawOrbital(QPainter& p, const Arrow& a, const QColor& color, double
         } else if (a.look == OrbitalLook::Gradient) {
             const QColor inner = main ? mix(color, 0.75) : QColor(Qt::white), outer = main ? color : mix(color, 0.7);
             const QPointF focus = r.center() + light * 0.3 * radius;
-            if (p.paintEngine() && p.paintEngine()->type() == QPaintEngine::Pdf) {
+            if (p.paintEngine() && (p.paintEngine()->type() == QPaintEngine::Pdf || p.paintEngine()->type() == kEmfEngine)) {
                 // ponytail: Qt writes gradient fills with an uncoloured pattern colour space, which
                 // Apple's PDF renderer (Preview, Keynote, Word on macOS) skips; so PDFs get 16 vector
                 // bands instead. Drop this once Qt writes a plain /Pattern colour space.
@@ -1050,3 +1054,160 @@ Chrome chrome(const Theme& t) {
     // The Catppuccin themes keep their own colours.
     return {t.surface.lighter(125), t.text, t.dark ? t.surface.lighter(145) : t.surface.darker(110)};
 }
+
+#ifdef Q_OS_WIN
+// Enhanced Metafile, for Office on Windows (#394). Qt has no EMF paint device, so this engine
+// replays the export as GDI paths into a metafile DC: vector throughout, text as glyph outlines.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+namespace {
+constexpr double kTwipsPerPoint = 20;  // MM_TWIPS: 1/1440 inch, y up
+
+// GDI has no alpha: a translucent colour is mixed with white, as it shows on a page.
+COLORREF gdiColor(const QColor& c) {
+    const double a = c.alphaF();
+    auto mixed = [a](int v) { return BYTE(std::lround(v * a + 255 * (1 - a))); };
+    return RGB(mixed(c.red()), mixed(c.green()), mixed(c.blue()));
+}
+
+class EmfEngine : public QPaintEngine {
+public:
+    explicit EmfEngine(HDC dc) : QPaintEngine(AllFeatures), dc_(dc) {}
+    bool begin(QPaintDevice*) override { return true; }
+    bool end() override { return true; }
+    Type type() const override { return kEmfEngine; }
+    void updateState(const QPaintEngineState& s) override {
+        if (s.state() & DirtyPen) pen_ = s.pen();
+        if (s.state() & DirtyBrush) brush_ = s.brush();
+        if (s.state() & DirtyTransform) transform_ = s.transform();
+    }
+    void drawPixmap(const QRectF&, const QPixmap&, const QRectF&) override {}  // the renderer draws none
+    using QPaintEngine::drawPolygon;
+    void drawPolygon(const QPointF* points, int count, PolygonDrawMode mode) override {
+        QPainterPath path;
+        path.setFillRule(mode == WindingMode ? Qt::WindingFill : Qt::OddEvenFill);
+        path.addPolygon(QPolygonF(QList<QPointF>(points, points + count)));
+        if (mode != PolylineMode) {
+            path.closeSubpath();
+            return drawPath(path);
+        }
+        const QBrush brush = std::exchange(brush_, QBrush());
+        drawPath(path);
+        brush_ = brush;
+    }
+    void drawPath(const QPainterPath& path) override {
+        const bool fill = brush_.style() != Qt::NoBrush && brush_.color().alpha() > 0;
+        const bool stroke = pen_.style() != Qt::NoPen && pen_.color().alpha() > 0;
+        if (!fill && !stroke) return;
+        const QPainterPath mapped = transform_.map(path);
+        auto at = [&](int i) {
+            const QPainterPath::Element e = mapped.elementAt(i);
+            return POINT{LONG(std::lround(e.x)), LONG(-std::lround(e.y))};
+        };
+        BeginPath(dc_);
+        POINT start{}, last{};
+        auto closeIfClosed = [&] {
+            if (start.x == last.x && start.y == last.y) CloseFigure(dc_);
+        };
+        for (int i = 0; i < mapped.elementCount(); ++i) {
+            const QPainterPath::Element e = mapped.elementAt(i);
+            if (e.isMoveTo()) {
+                if (i > 0) closeIfClosed();
+                start = last = at(i);
+                MoveToEx(dc_, start.x, start.y, nullptr);
+            } else if (e.isLineTo()) {
+                last = at(i);
+                LineTo(dc_, last.x, last.y);
+            } else if (e.isCurveTo() && i + 2 < mapped.elementCount()) {
+                const POINT curve[3] = {at(i), at(i + 1), at(i + 2)};
+                PolyBezierTo(dc_, curve, 3);
+                last = curve[2];
+                i += 2;
+            }
+        }
+        closeIfClosed();
+        EndPath(dc_);
+        SetPolyFillMode(dc_, path.fillRule() == Qt::WindingFill ? WINDING : ALTERNATE);
+        HGDIOBJ brush = fill ? HGDIOBJ(CreateSolidBrush(gdiColor(brush_.color()))) : GetStockObject(NULL_BRUSH);
+        HGDIOBJ pen = stroke ? HGDIOBJ(gdiPen()) : GetStockObject(NULL_PEN);
+        HGDIOBJ oldBrush = SelectObject(dc_, brush), oldPen = SelectObject(dc_, pen);
+        if (fill && stroke) StrokeAndFillPath(dc_);
+        else if (fill) FillPath(dc_);
+        else StrokePath(dc_);
+        SelectObject(dc_, oldBrush);
+        SelectObject(dc_, oldPen);
+        if (fill) DeleteObject(brush);
+        if (stroke) DeleteObject(pen);
+    }
+
+private:
+    HPEN gdiPen() {
+        const double scale = pen_.isCosmetic() ? 1 : std::sqrt(std::abs(transform_.determinant()));
+        const double width = std::max(1.0, pen_.widthF() * scale);
+        DWORD style = PS_GEOMETRIC | PS_SOLID;
+        std::vector<DWORD> dashes;
+        if (pen_.style() != Qt::SolidLine) {  // Qt's dashes are in pen widths
+            style = PS_GEOMETRIC | PS_USERSTYLE;
+            for (qreal d : pen_.dashPattern()) dashes.push_back(DWORD(std::max(1.0, std::round(d * width))));
+        }
+        style |= pen_.capStyle() == Qt::RoundCap ? PS_ENDCAP_ROUND : pen_.capStyle() == Qt::SquareCap ? PS_ENDCAP_SQUARE : PS_ENDCAP_FLAT;
+        style |= pen_.joinStyle() == Qt::RoundJoin ? PS_JOIN_ROUND : pen_.joinStyle() == Qt::BevelJoin ? PS_JOIN_BEVEL : PS_JOIN_MITER;
+        SetMiterLimit(dc_, FLOAT(pen_.miterLimit()), nullptr);
+        const LOGBRUSH brush{BS_SOLID, gdiColor(pen_.color()), 0};
+        return ExtCreatePen(style, DWORD(std::lround(width)), &brush, DWORD(dashes.size()), dashes.empty() ? nullptr : dashes.data());
+    }
+    HDC dc_;
+    QPen pen_;
+    QBrush brush_;
+    QTransform transform_;
+};
+
+class EmfDevice : public QPaintDevice {
+public:
+    EmfDevice(HDC dc, QSize size) : engine_(dc), size_(size) {}
+    QPaintEngine* paintEngine() const override { return &engine_; }
+
+protected:
+    int metric(PaintDeviceMetric m) const override {
+        switch (m) {
+        case PdmWidth: return size_.width();
+        case PdmHeight: return size_.height();
+        case PdmWidthMM: return qRound(size_.width() * 25.4 / 1440);
+        case PdmHeightMM: return qRound(size_.height() * 25.4 / 1440);
+        case PdmDpiX: case PdmDpiY: case PdmPhysicalDpiX: case PdmPhysicalDpiY: return 1440;
+        case PdmDepth: return 32;
+        case PdmNumColors: return std::numeric_limits<int>::max();
+        default: return QPaintDevice::metric(m);
+        }
+    }
+
+private:
+    mutable EmfEngine engine_;
+    QSize size_;
+};
+}  // namespace
+
+QByteArray renderEmf(const Document& doc, const ExportOptions& o) {
+    const auto [r, s] = exportFrame(doc, o);
+    const QSizeF points = r.size() * s;
+    const RECT frame{0, 0, LONG(std::lround(points.width() * 2540 / 72)), LONG(std::lround(points.height() * 2540 / 72))};  // 0.01 mm
+    HDC dc = CreateEnhMetaFileW(nullptr, nullptr, &frame, L"Penzene\0Structure\0");
+    if (!dc) return {};
+    SetMapMode(dc, MM_TWIPS);
+    SetBkMode(dc, TRANSPARENT);  // dash gaps stay clear
+    {
+        EmfDevice device(dc, (points * kTwipsPerPoint).toSize().expandedTo({1, 1}));
+        QPainter p(&device);
+        paintFrame(p, doc, o, kTwipsPerPoint);
+    }
+    HENHMETAFILE emf = CloseEnhMetaFile(dc);
+    if (!emf) return {};
+    QByteArray bytes(qsizetype(GetEnhMetaFileBits(emf, 0, nullptr)), Qt::Uninitialized);
+    GetEnhMetaFileBits(emf, UINT(bytes.size()), reinterpret_cast<BYTE*>(bytes.data()));
+    DeleteEnhMetaFile(emf);
+    return bytes;
+}
+#endif

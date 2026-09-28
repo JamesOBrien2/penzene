@@ -12,6 +12,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Copy as SMILES and to_smiles() keep stereo groups: a drawing with &1 or or1 centres is written as CXSMILES (`C[C@H](N)C(=O)O |&1:1|`), one without them as plain SMILES as before.
 - **Stereo groups**: Tag a stereocentre abs, &1 or or1 from its right-click menu, as in ChemDraw; drawn beside the centre and kept in MOL V3000 and ChemDraw files, and read from CXSMILES. <!-- icon: atom -->
 - Open reads MDL RD files (.rdf): the steps open as one scheme, left to right, with a step's product carrying on as the next step's reactant.
+- On Windows, Copy also offers an Enhanced Metafile, so Word and PowerPoint paste a vector picture that stays sharp when scaled.
 - Preferences can check structures before export and copy: unassigned stereocentres and valence errors are listed first, with Export Anyway or Cancel.
 - The Python API reference gives the version that added each function, class, method and property, and the stability policy spells out that argument names, argument order and return types are stable while repr() strings and exact image bytes are not.
 

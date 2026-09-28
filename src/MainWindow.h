@@ -16,6 +16,19 @@ struct ChemDrawPasteboard : QUtiMimeConverter {
     QList<QByteArray> convertFromMime(const QString&, const QVariant& data, const QString&) const override;
 };
 #endif
+#ifdef Q_OS_WIN
+#include <QVariant>
+#include <QWindowsMimeConverter>
+// The copied drawing's Enhanced Metafile (image/x-emf) as CF_ENHMETAFILE, which Office pastes as a vector picture.
+struct EmfClipboard : QWindowsMimeConverter {
+    bool canConvertFromMime(const FORMATETC& format, const QMimeData* mime) const override;
+    bool convertFromMime(const FORMATETC& format, const QMimeData* mime, STGMEDIUM* medium) const override;
+    QList<FORMATETC> formatsForMime(const QString& type, const QMimeData*) const override;
+    bool canConvertToMime(const QString&, IDataObject*) const override { return false; }
+    QVariant convertToMime(const QString&, IDataObject*, QMetaType) const override { return {}; }
+    QString mimeForFormat(const FORMATETC&) const override { return {}; }
+};
+#endif
 
 class Canvas;
 class QLabel;
