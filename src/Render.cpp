@@ -238,6 +238,7 @@ static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HS
     }
 }
 
+constexpr double kWedgeReach = 1.3;  // how far a wedge's wide corner may stretch to meet a neighbouring bond
 static void drawBond(QPainter& p, const Document& doc, const Bond& b, const DrawingStyle& st, const std::vector<int>& degree,
                      const std::vector<bool>& labeled, const BondsAt& at, const std::vector<QPointF>& gaps = {}) {
     QPointF pa = doc.atoms[b.a].pos, pb = doc.atoms[b.b].pos;
@@ -253,10 +254,26 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     QPointF e = labeled[b.b] ? pb - d * trim(b.b, -d) : pb;
     if (QPointF::dotProduct(e - a, d) <= 0) return;  // labels so close that the trimmed ends cross (#496)
 
+    // A wedge's wide end at a bare atom meets its other bonds rather than jutting past them: each
+    // side runs to the line of the bond nearest it on that side, if that is close to its own end.
+    QPointF corner[2] = {e + n * st.wedgeWidth / 2, e - n * st.wedgeWidth / 2};
+    if ((b.stereo == BondStereo::Wedge || b.stereo == BondStereo::Hash) && !labeled[b.b])
+        for (int s : {0, 1}) {
+            const QPointF side = corner[s] - a;
+            double back = -2;
+            QPointF u;
+            for (int nb : neighbors(doc, at, b.b)) {
+                const QPointF v = unit(doc.atoms[nb].pos - pb);
+                if (nb != b.a && QPointF::dotProduct(v, n) * (s ? -1 : 1) > 1e-6 && QPointF::dotProduct(v, -d) > back)
+                    back = QPointF::dotProduct(v, -d), u = v;
+            }
+            if (back < -1 || std::abs(cross(side, u)) < 1e-9) continue;
+            const double t = cross(pb - a, u) / cross(side, u);
+            if (t > 0.5 && t < kWedgeReach) corner[s] = a + side * t;
+        }
     if (b.stereo == BondStereo::Wedge) {
-        QPolygonF tri{a, e + n * st.wedgeWidth / 2, e - n * st.wedgeWidth / 2};
         p.setBrush(p.pen().color());
-        p.drawPolygon(tri);
+        p.drawPolygon(QPolygonF{a, corner[0], e, corner[1]});
         p.setBrush(Qt::NoBrush);
         return;
     }
@@ -265,9 +282,7 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         int count = std::max(3, int(L / st.hashSpacing));
         for (int k = 0; k <= count; ++k) {
             double t = double(k) / count;
-            QPointF c = a + (e - a) * t;
-            double w = st.wedgeWidth / 2 * t;
-            p.drawLine(c + n * w, c - n * w);
+            p.drawLine(a + (corner[0] - a) * t, a + (corner[1] - a) * t);
         }
         return;
     }
