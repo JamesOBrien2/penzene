@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- An aldehyde's C=O and a chain-end C=C sit toward their neighbour, so the single bond meets the double bond cleanly (#542).
 - Arrowhead sizes go out to ChemDraw files and come back, at the size ChemDraw draws them (#538).
 
 ## 1.7.0 (2026-09-29)

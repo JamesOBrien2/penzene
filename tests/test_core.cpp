@@ -1166,6 +1166,39 @@ TEST_CASE("a bond between two labels closer than their clearances isn't drawn ov
     CHECK(render(d) == alone);
 }
 
+TEST_CASE("an aldehyde's or chain-end alkene's double bond sits toward its one neighbour; a ketone's is centred (#542)") {
+    // A zigzag chain from the origin; the last atom is `end`, doubly bonded to the one before it.
+    auto chain = [](int atoms, int end, std::vector<QPointF> extra = {}) {
+        Document d;
+        for (int i = 0; i < atoms; ++i) {
+            Atom a;
+            a.pos = QPointF(i * 12.47, i % 2 ? -7.2 : 0);
+            if (i == atoms - 1) a.z = end;
+            d.atoms.push_back(a);
+            if (i) d.bonds.push_back({i - 1, i, i == atoms - 1 ? 2 : 1});
+        }
+        for (QPointF p : extra) {  // more atoms on the double bond's inner end
+            Atom a;
+            a.pos = p;
+            d.atoms.push_back(a);
+            d.bonds.push_back({atoms - 2, int(d.atoms.size()) - 1});
+        }
+        return d;
+    };
+    auto towardNeighbour = [](const Document& d) {  // the second line on the side of the atom before
+        const Bond& b = d.bonds.back();
+        const QPointF n = perp(unit(d.atoms[b.b].pos - d.atoms[b.a].pos)) * doubleBondSide(d, b);
+        return QPointF::dotProduct(n, d.atoms[0].pos - d.atoms[b.a].pos) > 0;
+    };
+    CHECK(doubleBondSide(chain(3, 8), chain(3, 8).bonds.back()) != 0);  // CC=O
+    CHECK(towardNeighbour(chain(3, 8)));
+    CHECK(towardNeighbour(chain(3, 6)));  // CC=C
+    CHECK(towardNeighbour(chain(4, 8)));  // CCC=O
+    CHECK(doubleBondSide(chain(2, 8), chain(2, 8).bonds.back()) == 0);  // C=O
+    const Document ketone = chain(3, 8, {{12.47, -21.6}});  // CC(C)=O
+    CHECK(doubleBondSide(ketone, ketone.bonds[1]) == 0);
+}
+
 TEST_CASE("a wedge's wide end lies along the bonds beside it, not past them or into a double bond (#509)") {
     const QPointF b(14.4, 0);
     const double k = 20;
