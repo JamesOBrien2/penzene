@@ -453,11 +453,17 @@ struct LabelNode {
     int headCharge = 0;  // the charge on the fragment's atom under the label (RDKit drops it)
 };
 
+// The colours the file gives atoms and bonds, by node position: RDKit reads none of them.
+struct FileInks {
+    std::vector<std::pair<QPointF, QColor>> atoms;
+    std::vector<std::tuple<QPointF, QPointF, QColor>> bonds;  // from, to
+};
+
 // Arrows, free text and label nodes from the CDXML itself; RDKit only reads the
 // molecules. Returns the label nodes and how many bonds each node id has.
 // ponytail: plain lines, brackets, shapes and binary .cdx graphics are skipped.
 static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& doc, QHash<int, int>& bondCount,
-                                               std::vector<QPointF>& lonePairs) {
+                                               std::vector<QPointF>& lonePairs, FileInks& inks) {
     QXmlStreamReader r(xml);
     double scale = kBondLength / 30;  // CDXML's default BondLength
     struct Open { QString tag; int label = -1; };  // label: index into `labels` for label <n>s
@@ -473,6 +479,16 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     bool superscript = false;  // the current style run is superscript (face 64)
     auto inside = [&](const char* tag) {
         return std::any_of(stack.begin(), stack.end(), [&](const Open& o) { return o.tag == tag; });
+    };
+    // Colour numbers: 0 and 1 are the hard-wired black and white, the file's table starts at 2
+    // (its first two entries are the page background and default ink).
+    // Black is the ink (it follows the theme), so it comes back as no colour.
+    std::vector<QColor> table;
+    QHash<int, QPointF> nodePos;
+    auto ink = [&](const QXmlStreamAttributes& at) {
+        const int i = at.value("color").toInt() - 2;
+        const QColor c = i >= 0 && i < int(table.size()) ? table[i] : QColor();
+        return c == QColor(Qt::black) ? QColor() : c;
     };
     static const QStringList labelTypes{"Fragment",    "Nickname",  "GenericNickname", "Unspecified", "Anonymous",
                                         "AnonymousAlternativeGroup", "NamedAlternativeGroup", "Variable"};
@@ -504,22 +520,32 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         if (tok != QXmlStreamReader::StartElement) continue;
         const QString tag = r.name().toString();
         const auto at = r.attributes();
-        auto pushArrow = [&](const Arrow& a) {
+        auto pushArrow = [&](Arrow a) {
+            a.color = ink(at);
             doc.arrows.push_back(a);
             arrowZ.push_back(at.hasAttribute("Z") ? at.value("Z").toDouble() : std::numeric_limits<double>::quiet_NaN());
         };
         const int parentLabel = stack.empty() ? -1 : stack.back().label;
         stack.push_back({tag});
+        const bool inLabel = std::any_of(stack.begin(), stack.end(), [](const Open& o) { return o.label >= 0; });
+        if (tag == "color")
+            table.push_back(QColor(qRound(at.value("r").toDouble() * 255), qRound(at.value("g").toDouble() * 255),
+                                   qRound(at.value("b").toDouble() * 255)));  // 8-bit, as the colours are chosen
         if (tag == "CDXML") {
             const double bond = at.hasAttribute("BondLength") ? std::max(1.0, at.value("BondLength").toDouble()) : 30;
             scale = kBondLength / bond;
             // The file's labels relative to its bonds, which may be far from our styles' (#203).
             if (at.hasAttribute("LabelSize")) doc.labelRatio = at.value("LabelSize").toDouble() / bond;
         } else if (tag == "b") {
-            ++bondCount[at.value("B").toInt()], ++bondCount[at.value("E").toInt()];
+            const int from = at.value("B").toInt(), to = at.value("E").toInt();
+            ++bondCount[from], ++bondCount[to];
+            if (const QColor c = ink(at); c.isValid() && !inLabel && nodePos.contains(from) && nodePos.contains(to))
+                inks.bonds.push_back({nodePos[from], nodePos[to], c});
         } else if (tag == "n") {
             if (at.hasAttribute("Z")) moleculeZ = std::min(moleculeZ, at.value("Z").toDouble());
             const int id = at.value("id").toInt();
+            nodePos[id] = point(at.value("p"));
+            if (const QColor c = ink(at); c.isValid() && !inLabel) inks.atoms.push_back({nodePos[id], c});
             for (const Open& o : stack)  // an atom inside a label's fragment (its link out isn't one)
                 if (o.label >= 0 && at.value("NodeType") != u"ExternalConnectionPoint") {
                     LabelNode& l = labels[o.label];
@@ -537,6 +563,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             labelText = parentLabel;
         }
         if (tag == "s") superscript = at.value("face").toInt() & 64;
+        if (tag == "s" && text && !text->color.isValid()) text->color = ink(at);
         if (tag == "s" && (text || labelText >= 0) && at.hasAttribute("size")) {
             const double rel = at.value("size").toDouble() * scale / 10;  // 10 pt: the default (ACS) label size
             if (rel > 0) (text ? text->scale : labels[labelText].textScale) = rel;  // size="0" would save unopenable (#316)
@@ -547,6 +574,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             if (box.size() == 4) p.setX(std::min(box[0].toDouble(), box[2].toDouble()) * scale);
             doc.texts.push_back({p, {}});
             text = &doc.texts.back();
+            text->color = ink(at);
         } else if (tag == "graphic") {
             // Plain lines, boxes and ellipses (not filled ones), and orbitals. A graphic ChemDraw
             // marks SupersededBy is the old copy of an <arrow> read above: skip it.
@@ -727,7 +755,18 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         Document graphics;
         QHash<int, int> bondCount;
         std::vector<QPointF> lonePairs;
-        placeLabels(doc, chemDrawGraphics(data, graphics, bondCount, lonePairs), bondCount);
+        FileInks inks;
+        placeLabels(doc, chemDrawGraphics(data, graphics, bondCount, lonePairs, inks), bondCount);
+        auto atomAt = [&](QPointF p) {
+            for (int i = 0; i < int(doc.atoms.size()); ++i)
+                if (QLineF(doc.atoms[i].pos, p).length() < 0.6) return i;
+            return -1;
+        };
+        for (const auto& [p, c] : inks.atoms)
+            if (const int i = atomAt(p); i >= 0) doc.atoms[i].color = c;
+        for (const auto& [from, to, c] : inks.bonds)
+            for (Bond& b : doc.bonds)
+                if ((atomAt(from) == b.a && atomAt(to) == b.b) || (atomAt(from) == b.b && atomAt(to) == b.a)) b.color = c;
         for (QPointF lp : lonePairs) {  // onto the nearest atom
             int best = -1;
             double bestDist = 1.4 * kBondLength;
@@ -1057,10 +1096,35 @@ QByteArray toCdxml(const Document& doc) {
     const QPointF shift(std::round(std::max(306 - box.center().x(), 72 - box.left())), std::round(72 - box.top()));  // whole points: coordinates keep their decimals
     auto pt = [shift](QPointF p) { p += shift; return QString("%1 %2").arg(p.x(), 0, 'f', 2).arg(p.y(), 0, 'f', 2); };
     auto pt3 = [&](QPointF p) { return pt(p) + " 0"; };
+    // The colour table starts at colour 2 (0 and 1 are black and white); its first two entries are
+    // ChemDraw's page background and default ink, so white and black lead it and the colours used follow.
+    std::vector<QColor> palette{Qt::white, Qt::black};
+    auto colorNo = [&](const QColor& c) {
+        auto it = std::find(palette.begin(), palette.end(), c);
+        if (it == palette.end()) it = palette.insert(palette.end(), c);
+        return int(it - palette.begin()) + 2;
+    };
+    auto paint = [&](const QColor& c) {
+        if (c.isValid()) w.writeAttribute("color", QString::number(colorNo(c)));
+    };
+    for (const Atom& a : doc.atoms) if (a.color.isValid()) colorNo(a.color);
+    for (const Bond& b : doc.bonds) if (b.color.isValid()) colorNo(b.color);
+    for (const Text& tx : doc.texts) if (tx.color.isValid()) colorNo(tx.color);
+    for (const Arrow& a : doc.arrows) if (a.color.isValid()) colorNo(a.color);
     w.writeStartElement("CDXML");
     w.writeAttribute("BondLength", QString::number(kBondLength));
     if (doc.labelRatio > 0) w.writeAttribute("LabelSize", QString::number(doc.labelRatio * kBondLength));
     w.writeAttribute("CreationProgram", "Penzene");
+    if (palette.size() > 2) {
+        w.writeStartElement("colortable");
+        for (const QColor& c : palette) {
+            w.writeEmptyElement("color");
+            w.writeAttribute("r", QString::number(c.redF(), 'f', 4));
+            w.writeAttribute("g", QString::number(c.greenF(), 'f', 4));
+            w.writeAttribute("b", QString::number(c.blueF(), 'f', 4));
+        }
+        w.writeEndElement();
+    }
     w.writeStartElement("page");
     w.writeAttribute("id", QString::number(id++));
     // Stacking (Z, and document order for readers without it): arrows sent behind the molecule first.
@@ -1096,6 +1160,7 @@ QByteArray toCdxml(const Document& doc) {
                 if (a.kind == ArrowKind::RoundedBox) w.writeAttribute("RectangleType", "RoundEdge");
             }
             if (a.dashed) w.writeAttribute("LineType", "Dashed");
+            paint(a.color);
             w.writeEndElement();
             return;
         }
@@ -1123,6 +1188,7 @@ QByteArray toCdxml(const Document& doc) {
         }
         if (a.kind != ArrowKind::Retro) w.writeAttribute("ArrowheadType", "Solid");
         if (a.crossed) w.writeAttribute("NoGo", "Cross");
+        paint(a.color);
         if (std::abs(a.bend) > 1e-6 && a.kind != ArrowKind::Equilibrium) {
             // The circle through both ends and the arc's midpoint (bend off the chord, as read back).
             const QPointF d = a.to - a.from, mid = (a.from + a.to) / 2;
@@ -1164,6 +1230,7 @@ QByteArray toCdxml(const Document& doc) {
             w.writeAttribute("id", QString::number(node[i]));
             w.writeAttribute("Z", QString::number(z));
             w.writeAttribute("p", pt(a.pos));
+            paint(a.color);
             if (a.label.isEmpty()) {
                 element(a);
                 w.writeEndElement();
@@ -1228,7 +1295,10 @@ QByteArray toCdxml(const Document& doc) {
             }
             w.writeStartElement("t");
             w.writeAttribute("p", pt(a.pos + QPointF(-3, 4)));
-            w.writeTextElement("s", a.label);
+            w.writeStartElement("s");
+            paint(a.color);
+            w.writeCharacters(a.label);
+            w.writeEndElement();
             w.writeEndElement();
             w.writeEndElement();
         }
@@ -1245,6 +1315,7 @@ QByteArray toCdxml(const Document& doc) {
             else if (b.order > 1) w.writeAttribute("Order", QString::number(b.order));
             if (display[int(b.stereo)]) w.writeAttribute("Display", display[int(b.stereo)]);
             if (side[int(b.position)]) w.writeAttribute("DoublePosition", side[int(b.position)]);
+            paint(b.color);
             w.writeEndElement();
         }
         w.writeEndElement();
@@ -1253,10 +1324,12 @@ QByteArray toCdxml(const Document& doc) {
         w.writeStartElement("t");
         w.writeAttribute("id", QString::number(id++));
         w.writeAttribute("p", pt(t.pos));
+        paint(t.color);  // on the text and its runs: the binary CDX keeps only the text's
         // One run per script, as ChemDraw styles them: subscript face 32, superscript 64.
         auto run = [&](Script s, const QString& chars) {
             w.writeStartElement("s");
             w.writeAttribute("size", QString::number(10 * t.scale));  // 10 pt: the ACS label size
+            paint(t.color);
             if (s != Script::Base) w.writeAttribute("face", s == Script::Sub ? "32" : "64");
             w.writeCharacters(chars);
             w.writeEndElement();

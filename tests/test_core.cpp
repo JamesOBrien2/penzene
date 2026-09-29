@@ -797,6 +797,41 @@ TEST_CASE("CDXML export reads back: molecules, wedges, arrows and text (#29)") {
     CHECK(chem::cdxmlToCdx("<not closed").isEmpty());
 }
 
+TEST_CASE("ChemDraw save and reopen keeps custom colours (#426)") {
+    Document d = *chem::fromSmiles("CCO");
+    const QColor red(255, 0, 0), blue(0, 0, 255), green(0, 128, 0), orange(255, 128, 0);
+    for (auto& a : d.atoms)
+        if (a.z == 8) a.color = red;
+    d.bonds[0].color = blue;  // C-C
+    d.texts.push_back({{0, 60}, "note"});
+    d.texts.back().color = green;
+    d.arrows.push_back({{60, 0}, {100, 0}});
+    d.arrows.back().color = orange;
+    d.arrows.push_back({{60, 20}, {100, 20}});  // left as the ink
+    for (const QByteArray& file : {chem::toCdxml(d), chem::toCdx(d)}) {
+        if (file.isEmpty()) continue;  // a build without binary CDX
+        auto back = chem::fromChemDraw(file);
+        REQUIRE(back);
+        int coloured = 0;
+        for (const auto& a : back->atoms) {
+            CHECK(a.color == (a.z == 8 ? red : QColor()));
+            coloured += a.color.isValid();
+        }
+        CHECK(coloured == 1);
+        int blueBonds = 0;
+        for (const auto& b : back->bonds) blueBonds += b.color == blue;
+        CHECK(blueBonds == 1);
+        REQUIRE(back->texts.size() == 1);
+        CHECK(back->texts[0].color == green);
+        REQUIRE(back->arrows.size() == 2);
+        CHECK(back->arrows[0].color == orange);
+        CHECK(!back->arrows[1].color.isValid());
+    }
+    // ChemDraw takes the table's first two entries as the page and the ink: white, then black, then the colours used.
+    CHECK(chem::toCdxml(d).simplified().replace("> <", "><").contains(R"(<colortable><color r="1.0000" g="1.0000" b="1.0000"/><color r="0.0000" g="0.0000" b="0.0000"/><color r="1.0000" g="0.0000" b="0.0000"/>)"));
+    CHECK(!chem::toCdxml(*chem::fromSmiles("CCO")).contains("colortable"));  // nothing coloured, nothing written
+}
+
 TEST_CASE("a real ChemDraw file survives CDXML → CDX → CDXML (#185)") {
     QFile f(QString(PENZENE_TEST_DATA) + "/scheme.cdxml");
     REQUIRE(f.open(QIODevice::ReadOnly));
