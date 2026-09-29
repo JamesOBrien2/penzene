@@ -322,7 +322,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     auto* massLayout = new QVBoxLayout(massCard);
     massLayout->setContentsMargins(12, 12, 12, 12);
     ion_ = new QComboBox;
-    ion_->addItems({"[M]", "[M+H]⁺", "[M+Na]⁺", "[M−H]⁻"});
+    ion_->addItems({"[M]⁺•", "[M+H]⁺", "[M+Na]⁺", "[M−H]⁻"});
     ion_->setCurrentIndex(1);
     ion_->setAccessibleName(tr("Ion"));  // macOS reads the current item; Windows needs a name
     spectrum_ = new SpectrumView;

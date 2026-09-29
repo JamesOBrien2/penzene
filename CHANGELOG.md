@@ -10,6 +10,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - File → Import → Peptide Sequence… (and `--peptide` on the command line) draws a peptide from `GFLS` or `Gly-Phe-Leu-Ser` (#503).
 - Alt+↑/↓ bends the selected curved arrow and Arrange → Flip Curved Arrow turns it over; Arrange → Add Arrow / Add Text After Selection place them without the mouse (#549).
 - With [M] chosen, the Mass Spec panel lists the EI ions to look for, from the groups drawn: M − 15 for a methyl, m/z 91 for a benzyl, McLafferty and more (#554).
+- The Mass Spec panel's [M] is now M⁺• for a neutral molecule, one electron lighter, as the spectrometer sees it (#556).
 - The Mass Spec panel copies an HRMS line for the supporting information ("[M+H]+ calcd for C9H9O4 181.0495") and exports the isotope pattern as CSV (#398).
 - The keyboard can pick atoms and bonds one by one (`G`) and draw a curved arrow between two of them (`>` … `>`) (#541).
 - An aldehyde's C=O and a chain-end C=C sit toward their neighbour, so the single bond meets the double bond cleanly (#542).

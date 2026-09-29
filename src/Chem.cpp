@@ -1591,6 +1591,7 @@ std::vector<Peak> isotopePattern(const Document& doc, Ion ion) {
         if (a->getIsotope()) pattern[0].mz += isotopeMass(a->getAtomicNum(), a->getIsotope());
         else ++natural[a->getAtomicNum()];
     }
+    if (ion == Ion::M && charge == 0) charge = 1;  // a neutral molecule is seen as M+•, one electron lighter (#556)
     if (ion == Ion::MplusH) ++natural[1], ++charge;
     if (ion == Ion::MplusNa) ++natural[11], ++charge;
     if (ion == Ion::MminusH) --natural[1], --charge;
