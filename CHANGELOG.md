@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Structure → Align and Distribute → Center on Page moves the selection, or the whole drawing, to the middle of the page, keeping its spacing (Undo puts it back).
 - Pinch two fingers on a trackpad to zoom the drawing (right-click the canvas for Zoom In and Out), and the grid and rulers are on by default (View turns either off, and Penzene remembers).
 - Rotate in 3D is a tool in the Select flyout: drag a molecule out of the page and it keeps its stereochemistry. The two Turn Over commands are removed (Shift+Alt+drag and the arrow keys still turn it).
 - View → Show Implicit Hydrogens is removed: labels always show their implicit hydrogens (OH, NH₂).

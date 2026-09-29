@@ -956,6 +956,19 @@ void Canvas::alignSelection(Align edge) {
     commit(next, tr("Align"));
 }
 
+void Canvas::centerOnPage() {
+    const QRectF page = pageRect(doc_);
+    QSet<int> atoms = selectedAtoms_, arrows = selectedArrows_, texts = selectedTexts_;
+    if (atoms.isEmpty() && arrows.isEmpty() && texts.isEmpty())
+        atoms = range(0, int(doc_.atoms.size())), arrows = range(0, int(doc_.arrows.size())),
+        texts = range(0, int(doc_.texts.size()));
+    const QRectF box = documentBounds(selectedSubset());
+    if (page.isEmpty() || box.isEmpty()) return;
+    Document next = doc_;
+    applyTransform(next, atoms, arrows, texts, QTransform::fromTranslate(page.center().x() - box.center().x(), page.center().y() - box.center().y()));
+    commit(next, tr("Center on Page"));
+}
+
 // Equal gaps between neighbouring objects; the outermost two stay put.
 void Canvas::distributeSelection(bool horizontal) {
     auto ps = pieces(doc_, selectedAtoms_, selectedArrows_, selectedTexts_);

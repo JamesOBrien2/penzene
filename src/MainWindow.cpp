@@ -1964,6 +1964,9 @@ void MainWindow::buildMenus() {
     arrange->addSeparator();
     arrange->addAction(tr("Distribute &Horizontally"), this, [this] { canvas_->distributeSelection(true); });
     arrange->addAction(tr("Distribute &Vertically"), this, [this] { canvas_->distributeSelection(false); });
+    arrange->addSeparator();
+    arrange->addAction(tr("Center on &Page"), this, [this] { canvas_->centerOnPage(); })
+        ->setStatusTip(tr("Move the selection, or the whole drawing, to the middle of the page"));
     structure->addSeparator();
     structure->addAction(tr("Add Explicit &Hydrogens"), this, [this] {
         canvas_->commit(chem::addHydrogens(canvas_->document()), tr("Add hydrogens"));
