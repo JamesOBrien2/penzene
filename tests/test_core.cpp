@@ -2026,3 +2026,46 @@ TEST_CASE("a spectrum's legend takes the emptier top corner and the sticks keep 
     CHECK(l.scale == Catch::Approx((200 - 80 - 10) / (0.8 * 200)));
     clear(l, both);
 }
+
+TEST_CASE(".penz schema describes every field the app writes (#573)") {
+    QFile f(QString(PENZENE_TEST_DATA) + "/../../docs/_static/penz.schema.json");
+    REQUIRE(f.open(QIODevice::ReadOnly));
+    const QJsonObject defs = QJsonDocument::fromJson(f.readAll()).object()["$defs"].toObject();
+    auto properties = [&](const QString& def) { return defs[def].toObject()["properties"].toObject(); };
+    auto described = [](const QJsonObject& written, const QJsonObject& schema) {
+        for (const QString& key : written.keys()) {
+            INFO(key.toStdString());
+            CHECK(schema.contains(key));
+        }
+    };
+    Document d = *chem::fromSmiles("C[C@H](N)C(=O)O");  // every feature, so every field is written
+    Atom& a = d.atoms[1];
+    a.charge = 1, a.label = "Me", a.color = Qt::red, a.map = 1, a.lonePairs = 1, a.radicals = 1, a.partial = 1;
+    a.isotope = 13, a.stereoGroup = StereoGroup::And, a.stereoGroupNumber = 1;
+    d.bonds[0].stereo = BondStereo::Wedge, d.bonds[0].position = BondPosition::Left, d.bonds[0].color = Qt::red;
+    Arrow arrow;
+    arrow.to = {50, 0}, arrow.bend = 5, arrow.color = Qt::red, arrow.dashed = arrow.behind = arrow.crossed = true;
+    arrow.look = OrbitalLook::Shaded, arrow.head = 2, arrow.fromAt = {0, -1}, arrow.toAt = {1, 2};
+    d.arrows.push_back(arrow);
+    Text text{{0, 40}, "1"};
+    text.scale = 2, text.color = Qt::red, text.compound = true, text.anchor = 0;
+    d.texts.push_back(text);
+    d.fills.push_back({{0, 1, 2}, Qt::red});
+    d.brackets.push_back({{0, 1}, false, "n"});
+    d.style = "ACS 1996", d.carbonLabels = Document::CarbonLabels::All, d.labelRatio = 0.5;
+    d.showStereo = d.showAtomNumbers = d.showShifts = d.aromaticCircles = true;
+    d.page = "A4", d.aromaticCircleOverrides = {{0, 1, 2}};
+    const QJsonObject root = QJsonDocument::fromJson(d.toJson()).object();
+    QJsonObject page = properties("page");
+    page["format"] = page["version"] = true;
+    described(root, page);
+    for (const auto& [key, def] : {std::pair{"atoms", "atom"}, {"bonds", "bond"}, {"arrows", "arrow"}, {"texts", "text"},
+                                   {"fills", "fill"}, {"brackets", "bracket"}}) {
+        REQUIRE(!root[key].toArray().isEmpty());
+        for (const auto& o : root[key].toArray()) described(o.toObject(), properties(def));
+    }
+    described(root["page"].toObject(), page["page"].toObject()["properties"].toObject());
+    QJsonObject v2 = properties("v2");
+    v2["format"] = true;
+    described(QJsonDocument::fromJson(sheetsToJson({{"A", d}, {"B", d}})).object(), v2);
+}
