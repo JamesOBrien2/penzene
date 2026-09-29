@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Opening a file that has been moved or deleted says it doesn't exist, instead of that it isn't a structure file, and Open Recent drops it (unless its whole folder is missing, as on a drive that isn't plugged in).
 - Python: `read` of a missing file raises `FileNotFoundError` (still a `ValueError`, so existing `except ValueError` keeps working), and an unknown `style` names the styles it accepts.
 - Quitting on macOS no longer aborts inside Qt: the ChemDraw clipboard converter is left for Qt to delete, as it expects.
 - Dragging an atom with Predicted NMR Shifts on no longer looks the shifts up again on every mouse move: they depend on the bonds, so the last answer is reused until the structure changes (#476).

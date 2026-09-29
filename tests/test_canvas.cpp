@@ -3167,3 +3167,24 @@ TEST_CASE("the predicted shifts view is saved and drawn with its notice (#403)")
     CHECK(shown.bottom() > plain.bottom() + 12);  // the nmrshiftdb2 notice (three lines), under the drawing
     CHECK(shown.width() > plain.width());
 }
+
+TEST_CASE("Open says when a file is missing, not that it isn't a structure (#484)") {
+    App app;
+    MainWindow w;
+    QString shown;
+    QTimer::singleShot(0, &w, [&] {
+        if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            shown = box->text();
+            box->button(QMessageBox::Ok)->click();
+        }
+    });
+    const QString gone = QDir::tempPath() + "/penzene-gone-488.mol", unmounted = "/no/such/dir/gone.mol";
+    QSettings().setValue("recentFiles", QStringList{gone, unmounted});
+    CHECK_FALSE(w.openFile(unmounted));
+    CHECK(shown.contains("doesn't exist"));
+    // Open Recent forgets a file missing from a folder that is there, and keeps one whose folder isn't (#488).
+    QTimer::singleShot(0, &w, [] { qobject_cast<QMessageBox*>(QApplication::activeModalWidget())->button(QMessageBox::Ok)->click(); });
+    CHECK_FALSE(w.openFile(gone));
+    CHECK(w.recentFiles() == QStringList{unmounted});
+    QSettings().remove("recentFiles");
+}
