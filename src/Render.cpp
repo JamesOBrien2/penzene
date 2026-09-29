@@ -251,6 +251,7 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     };
     QPointF a = labeled[b.a] ? pa + d * trim(b.a, d) : pa;
     QPointF e = labeled[b.b] ? pb - d * trim(b.b, -d) : pb;
+    if (QPointF::dotProduct(e - a, d) <= 0) return;  // labels so close that the trimmed ends cross (#496)
 
     if (b.stereo == BondStereo::Wedge) {
         QPolygonF tri{a, e + n * st.wedgeWidth / 2, e - n * st.wedgeWidth / 2};
