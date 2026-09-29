@@ -98,6 +98,7 @@ public:
     std::optional<QPointF> nextPlace() const;
     void addArrowAfter();
     void addTextAfter();
+    void numberCompounds();  // a bold number under each selected molecule (or every one) that has none (#504)
 
 signals:
     void documentChanged();

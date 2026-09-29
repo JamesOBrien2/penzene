@@ -95,7 +95,9 @@
         "y": {"type": "number"},
         "text": {"type": "string"},
         "scale": {"type": "number", "exclusiveMinimum": 0, "default": 1},
-        "color": {"$ref": "#/$defs/color"}
+        "color": {"$ref": "#/$defs/color"},
+        "compound": {"type": "boolean", "description": "A compound number: bold, renumbered in scheme order as the drawing is edited."},
+        "anchor": {"$ref": "#/$defs/index", "description": "The atom of the molecule a compound number belongs to; it moves with the molecule."}
       }
     },
     "fill": {
