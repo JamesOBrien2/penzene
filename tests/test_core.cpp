@@ -769,11 +769,12 @@ TEST_CASE("CDXML export reads back: molecules, wedges, arrows and text (#29)") {
     REQUIRE(back);
     CHECK(chem::toSmiles(*back) == smiles);  // stereo survives
     REQUIRE(back->arrows.size() == 2);
-    CHECK(QLineF(back->arrows[0].from, doc.arrows[0].from).length() < 0.1);
+    const QPointF moved = back->atoms[0].pos - doc.atoms[0].pos;  // onto the page (#443)
+    CHECK(QLineF(back->arrows[0].from - moved, doc.arrows[0].from).length() < 0.1);
     CHECK(std::abs(back->arrows[1].bend - 10) < 0.1);  // the arc comes back on the same side
     REQUIRE(back->texts.size() == 1);
     CHECK(back->texts[0].text == "L-alanine");
-    for (size_t i = 0; i < doc.atoms.size(); ++i) CHECK(QLineF(back->atoms[i].pos, doc.atoms[i].pos).length() < 0.1);
+    for (size_t i = 0; i < doc.atoms.size(); ++i) CHECK(QLineF(back->atoms[i].pos - moved, doc.atoms[i].pos).length() < 0.1);
 
     Document r = *chem::fromSmiles("CC");
     edit::applyLabel(r, 1, "R", true);
@@ -931,12 +932,13 @@ TEST_CASE("shapes and lines: saved, exported and read from CDXML (#107)") {
     auto cdx = chem::fromChemDraw(chem::toCdxml(doc));
     REQUIRE(cdx);
     REQUIRE(cdx->arrows.size() == 3);
+    auto box = [](const Arrow& a) { return QRectF(a.from, a.to).normalized(); };
+    const QPointF moved = box(cdx->arrows[0]).topLeft() - box(doc.arrows[0]).topLeft();  // onto the page (#443)
     for (size_t k = 0; k < 3; ++k) {
         INFO(k);
         CHECK(cdx->arrows[k].kind == doc.arrows[k].kind);
         CHECK(cdx->arrows[k].dashed == doc.arrows[k].dashed);
-        CHECK(QRectF(cdx->arrows[k].from, cdx->arrows[k].to).normalized() ==
-              QRectF(doc.arrows[k].from, doc.arrows[k].to).normalized());
+        CHECK(box(cdx->arrows[k]) == box(doc.arrows[k]).translated(moved));
     }
 }
 
@@ -1001,6 +1003,14 @@ TEST_CASE("a CDXML file that starts with a byte order mark opens (#244)") {
     auto doc = chem::fromChemDraw("\xEF\xBB\xBF" + cdxml);
     REQUIRE(doc);
     CHECK(chem::toSmiles(*doc) == "CC(=O)Oc1ccccc1C(=O)O");
+}
+
+TEST_CASE("a CDXML export sits inside the page, not at its top-left corner (#443)") {
+    const QRectF box = documentBounds(*chem::fromChemDraw(chem::toCdxml(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"))));
+    CHECK(box.center().x() == Catch::Approx(306).margin(1));  // across a US Letter page
+    CHECK(box.top() == Catch::Approx(72).margin(1));          // an inch down
+    Document wide = *chem::fromSmiles("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC");
+    CHECK(documentBounds(*chem::fromChemDraw(chem::toCdxml(wide))).left() == Catch::Approx(72).margin(1));  // wider than the page
 }
 
 TEST_CASE("separate ions and molecules from SMILES don't overlap") {
@@ -1533,11 +1543,12 @@ TEST_CASE("orbitals: kind, look and colour survive .penz and CDXML (#204)") {
     auto back = chem::fromChemDraw(chem::toCdxml(*doc));
     REQUIRE(back);
     REQUIRE(back->arrows.size() == 3);
+    const QPointF moved = back->atoms[0].pos - doc->atoms[0].pos;  // onto the page (#443)
     for (int i = 0; i < 3; ++i) {
         CHECK(back->arrows[i].kind == doc->arrows[i].kind);
         CHECK(back->arrows[i].look == doc->arrows[i].look);
         CHECK(back->arrows[i].behind == doc->arrows[i].behind);
-        CHECK(len(back->arrows[i].to - doc->arrows[i].to) < 0.05);
+        CHECK(len(back->arrows[i].to - moved - doc->arrows[i].to) < 0.05);
     }
 }
 
