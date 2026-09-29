@@ -4,6 +4,7 @@
 #include "Document.h"
 
 #include <QString>
+#include <map>
 #include <vector>
 
 namespace edit {
@@ -24,8 +25,13 @@ QPointF snapToAnchor(const Document& doc, std::array<int, 2> at, QPointF p, QPoi
 void followAnchors(const Document& before, Document& after);
 std::vector<int> moleculeOf(const Document& doc, int atom);  // the atoms bonded to it, directly or not, itself included
 // Compound numbers (#504) in scheme order: rows top to bottom, left to right along each. A number's
-// suffix is kept, and suffixed numbers that shared a number (2a, 2b) still share one.
-void renumberCompounds(Document& doc);
+// suffix is kept, and suffixed numbers that shared a number (2a, 2b) still share one. `from`: the
+// numbers taken on the pages before (#569); returns them with this page's added.
+struct CompoundCount {
+    int last = 0;
+    std::map<QString, int> series;  // a suffixed number's old number: its new one
+};
+CompoundCount renumberCompounds(Document& doc, CompoundCount from = {});
 // A compound number in `after` that wasn't moved itself follows the foot of its molecule from `before`.
 void followNumbers(const Document& before, Document& after);
 int atomAtOrNew(Document& doc, QPointF p, int z = 6);

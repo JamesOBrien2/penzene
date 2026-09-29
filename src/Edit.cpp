@@ -135,7 +135,7 @@ static QRectF atomBox(const Document& doc, const std::vector<int>& atoms) {
     return QRectF(lo, hi);
 }
 
-void renumberCompounds(Document& doc) {
+CompoundCount renumberCompounds(Document& doc, CompoundCount count) {
     struct Item {
         int text;
         double x, y;
@@ -151,8 +151,8 @@ void renumberCompounds(Document& doc) {
         std::stable_sort(items.begin() + row, items.begin() + end, [](const Item& a, const Item& b) { return a.x < b.x; });
         row = end;
     }
-    int next = 0;
-    std::map<QString, int> series;  // a suffixed number's old number: its new one
+    int& next = count.last;
+    auto& series = count.series;
     for (const Item& item : items) {
         QString& text = doc.texts[item.text].text;
         int digits = 0;
@@ -161,6 +161,7 @@ void renumberCompounds(Document& doc) {
         const int n = suffix.isEmpty() ? ++next : series.count(old) ? series[old] : (series[old] = ++next);
         text = QString::number(n) + suffix;
     }
+    return count;
 }
 
 void followNumbers(const Document& before, Document& after) {

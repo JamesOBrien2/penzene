@@ -57,6 +57,7 @@
 #include <QToolButton>
 #include <QTextBrowser>
 #include <QWidgetAction>
+#include <QUndoGroup>
 #include <QUndoStack>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -3430,6 +3431,67 @@ TEST_CASE("pages: tabs along the bottom, each with its own drawing and undo hist
         QApplication::processEvents();
         other.grab().save(QString::fromUtf8(shot));
     }
+}
+
+TEST_CASE("compound numbers run on across the pages, in page order (#569)") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    auto* tabs = w.findChild<QTabBar*>("pageTabs");
+    QAction *number = nullptr, *undo = nullptr;
+    for (auto* a : w.findChildren<QAction*>()) {
+        if (a->text() == "&Number Compounds") number = a;
+        if (a->shortcut() == QKeySequence::Undo) undo = a;
+    }
+    REQUIRE(number);
+    REQUIRE(undo);
+    auto numbers = [&](int page) {
+        const auto sheets = w.sheets();
+        QStringList out;
+        for (const Text& t : sheets[page].doc.texts) out << t.text;
+        return out.join(' ').toStdString();
+    };
+    canvas->setDocumentSilently(*chem::fromSmiles("CCO"));
+    number->trigger();
+    w.findChild<QToolButton*>("addPage")->click();
+    canvas->setDocumentSilently(*chem::fromSmiles("c1ccccc1"));
+    number->trigger();
+    CHECK(numbers(0) == "1");
+    CHECK(numbers(1) == "2");  // on from page 1
+
+    tabs->setCurrentIndex(0);
+    Document more = canvas->document();
+    more.append(*chem::fromSmiles("N"), {20 * kBondLength, 0});
+    canvas->commit(more, "Draw");
+    number->trigger();
+    CHECK(numbers(0) == "1 2");
+    CHECK(numbers(1) == "3");  // an earlier page's new number moves the later ones on
+    tabs->setCurrentIndex(1);
+    undo->trigger();  // page 2's own history: back to before its number
+    CHECK(numbers(1).empty());
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->shortcut() == QKeySequence::Redo) a->trigger();
+    CHECK(numbers(1) == "3");  // redone as it is now, not as it was saved
+
+    QUndoStack* history = w.findChild<QUndoGroup*>()->activeStack();
+    const int steps = history->count();
+    canvas->commit(canvas->document(), "Nothing");
+    CHECK(history->count() == steps);  // numbered on from page 1 already: no change, no step
+
+    tabs->moveTab(1, 0);  // benzene's page first
+    CHECK(numbers(0) == "1");
+    CHECK(numbers(1) == "2 3");
+
+    Document shared = w.sheets()[0].doc;  // 1a on one page, 1b on the next: still one compound
+    shared.texts[0].text = "1a";
+    tabs->setCurrentIndex(0);
+    canvas->commit(shared, "Edit");
+    tabs->setCurrentIndex(1);
+    Document next = canvas->document();
+    next.texts[0].text = "1b";
+    canvas->commit(next, "Edit");
+    CHECK(numbers(0) == "1a");
+    CHECK(numbers(1) == "1b 2");
 }
 
 TEST_CASE("opening a file while on a later page doesn't touch freed undo stacks (#359)") {

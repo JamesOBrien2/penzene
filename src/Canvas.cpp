@@ -300,7 +300,7 @@ void Canvas::commit(const Document& next, const QString& text) {
     Document after = next;
     followAnchors(doc_, after);  // whatever moved the atoms, curved arrows on them come along (#498)
     followNumbers(doc_, after);  // and compound numbers, which stay in scheme order (#504)
-    renumberCompounds(after);
+    renumberCompounds(after, compoundStart_);
     if (after == doc_) return;  // nothing changed: no undo step, and the file stays clean
     undo_->push(new Snapshot(this, doc_, after, text));
 }
@@ -1694,7 +1694,7 @@ void Canvas::numberCompounds() {
         next.texts.push_back({{box.center().x(), box.bottom() + 1.3 * kBondLength}, "", 1, {}, true, i});
     }
     if (next.texts.size() == doc_.texts.size()) return;
-    renumberCompounds(next);
+    renumberCompounds(next, compoundStart_);
     for (size_t k = doc_.texts.size(); k < next.texts.size(); ++k) {  // centred under the molecule
         Text& t = next.texts[k];
         t.pos.rx() -= textPath(t, documentStyle(next)).boundingRect().center().x() - t.pos.x();

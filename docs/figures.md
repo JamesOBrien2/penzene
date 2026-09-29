@@ -83,7 +83,8 @@ things after it as products.
 **Arrange → Number Compounds** puts a bold number under each selected molecule (or every molecule)
 that has none. The numbers follow their molecules and stay in scheme order, row by row and left to
 right, as you edit: insert a step and the later numbers move up. Edit one to add a letter; **2a** and
-**2b** keep sharing their number.
+**2b** keep sharing their number. They run on across the pages in tab order, so a scheme split over
+pages keeps one sequence.
 
 ```{image} _static/scheme-light.png
 :alt: A reaction scheme: salicylic acid to aspirin with Ac₂O and H₂SO₄ over the arrow

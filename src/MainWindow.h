@@ -135,6 +135,7 @@ private:
     class QTabBar* pageTabs_;
     void setPages(const std::vector<Sheet>& sheets);  // New, Open: every page replaced, no history
     void showPage(int i);
+    void renumberPages();  // compound numbers run on from page to page (#569)
     void addPage();
     void renamePage(int i);
     void deletePage(int i);
