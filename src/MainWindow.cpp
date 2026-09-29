@@ -387,8 +387,10 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
         pages_.insert(pages_.begin() + to, moved);
         page_ = pageTabs_->currentIndex();
         pagesEdited_ = true;
+        renumberPages();
         updateTitle();
     });
+    connect(canvas_, &Canvas::documentChanged, this, &MainWindow::renumberPages);  // an edit, an undo, another page
     connect(pageTabs_, &QTabBar::tabBarDoubleClicked, this, &MainWindow::renamePage);
     connect(pageTabs_, &QWidget::customContextMenuRequested, this, [this](QPoint at) {
         const int i = pageTabs_->tabAt(at);
@@ -834,6 +836,22 @@ void MainWindow::setPages(const std::vector<Sheet>& sheets) {
     updateTitle();
 }
 
+// Each page's numbers start where the page before's stop. Only the page on the canvas is edited,
+// so the others are renumbered here, outside their undo history: numbers follow the pages.
+void MainWindow::renumberPages() {
+    edit::CompoundCount count;
+    for (int i = 0; i < int(pages_.size()); ++i) {
+        if (i != page_) {
+            count = edit::renumberCompounds(pages_[i].doc, count);
+            continue;
+        }
+        canvas_->setCompoundStart(count);
+        Document doc = canvas_->document();
+        count = edit::renumberCompounds(doc, count);
+        if (!(doc == canvas_->document())) canvas_->setDocumentSilently(doc);  // stale after an undo or an earlier page's edit
+    }
+}
+
 void MainWindow::showPage(int i) {
     if (i < 0 || i >= int(pages_.size())) return;
     pages_[page_].doc = canvas_->document();
@@ -896,6 +914,7 @@ void MainWindow::deletePage(int i) {
         pageTabs_->setCurrentIndex(page_);
     }
     pagesEdited_ = true;
+    renumberPages();
     updateTitle();
 }
 
