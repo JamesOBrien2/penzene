@@ -83,7 +83,7 @@ struct Profile {
 std::optional<Profile> profile(const Document& doc);  // nullopt if empty or invalid
 // The mass spectrum's isotope pattern for an ion of everything in `doc` (all fragments, like the
 // formula), from natural abundances; drawn isotopes (13C) count as that isotope only.
-enum class Ion { M, MplusH, MplusNa, MminusH };
+enum class Ion { M, MplusH, MplusNa, MminusH };  // M: M+• of a neutral molecule, else the drawn ion
 struct Peak {
     double mz, intensity;  // intensity: the tallest is 100
 };

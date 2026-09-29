@@ -620,7 +620,7 @@ TEST_CASE("isotope pattern: aspirin's ions and a chlorine M+2 (#397)") {
     };
     const auto m = chem::isotopePattern(aspirin, chem::Ion::M);
     REQUIRE_FALSE(m.empty());
-    CHECK(std::abs(m[0].mz - chem::properties(aspirin)->exactMass) < 1e-6);
+    CHECK(std::abs(m[0].mz - 180.0417) < 0.0001);  // M+•: the neutral 180.0423 less an electron (#556)
 
     const auto mh = chem::isotopePattern(aspirin, chem::Ion::MplusH);
     REQUIRE(mh.size() > 2);
@@ -646,7 +646,7 @@ TEST_CASE("isotope pattern: aspirin's ions and a chlorine M+2 (#397)") {
     // A drawn 13C is that isotope only: one mass unit up, and no more 13C to spread.
     const auto labelled = chem::isotopePattern(*chem::fromSmiles("[13CH4]"), chem::Ion::M);
     REQUIRE_FALSE(labelled.empty());
-    CHECK(std::abs(labelled[0].mz - 17.0347) < 0.0001);
+    CHECK(std::abs(labelled[0].mz - 17.0341) < 0.0001);
     CHECK(labelled.size() == 1);
     CHECK(chem::isotopePattern(Document{}, chem::Ion::M).empty());
     CHECK(chem::isotopePattern(*chem::fromSmiles("[Na+].[Cl-]"), chem::Ion::MminusH).empty());
