@@ -18,6 +18,7 @@
 #include <GraphMol/inchi.h>
 #include <GraphMol/FileParsers/FileParsers.h>
 #include <GraphMol/FileParsers/FileWriters.h>
+#include <GraphMol/FileParsers/SequenceParsers.h>
 #include <GraphMol/MolOps.h>
 #include <GraphMol/atomic_data.h>
 #include <GraphMol/new_canon.h>
@@ -385,6 +386,34 @@ std::optional<Document> fromSmiles(const std::string& smiles) {
         return std::nullopt;
     }
     if (!mol) return std::nullopt;
+    layout(*mol);
+    RDKit::Chirality::wedgeMolBonds(*mol, &mol->getConformer());
+    return fromRDKit(*mol);
+}
+
+std::optional<Document> fromSequence(const QString& sequence) {
+    static const QHash<QString, QChar> codes{
+        {"ala", 'A'}, {"arg", 'R'}, {"asn", 'N'}, {"asp", 'D'}, {"cys", 'C'}, {"gln", 'Q'}, {"glu", 'E'},
+        {"gly", 'G'}, {"his", 'H'}, {"ile", 'I'}, {"leu", 'L'}, {"lys", 'K'}, {"met", 'M'}, {"phe", 'F'},
+        {"pro", 'P'}, {"ser", 'S'}, {"thr", 'T'}, {"trp", 'W'}, {"tyr", 'Y'}, {"val", 'V'}};
+    // Three-letter codes: Gly-Phe or GLY PHE; a lone one only as written (Gly), since GLY is also Gly-Leu-Tyr.
+    const QStringList words = sequence.split(QRegularExpression("[\\s-]+"), Qt::SkipEmptyParts);
+    const bool three = !words.isEmpty() && std::all_of(words.begin(), words.end(), [&](const QString& w) {
+        return codes.contains(w.toLower()) && (words.size() > 1 || w == w.left(1).toUpper() + w.mid(1).toLower());
+    });
+    QString letters;
+    if (three)
+        for (const QString& w : words) letters += codes[w.toLower()];
+    else
+        letters = words.join("");  // one-letter, lower case for D residues
+    if (letters.isEmpty()) return std::nullopt;
+    std::unique_ptr<RWMol> mol;
+    try {
+        mol.reset(RDKit::SequenceToMol(letters.toStdString(), true, true));  // lower case: D
+    } catch (...) {
+        return std::nullopt;
+    }
+    if (!mol || !mol->getNumAtoms()) return std::nullopt;
     layout(*mol);
     RDKit::Chirality::wedgeMolBonds(*mol, &mol->getConformer());
     return fromRDKit(*mol);

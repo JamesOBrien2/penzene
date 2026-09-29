@@ -11,6 +11,8 @@ namespace chem {
 std::optional<Document> fromSmiles(const std::string& smiles);
 std::optional<Document> fromMolBlock(const std::string& block);
 std::optional<Document> fromInchi(const std::string& inchi);
+// A peptide from its sequence: one-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser).
+std::optional<Document> fromSequence(const QString& sequence);
 // ChemDraw .cdxml (molecules, arrows, text) or binary .cdx (molecules only,
 // where RDKit was built with ChemDraw support).
 std::optional<Document> fromChemDraw(const QByteArray& data);

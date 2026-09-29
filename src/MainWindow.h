@@ -105,6 +105,7 @@ private:
     void exportImage();
     void exportDescriptors();
     void importSmiles();
+    void importSequence();
     void importName();
     void print();
     bool copy();  // false when nothing was copied (empty, or the structure warning cancelled)

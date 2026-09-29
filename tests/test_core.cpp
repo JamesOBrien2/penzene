@@ -134,6 +134,23 @@ TEST_CASE(".penz rejects bad arrows; v0.1 files still load") {
     CHECK(old->arrows.empty());
 }
 
+TEST_CASE("a peptide from its one- or three-letter sequence (#503)") {
+    const auto gfls = chem::fromSequence("GFLS");
+    REQUIRE(gfls);
+    CHECK(chem::properties(*gfls)->formula == "C20H30N4O6");
+    for (const char* same : {"Gly-Phe-Leu-Ser", "GLY PHE LEU SER", " G F L S "}) {
+        INFO(same);
+        const auto doc = chem::fromSequence(same);
+        REQUIRE(doc);
+        CHECK(chem::toSmiles(*doc) == chem::toSmiles(*gfls));
+    }
+    CHECK(chem::properties(*chem::fromSequence("Gly"))->formula == "C2H5NO2");  // glycine, not Gly-Leu-Tyr
+    CHECK(chem::properties(*chem::fromSequence("GLY"))->formula == "C17H25N3O5");  // Gly-Leu-Tyr
+    CHECK(chem::toSmiles(*chem::fromSequence("a")) != chem::toSmiles(*chem::fromSequence("A")));  // D- and L-alanine
+    CHECK_FALSE(chem::fromSequence(""));
+    CHECK_FALSE(chem::fromSequence("G1S"));
+}
+
 TEST_CASE("macrocycles and peptides are laid out cleanly (#502)") {
     // A cyclophane's bridges leave their rings well clear of the ring bonds, not squeezed against one.
     const Document phane = *chem::fromSmiles("C1Cc2ccc(cc2)CCc2ccc1cc2");  // [2.2]paracyclophane

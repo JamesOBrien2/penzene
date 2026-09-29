@@ -219,6 +219,8 @@ add_test(NAME descriptors COMMAND penzene --descriptors "CC(=O)Oc1ccccc1C(=O)O" 
          --columns name,formula,tpsa)
 set_tests_properties(descriptors PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
                      PASS_REGULAR_EXPRESSION "name,formula,tpsa\n\"?structure\"?,C9H8O4,63\\.60\naspirin,C9H8O4,63\\.60")
+add_test(NAME descriptors-peptide COMMAND penzene --descriptors Gly-Phe-Leu-Ser --peptide --columns formula)
+set_tests_properties(descriptors-peptide PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen PASS_REGULAR_EXPRESSION "formula\nC20H30N4O6")
 target_compile_definitions(penzene_tests PRIVATE PENZENE_TEST_DATA="${CMAKE_SOURCE_DIR}/tests/data")
 endif()
 endif()
