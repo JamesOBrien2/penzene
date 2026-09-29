@@ -1855,6 +1855,7 @@ TEST_CASE("predicted spectra: one stick per set of equivalent atoms, for the cho
     for (size_t k = 1; k < carbon.size(); ++k) CHECK(carbon[k - 1].ppm >= carbon[k].ppm);
     for (const auto& k : carbon)
         for (int a : k.atoms) CHECK(a >= 3);  // the drawing's own indices, so a stick can light its atoms
+    CHECK(chem::nmrSticks(d, false).size() == carbon.size() + 2);  // the whole page: no stick shared across molecules
     const auto proton = chem::nmrSticks(d, true, toluene);
     int hydrogens = 0;
     for (const auto& k : proton) hydrogens += k.count;
@@ -1867,7 +1868,7 @@ TEST_CASE("predicted spectra: one stick per set of equivalent atoms, for the cho
     for (const auto& k : chem::nmrSticks(d, true, {0, 1, 2})) split << QString::number(k.count) + k.multiplicity();
     split.sort();
     CHECK(split == QStringList{"1s", "2q", "3t"});
-    CHECK(proton.back().multiplicity() == "s");  // toluene's CH3: no H next door
+    CHECK(chem::nmrSticks(d, true, {3}).at(0).multiplicity() == "s");  // toluene's CH3: no H next door
     CHECK(chem::nmrSticks(*chem::fromSmiles("C1CCCCC1"), true).at(0).multiplicity() == "s");  // equivalent H don't split each other
     const QString h = chem::nmrLine(d, true, {0, 1, 2});  // for the SI (#566)
     CHECK(h.startsWith("1H NMR (predicted) δ "));
@@ -1981,13 +1982,16 @@ TEST_CASE("a spectrum's legend takes the emptier top corner and the sticks keep 
     clear(l, both);
 }
 
-TEST_CASE("a molecule's spectrum doesn't depend on the others on the page") {
-    Document d = *chem::fromSmiles("CCO");
-    const auto alone = chem::nmrSticks(d, false, {0, 1, 2});
-    const int c = d.addAtom({100, 0});  // a five-bonded carbon elsewhere: no valid molecule
+TEST_CASE("a molecule's predicted shifts don't depend on the others on the page (#575)") {
+    const Document ethanol = *chem::fromSmiles("CCO");
+    Document d;
+    const int c = d.addAtom({100, 0});  // first, a five-bonded carbon: no valid molecule
     for (int k = 0; k < 5; ++k) d.bonds.push_back({c, d.addAtom({100.0 + k, 10})});
-    const auto sticks = chem::nmrSticks(d, false, {0, 1, 2});
-    REQUIRE(sticks.size() == alone.size());
+    d.append(ethanol);  // atoms 6-8
+    const auto alone = chem::nmrSticks(ethanol, false);
+    const auto sticks = chem::nmrSticks(d, false, {6, 7, 8});
     REQUIRE(sticks.size() == 2);
+    REQUIRE(sticks.size() == alone.size());
     for (size_t k = 0; k < sticks.size(); ++k) CHECK(sticks[k].ppm == alone[k].ppm);
+    CHECK(chem::predictShifts(d).size() == chem::predictShifts(ethanol).size());  // the canvas's shift labels too
 }

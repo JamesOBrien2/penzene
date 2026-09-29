@@ -2336,12 +2336,40 @@ std::vector<std::vector<std::string>> hoseCodes(const std::string& molBlock, int
     }
 }
 
+// Molecule by molecule, so one RDKit can't read leaves the others their codes.
 static std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSpheres, std::vector<int>* classes) {
-    auto mol = toRDKit(doc);
-    if (doc.atoms.empty() || !perceive(*mol)) return {};  // half-perceived: codes the table can't match
-    auto codes = hoseCodesOf(*mol, maxSpheres, classes);
-    codes.resize(std::min(codes.size(), doc.atoms.size()));  // not expanded abbreviations' atoms
-    return codes;
+    const int n = int(doc.atoms.size());
+    std::vector<std::vector<std::string>> out(n);
+    if (classes) classes->assign(n, -1);
+    std::vector<int> piece(n, -1);
+    int pieces = 0;
+    for (int i = 0; i < n; ++i) {
+        if (piece[i] >= 0) continue;
+        std::vector<int> todo{i};
+        piece[i] = pieces;
+        while (!todo.empty()) {
+            const int a = todo.back();
+            todo.pop_back();
+            for (int b : doc.neighbors(a))
+                if (piece[b] < 0) piece[b] = pieces, todo.push_back(b);
+        }
+        ++pieces;
+    }
+    for (int p = 0; p < pieces; ++p) {
+        std::vector<int> kept, others;  // the part's atom j is the drawing's kept[j]
+        for (int i = 0; i < n; ++i) (piece[i] == p ? kept : others).push_back(i);
+        Document part = doc;
+        part.removeAtoms(others);
+        auto mol = toRDKit(part);
+        if (!perceive(*mol)) continue;  // half-perceived: codes the table can't match
+        std::vector<int> ranks;
+        auto codes = hoseCodesOf(*mol, maxSpheres, classes ? &ranks : nullptr);
+        for (size_t j = 0; j < kept.size() && j < codes.size(); ++j) {  // not expanded abbreviations' atoms
+            out[kept[j]] = std::move(codes[j]);
+            if (classes) (*classes)[kept[j]] = p * n + ranks[j];  // ranks restart in each molecule
+        }
+    }
+    return out;
 }
 
 std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSpheres) {
@@ -2390,23 +2418,14 @@ std::vector<Shift> predictShifts(const Document& doc) {
 }
 
 std::vector<NmrStick> nmrSticks(const Document& doc, bool proton, const std::vector<int>& only) {
-    // Predicted on the chosen atoms alone, so a molecule RDKit can't read elsewhere on the page can't blank it.
     const std::set<int> wanted(only.begin(), only.end());
-    const std::vector<int> kept(wanted.begin(), wanted.end());  // the part's atom i is the drawing's kept[i]
-    Document part = doc;
-    if (!kept.empty()) {
-        std::vector<int> others;
-        for (int i = 0; i < int(doc.atoms.size()); ++i)
-            if (!wanted.count(i)) others.push_back(i);
-        part.removeAtoms(others);
-    }
     std::map<int, NmrStick> byClass;  // atoms the molecule can't tell apart make one stick
-    for (const Shift& s : predictShifts(part)) {
-        if (!(proton ? s.protonSpheres : s.carbonSpheres)) continue;
+    for (const Shift& s : predictShifts(doc)) {
+        if (!(proton ? s.protonSpheres : s.carbonSpheres) || (!wanted.empty() && !wanted.count(s.atom))) continue;
         NmrStick& k = byClass[s.symmetry];
         k.ppm = proton ? s.proton : s.carbon;
         k.count += proton ? s.hydrogens : 1;
-        k.atoms.push_back(kept.empty() ? s.atom : kept[s.atom]);
+        k.atoms.push_back(s.atom);
         k.weak = (proton ? s.protonSpheres : s.carbonSpheres) < 3;
         k.coupled = s.coupled;
     }
