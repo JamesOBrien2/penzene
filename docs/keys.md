@@ -74,4 +74,4 @@ Generated from Help → Keyboard Shortcuts in the app. Point at an atom or bond 
 | `Ctrl+←↑→↓` | duplicate across the next arrow that way (or alongside) |
 | `Alt+← →` | rotate 15°  •  **Alt+drag** rotate freely • **double-click** select fragment, or edit text |
 | `Ctrl+0` | zoom to the selection (to everything with none) |
-| `Shift+Alt+←↑→↓` | rotate 15° out of the page (3D), keeping stereo  •  **Shift+Alt+drag** freely |
+| `Shift+Alt+←↑→↓` | rotate 15° out of the page (3D), keeping stereo  •  choose the Rotate in 3D tool from Select and drag freely |

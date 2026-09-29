@@ -77,8 +77,8 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
   reaction arrow.
 - **Rotate:** drag the round handle above a selection (Shift turns in 15° steps; Ctrl lands it square to the
   page or at 45°, however it started), Alt+drag,
-  or Alt+←/→ in 15° steps. **Out of the page:** Shift+Alt+drag or
-  Shift+Alt+arrows turn it in 3D and keep its stereo; **Structure → Turn Over** flips it 180°.
+  or Alt+←/→ in 15° steps. **Out of the page:** choose **Rotate in 3D** from the Select tool's
+  flyout and drag a molecule, or use Shift+Alt+drag or Shift+Alt+arrows. Stereo is preserved.
 - **Stretch and squash:** drag the handles around a selection (corners scale, edges stretch), or use
   **Structure → Transform** for exact values.
 - **Structure → Align and Distribute**, **Flip**, and **Arrange Scheme** (lines up a reaction scheme,
