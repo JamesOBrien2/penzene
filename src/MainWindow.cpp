@@ -387,8 +387,10 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
         pages_.insert(pages_.begin() + to, moved);
         page_ = pageTabs_->currentIndex();
         pagesEdited_ = true;
+        renumberPages();
         updateTitle();
     });
+    connect(canvas_, &Canvas::documentChanged, this, &MainWindow::renumberPages);  // an edit, an undo, another page
     connect(pageTabs_, &QTabBar::tabBarDoubleClicked, this, &MainWindow::renamePage);
     connect(pageTabs_, &QWidget::customContextMenuRequested, this, [this](QPoint at) {
         const int i = pageTabs_->tabAt(at);
@@ -820,6 +822,7 @@ void MainWindow::setPages(const std::vector<Sheet>& sheets) {
     }
     page_ = 0;
     pagesEdited_ = false;
+    penz1_ = false;
     undo_ = first;
     canvas_->setUndoStack(undo_);
     undoGroup_->setActiveStack(undo_);
@@ -832,6 +835,22 @@ void MainWindow::setPages(const std::vector<Sheet>& sheets) {
     canvas_->setSelection({});  // the old drawing's indices mean nothing in this one
     canvas_->setDocumentSilently(pages_[0].doc);
     updateTitle();
+}
+
+// Each page's numbers start where the page before's stop. Only the page on the canvas is edited,
+// so the others are renumbered here, outside their undo history: numbers follow the pages.
+void MainWindow::renumberPages() {
+    edit::CompoundCount count;
+    for (int i = 0; i < int(pages_.size()); ++i) {
+        if (i != page_) {
+            count = edit::renumberCompounds(pages_[i].doc, count);
+            continue;
+        }
+        canvas_->setCompoundStart(count);
+        Document doc = canvas_->document();
+        count = edit::renumberCompounds(doc, count);
+        if (!(doc == canvas_->document())) canvas_->setDocumentSilently(doc);  // stale after an undo or an earlier page's edit
+    }
 }
 
 void MainWindow::showPage(int i) {
@@ -896,6 +915,7 @@ void MainWindow::deletePage(int i) {
         pageTabs_->setCurrentIndex(page_);
     }
     pagesEdited_ = true;
+    renumberPages();
     updateTitle();
 }
 
@@ -1003,7 +1023,7 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
     const auto& doc = canvas_->document();
     QByteArray data;
     if (path.endsWith(".penz", Qt::CaseInsensitive)) {
-        data = sheetsToJson(sheets());
+        data = penz1_ ? sheetsToJsonV1(sheets()) : sheetsToJson(sheets());
     } else if (pages_.size() > 1) {
         QMessageBox::warning(this, tr("Save"),
                              tr("%1 holds one page. Save as a Penzene document (.penz) to keep all %2 pages, or export this page.")
@@ -1079,13 +1099,16 @@ bool MainWindow::save() {
 
 bool MainWindow::saveAs() {
     const QString v3000 = tr("MDL Molfile V3000 (*.mol)");
+    const QString penz1 = tr("Penzene 1.x (*.penz)");  // version 1, which Penzene 1.x opens (#404)
     QString filter;
     QString path = QFileDialog::getSaveFileName(this, tr("Save As"), path_,
-                                                tr("Penzene document (*.penz);;MDL Molfile (*.mol);;") + v3000 +
+                                                tr("Penzene document (*.penz);;") + penz1 + tr(";;MDL Molfile (*.mol);;") + v3000 +
                                                     tr(";;MDL SD file, one record per molecule (*.sdf);;MDL Rxnfile (*.rxn);;MDL RD file, every reaction step (*.rdf);;ChemDraw XML (*.cdxml);;"
                                                        "ChemDraw, molecules only (*.cdx)"),
                                                 &filter);
-    return !path.isEmpty() && saveTo(path, filter == v3000);
+    if (path.isEmpty()) return false;
+    penz1_ = filter == penz1;  // Save keeps writing what Save As chose
+    return saveTo(path, filter == v3000);
 }
 
 bool MainWindow::maybeSave() {
@@ -2517,8 +2540,8 @@ void MainWindow::buildMenus() {
         ->setStatusTip(tr("Move the selection, or the whole drawing, to the middle of the page"));
     arrangeMenu->addSeparator();
     arrangeMenu->addAction(tr("Arrange &Scheme"), this, [this] { canvas_->arrangeScheme(); });
-    arrangeMenu->addAction(tr("&Group"), QKeySequence(Qt::CTRL | Qt::Key_G), canvas_, &Canvas::groupSelection);
-    arrangeMenu->addAction(tr("&Ungroup"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_G), canvas_, &Canvas::ungroupSelection);
+    arrangeMenu->addAction(tr("&Group"), QKeySequence(tr("Ctrl+G")), canvas_, &Canvas::groupSelection);
+    arrangeMenu->addAction(tr("&Ungroup"), QKeySequence(tr("Ctrl+Shift+G")), canvas_, &Canvas::ungroupSelection);
     arrangeMenu->addAction(tr("&Number Compounds"), canvas_, &Canvas::numberCompounds)
         ->setStatusTip(tr("A bold number under each selected molecule, or every one; they renumber in scheme order as you edit"));
     arrangeMenu->addSeparator();

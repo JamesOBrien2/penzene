@@ -38,6 +38,7 @@ public:
     const QSet<int>& highlight() const { return highlight_; }
     void deleteSelection();
     void setUndoStack(QUndoStack* undo) { undo_ = undo; }  // each page has its own history
+    void setCompoundStart(edit::CompoundCount from) { compoundStart_ = std::move(from); }  // the pages before's numbers (#569)
     void insert(Document fragment, const QString& text);  // centred in view, selected
     void selectAll();
     void rotateSelection(double degrees);
@@ -143,6 +144,7 @@ private:
     bool grid_ = false, rulers_ = false;
     std::vector<QPointF> preview_;
     QUndoStack* undo_;
+    edit::CompoundCount compoundStart_;
     void selectGroups();  // a click or marquee on one member takes its whole group
     Tool tool_ = Tool::Bond;
     int element_ = 6, bondOrder_ = 1, ringSize_ = 6;

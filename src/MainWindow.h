@@ -130,10 +130,12 @@ private:
     std::vector<PageState> pages_;
     int page_ = 0;
     bool pagesEdited_ = false;  // pages added, deleted, renamed or moved since the last save
+    bool penz1_ = false;  // Save As chose "Penzene 1": .penz saves as version 1 until the next New or Open
     class QUndoGroup* undoGroup_;
     class QTabBar* pageTabs_;
     void setPages(const std::vector<Sheet>& sheets);  // New, Open: every page replaced, no history
     void showPage(int i);
+    void renumberPages();  // compound numbers run on from page to page (#569)
     void addPage();
     void renamePage(int i);
     void deletePage(int i);

@@ -1,43 +1,76 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://penzene.readthedocs.io/en/latest/_static/penz.schema.json",
-  "title": "Penzene drawing (.penz), version 1",
+  "title": "Penzene drawing (.penz), versions 1 and 2",
   "description": "Coordinates are points, x right and y down; a bond is 14.4 points long. Readers ignore fields they don't know, so every object allows extra properties.",
   "type": "object",
-  "required": ["format", "version", "atoms", "bonds"],
+  "required": ["format", "version"],
   "properties": {
     "format": {"const": "penzene"},
-    "version": {"const": 1},
-    "atoms": {"type": "array", "items": {"$ref": "#/$defs/atom"}},
-    "bonds": {"type": "array", "items": {"$ref": "#/$defs/bond"}},
-    "arrows": {"type": "array", "items": {"$ref": "#/$defs/arrow"}},
-    "texts": {"type": "array", "items": {"$ref": "#/$defs/text"}},
-    "fills": {"type": "array", "items": {"$ref": "#/$defs/fill"}},
-    "brackets": {"type": "array", "items": {"$ref": "#/$defs/bracket"}},
-    "name": {"type": "string", "description": "The page's name, on its tab (\"Page 1\" when missing)."},
-    "pages": {"type": "array", "description": "The file's other pages, in order: each a .penz document of its own (format, version, atoms, ...) with its own name. Versions before pages open the first page only.", "items": {"$ref": "#"}},
-    "style": {"type": "string", "description": "Drawing style name, e.g. \"ACS 1996\"; unknown names fall back to the default."},
-    "carbonLabels": {"enum": ["all", "terminal"], "description": "Absent: no carbon labels."},
-    "hideImplicitH": {"type": "boolean", "description": "Ignored: older versions could hide implicit hydrogens on labels; they are always shown now."},
-    "labelRatio": {"type": "number", "exclusiveMinimum": 0,
-                   "description": "Label font size over bond length, from a ChemDraw file. Absent: the drawing style's own."},
-    "showStereo": {"type": "boolean"},
-    "showAtomNumbers": {"type": "boolean"},
-    "aromaticCircles": {"type": "boolean"},
-    "aromaticCircleOverrides": {
-      "type": "array",
-      "description": "Rings (atom indices) drawn the other way from the aromaticCircles setting.",
-      "items": {"type": "array", "items": {"$ref": "#/$defs/index"}, "minItems": 3, "uniqueItems": true}
+    "version": {"enum": [1, 2]}
+  },
+  "oneOf": [{"$ref": "#/$defs/v2"}, {"$ref": "#/$defs/v1"}],
+  "$defs": {
+    "v2": {
+      "description": "Version 2 (Penzene 2.0 on): every page in pages, and the document settings all the pages share at the top. A page's own setting overrides the top's.",
+      "required": ["pages"],
+      "properties": {
+        "version": {"const": 2},
+        "pages": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/page", "required": ["atoms", "bonds"]}},
+        "style": {"$ref": "#/$defs/page/properties/style"},
+        "carbonLabels": {"$ref": "#/$defs/page/properties/carbonLabels"},
+        "labelRatio": {"$ref": "#/$defs/page/properties/labelRatio"},
+        "showStereo": {"$ref": "#/$defs/page/properties/showStereo"},
+        "showAtomNumbers": {"$ref": "#/$defs/page/properties/showAtomNumbers"},
+        "showShifts": {"$ref": "#/$defs/page/properties/showShifts"},
+        "aromaticCircles": {"$ref": "#/$defs/page/properties/aromaticCircles"}
+      }
+    },
+    "v1": {
+      "description": "Version 1: one page's drawing, with any other pages (Penzene 1.2 on) in pages; versions before pages open the first page only. The clipboard and exported images carry version 1.",
+      "$ref": "#/$defs/page",
+      "required": ["atoms", "bonds"],
+      "properties": {
+        "version": {"const": 1},
+        "pages": {"type": "array", "description": "The file's other pages, in order: each a version 1 document of its own with its own name.", "items": {"$ref": "#/$defs/v1"}}
+      }
     },
     "page": {
       "type": "object",
-      "description": "A page size shown on the canvas, and where its top-left corner sits.",
-      "required": ["name"],
-      "properties": {"name": {"type": "string"}, "x": {"type": "number"}, "y": {"type": "number"}}
-    }
-  },
-  "$defs": {
+      "description": "One page's drawing and settings.",
+      "properties": {
+        "atoms": {"type": "array", "items": {"$ref": "#/$defs/atom"}},
+        "bonds": {"type": "array", "items": {"$ref": "#/$defs/bond"}},
+        "arrows": {"type": "array", "items": {"$ref": "#/$defs/arrow"}},
+        "texts": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+        "fills": {"type": "array", "items": {"$ref": "#/$defs/fill"}},
+        "brackets": {"type": "array", "items": {"$ref": "#/$defs/bracket"}},
+        "name": {"type": "string", "description": "The page's name, on its tab (\"Page 1\" when missing)."},
+        "style": {"type": "string", "description": "Drawing style name, e.g. \"ACS 1996\"; unknown names fall back to the default."},
+        "carbonLabels": {"enum": ["all", "terminal"], "description": "Absent: no carbon labels."},
+        "hideImplicitH": {"type": "boolean", "description": "Ignored: older versions could hide implicit hydrogens on labels; they are always shown now."},
+        "labelRatio": {"type": "number", "exclusiveMinimum": 0,
+                       "description": "Label font size over bond length, from a ChemDraw file. Absent: the drawing style's own."},
+        "showStereo": {"type": "boolean"},
+        "showAtomNumbers": {"type": "boolean"},
+        "showShifts": {"type": "boolean", "description": "Predicted 13C shifts drawn beside the carbons."},
+        "aromaticCircles": {"type": "boolean"},
+        "aromaticCircleOverrides": {
+          "type": "array",
+          "description": "Rings (atom indices) drawn the other way from the aromaticCircles setting.",
+          "items": {"type": "array", "items": {"$ref": "#/$defs/index"}, "minItems": 3, "uniqueItems": true}
+        },
+        "page": {
+          "type": "object",
+          "description": "A page size shown on the canvas, and where its top-left corner sits.",
+          "required": ["name"],
+          "properties": {"name": {"type": "string"}, "x": {"type": "number"}, "y": {"type": "number"}}
+        }
+      }
+    },
     "index": {"type": "integer", "minimum": 0, "description": "An index into atoms."},
+    "group": {"type": "integer", "minimum": 0, "description": "Atoms, arrows and texts sharing a group number act as one (Arrange → Group)."},
+    "at": {"type": "array", "items": {"$ref": "#/$defs/index"}, "minItems": 1, "maxItems": 2},
     "color": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"},
     "atom": {
       "type": "object",
@@ -54,7 +87,8 @@
         "radicals": {"type": "integer", "minimum": 0, "maximum": 2},
         "isotope": {"type": "integer", "minimum": 0, "maximum": 300, "description": "Mass number (13 for carbon-13, 2 for deuterium); 0 or left out for natural abundance."},
         "partial": {"enum": [-1, 0, 1], "description": "Partial charge mark: δ− or δ+."},
-        "stereoGroup": {"type": "string", "pattern": "^(abs|&[1-9][0-9]{0,3}|or[1-9][0-9]{0,3})$", "description": "Enhanced stereo group of a stereocentre: abs (as drawn), &n (a mixture of it and its mirror image) or orn (one of the two, unknown which)."}
+        "stereoGroup": {"type": "string", "pattern": "^(abs|&[1-9][0-9]{0,3}|or[1-9][0-9]{0,3})$", "description": "Enhanced stereo group of a stereocentre: abs (as drawn), &n (a mixture of it and its mirror image) or orn (one of the two, unknown which)."},
+        "group": {"$ref": "#/$defs/group"}
       }
     },
     "bond": {
@@ -84,7 +118,11 @@
         "dashed": {"type": "boolean"},
         "look": {"enum": ["outline", "shaded", "gradient"], "default": "outline", "description": "Orbitals: lines only, the main phase filled, or both phases in a soft gradient."},
         "behind": {"type": "boolean", "description": "Drawn under the molecule rather than over it."},
-        "crossed": {"type": "boolean", "description": "No reaction: an ✕ across the arrow's middle."}
+        "crossed": {"type": "boolean", "description": "No reaction: an ✕ across the arrow's middle."},
+        "head": {"type": "number", "minimum": 0.25, "maximum": 4, "default": 1, "description": "Arrowhead size, relative to the usual."},
+        "fromAt": {"$ref": "#/$defs/at", "description": "What the tail is drawn on and follows: one atom, or a bond's two atoms."},
+        "toAt": {"$ref": "#/$defs/at", "description": "What the head is drawn on and follows, as fromAt."},
+        "group": {"$ref": "#/$defs/group"}
       }
     },
     "text": {
@@ -97,7 +135,8 @@
         "scale": {"type": "number", "exclusiveMinimum": 0, "default": 1},
         "color": {"$ref": "#/$defs/color"},
         "compound": {"type": "boolean", "description": "A compound number: bold, renumbered in scheme order as the drawing is edited."},
-        "anchor": {"$ref": "#/$defs/index", "description": "The atom of the molecule a compound number belongs to; it moves with the molecule."}
+        "anchor": {"$ref": "#/$defs/index", "description": "The atom of the molecule a compound number belongs to; it moves with the molecule."},
+        "group": {"$ref": "#/$defs/group"}
       }
     },
     "fill": {
