@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "Canvas.h"
 #include "Chem.h"
+#include "Edit.h"
 #include "Online.h"
 #include "Templates.h"
 #include "WhatsNew.h"
@@ -138,6 +139,8 @@ public:
     std::vector<chem::NmrStick> sticks;
     bool proton = false;
     Document doc;  // the sticks' own: names their atoms, whatever the canvas holds by now
+    std::vector<int> atoms;  // the molecule they're for
+    Document molecule;       // and it alone, drawn as the legend
     std::function<void(const std::vector<int>&)> light;
     int current = -1;
     NmrView() {
@@ -206,12 +209,11 @@ protected:
         }
         int tallest = 1;
         for (const auto& s : sticks) tallest = std::max(tallest, s.count);
-        auto top = [&](const chem::NmrStick& s) { return plot.bottom() - double(s.count) / tallest * plot.height(); };
-        for (size_t k = 0; k < sticks.size(); ++k) {
-            const auto& s = sticks[k];
-            const QColor c = int(k) == current ? ink : palette().color(QPalette::Highlight);
-            p.setPen(QPen(c, int(k) == current ? 3 : 2, s.weak ? Qt::DashLine : Qt::SolidLine, Qt::FlatCap));
-            // 1H: the multiplet's n + 1 lines, Pascal's triangle tall, drawn wider than a real J so it can be read.
+        // Each stick's lines as (x, height): 1H multiplets as n + 1 lines, Pascal's triangle tall, drawn wider
+        // than a real J so they can be read.
+        std::vector<std::vector<QPointF>> lines;
+        std::vector<QPointF> all;
+        for (const auto& s : sticks) {
             const int n = proton ? std::min(s.coupled, 6) : 0;
             std::vector<double> row{1};
             for (int k = 0; k < n; ++k) {
@@ -219,16 +221,37 @@ protected:
                 for (int j = k + 1; j > 0; --j) row[j] += row[j - 1];
             }
             const double peak = *std::max_element(row.begin(), row.end());
-            for (int j = 0; j <= n; ++j) {
-                const double at = x(s.ppm) + (j - n / 2.0) * 3;
-                p.drawLine(QPointF(at, plot.bottom()), QPointF(at, plot.bottom() - row[j] / peak * (plot.bottom() - top(s))));
-            }
+            lines.emplace_back();
+            for (int j = 0; j <= n; ++j)
+                lines.back().push_back({x(s.ppm) + (j - n / 2.0) * 3, row[j] / peak * s.count / tallest}), all.push_back(lines.back().back());
         }
+        // The molecule as the legend, as large as fits a corner, the sticks shrunk to keep clear of it and their label.
+        const QRectF bounds = documentBounds(molecule);
+        const double fit = std::min({0.45 * plot.width() / std::max(bounds.width(), 1.0), 0.5 * plot.height() / std::max(bounds.height(), 1.0),
+                                     22 / kBondLength});  // a bond no longer than 22 px
+        const Legend legend = placeLegend(plot, bounds.size() * fit, all, fm.height() + 6);
+        auto top = [&](int k) { return plot.bottom() - double(sticks[k].count) / tallest * legend.scale * plot.height(); };
+        for (size_t k = 0; k < sticks.size(); ++k) {
+            const QColor c = int(k) == current ? ink : palette().color(QPalette::Highlight);
+            p.setPen(QPen(c, int(k) == current ? 3 : 2, Qt::SolidLine, Qt::FlatCap));
+            for (QPointF l : lines[k]) p.drawLine(QPointF(l.x(), plot.bottom()), QPointF(l.x(), plot.bottom() - l.y() * legend.scale * plot.height()));
+        }
+        p.save();
+        p.translate(legend.rect.topLeft());
+        p.scale(fit, fit);
+        p.translate(-bounds.topLeft());
+        paintDocument(p, molecule, {ink});
+        if (current >= 0) {  // the stick in hand's atoms, ringed
+            p.setPen(QPen(palette().color(QPalette::Highlight), 1.5 / fit));
+            p.setBrush(Qt::NoBrush);
+            for (int a : sticks[current].atoms) p.drawEllipse(doc.atoms[a].pos, 7.0, 7.0);
+        }
+        p.restore();
         p.setPen(ink);
         if (current >= 0) {
             const QString t = describe(current).section(':', 0, 0);
             const double left = std::clamp(x(sticks[current].ppm) - fm.horizontalAdvance(t) / 2.0, 0.0, width() - fm.horizontalAdvance(t) - 0.0);
-            p.drawText(QPointF(left, std::max(top(sticks[current]) - 4, double(fm.ascent()))), t);
+            p.drawText(QPointF(left, std::max(top(current) - 4, double(fm.ascent()))), t);
         }
         p.drawText(QRectF(plot.left(), 0, plot.width(), fm.height() + 4), Qt::AlignRight, "δ / ppm");
     }
@@ -495,7 +518,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     nmr_->setAccessibleName(tr("Predicted spectrum"));
     nmr_->setToolTip(tr("Point at a stick, or press Left and Right, to light its atoms"));
     nmr_->light = [this](const std::vector<int>& atoms) { canvas_->setHighlight(QSet<int>(atoms.begin(), atoms.end())); };
-    auto* notice = new QLabel(tr("Predicted; ~ and dashed mark a weaker match.") + " " + nmrshiftdbNotice().join(" "));
+    auto* notice = new QLabel(tr("Predicted; ~ in a stick's label marks a weaker match.") + " " + nmrshiftdbNotice().join(" "));
     notice->setWordWrap(true);
     notice->setTextInteractionFlags(Qt::TextSelectableByMouse);
     notice->setStyleSheet("font-size: 10px;");
@@ -504,8 +527,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     auto* copyNmr = new QPushButton(tr("Copy SI Line"));
     copyNmr->setToolTip(tr("The predicted shifts as a supporting-information line, to replace with measured ones"));
     connect(copyNmr, &QPushButton::clicked, this, [this] {
-        const QSet<int>& selected = canvas_->selection();
-        const QString line = chem::nmrLine(canvas_->document(), nucleus_->currentIndex() == 1, std::vector<int>(selected.begin(), selected.end()));
+        const QString line = chem::nmrLine(nmr_->doc, nmr_->proton, nmr_->atoms);
         if (line.isEmpty()) return statusBar()->showMessage(tr("No predicted shifts to copy"), 4000);  // the clipboard kept
         QGuiApplication::clipboard()->setText(line);
     });
@@ -717,10 +739,29 @@ void MainWindow::updateNmr() {
     nmr_->current = -1;
     canvas_->setHighlight({});
     if (!nmrDock_->isVisible()) return;
+    // One molecule's spectrum: the one holding most of the selection, else the largest.
+    const Document& d = canvas_->document();
     const QSet<int>& selected = canvas_->selection();
+    std::vector<bool> seen(d.atoms.size());
+    std::pair<int, size_t> best{-1, 0};
+    nmr_->atoms.clear();
+    for (int i = 0; i < int(d.atoms.size()); ++i) {
+        if (seen[i]) continue;
+        auto mol = edit::moleculeOf(d, i);
+        int picked = 0;
+        for (int a : mol) seen[a] = true, picked += selected.contains(a);
+        if (std::pair{picked, mol.size()} > best) best = {picked, mol.size()}, nmr_->atoms = std::move(mol);
+    }
+    std::sort(nmr_->atoms.begin(), nmr_->atoms.end());
     nmr_->proton = nucleus_->currentIndex() == 1;
-    nmr_->doc = canvas_->document();
-    nmr_->sticks = chem::nmrSticks(canvas_->document(), nmr_->proton, std::vector<int>(selected.begin(), selected.end()));
+    nmr_->doc = d;
+    nmr_->molecule = d;
+    std::vector<int> others;
+    for (int i = 0; i < int(d.atoms.size()); ++i)
+        if (!std::binary_search(nmr_->atoms.begin(), nmr_->atoms.end(), i)) others.push_back(i);
+    nmr_->molecule.removeAtoms(others);
+    nmr_->molecule.arrows.clear(), nmr_->molecule.texts.clear();
+    nmr_->sticks = nmr_->atoms.empty() ? std::vector<chem::NmrStick>{} : chem::nmrSticks(d, nmr_->proton, nmr_->atoms);
     nmr_->setAccessibleDescription(nmr_->reading());
     nmr_->update();
 }

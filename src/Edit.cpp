@@ -112,6 +112,18 @@ void followAnchors(const Document& before, Document& after) {
     }
 }
 
+std::vector<int> moleculeOf(const Document& doc, int atom) {
+    const auto bondsAt = doc.bondsAt();
+    std::vector<bool> seen(doc.atoms.size());
+    std::vector<int> out{atom};
+    seen[atom] = true;
+    for (size_t k = 0; k < out.size(); ++k)
+        for (int b : bondsAt[out[k]])
+            for (int nb : {doc.bonds[b].a, doc.bonds[b].b})
+                if (!seen[nb]) seen[nb] = true, out.push_back(nb);
+    return out;
+}
+
 // Returns the atom at `p`, creating one if nothing is close enough.
 int atomAtOrNew(Document& doc, QPointF p, int z) {
     int i = atomNear(doc, p, kMergeRadius);

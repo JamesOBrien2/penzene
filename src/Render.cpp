@@ -1088,6 +1088,19 @@ static void paintFrame(QPainter& p, const Document& doc, const ExportOptions& o,
     paintDocument(p, doc);
 }
 
+Legend placeLegend(const QRectF& plot, QSizeF size, const std::vector<QPointF>& sticks, double clear) {
+    Legend best;
+    for (bool left : {true, false}) {  // the corner that shrinks the sticks least; left on a tie
+        const QRectF r(left ? plot.left() : plot.right() - size.width(), plot.top(), size.width(), size.height());
+        double scale = 1;
+        for (QPointF s : sticks)
+            if (s.x() > r.left() - 2 && s.x() < r.right() + 2 && s.y() > 0)
+                scale = std::min(scale, std::max(plot.bottom() - r.bottom() - clear, 0.0) / (s.y() * plot.height()));
+        if (left || scale > best.scale) best = {r, scale};
+    }
+    return best;
+}
+
 QStringList nmrshiftdbNotice() {
     return {QObject::tr("Contains information from nmrshiftdb2 (www.nmrshiftdb.org), which is made available here"),
             QObject::tr("under the nmrshiftdb2 Database License (%1).")

@@ -1528,7 +1528,11 @@ TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the 
     for (auto* c : dock->findChildren<QWidget*>())
         if (c->accessibleName() == "Predicted spectrum") view = c;
     REQUIRE(view);
-    CHECK(view->accessibleDescription().split("; ").size() == 7);  // ethanol's 2 carbons, toluene's 5
+    CHECK(view->accessibleDescription().split("; ").size() == 5);  // one molecule: the largest, toluene
+    canvas->setSelection({1});
+    CHECK(view->accessibleDescription().split("; ").size() == 2);  // the selected one, all of it: ethanol
+    canvas->setSelection({0, 1, 4});
+    CHECK(view->accessibleDescription().split("; ").size() == 2);  // the one with most of the selection
     canvas->setSelection({3, 4, 5, 6, 7, 8, 9});
     CHECK(view->accessibleDescription().split("; ").size() == 5);
     CHECK(view->accessibleDescription().contains("2 C: C7, C9"));  // the two meta carbons, one stick

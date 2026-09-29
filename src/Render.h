@@ -78,7 +78,14 @@ bool exportDocument(const Document& doc, const QString& path, const ExportOption
 // Replaces the file at `path` only once all of `data` is written.
 bool writeWhole(const QString& path, const QByteArray& data);
 QImage renderImage(const Document& doc, const ExportOptions& options = {});
-QStringList nmrshiftdbNotice();  // the lines nmrshiftdb2's licence asks for wherever predicted shifts are shown
+QStringList nmrshiftdbNotice();
+// A spectrum's legend (the molecule) in a top corner of `plot`, and how far to shrink every stick so that
+// none, nor `clear` above it, reaches the legend. Sticks are (x, height as a fraction of the plot's).
+struct Legend {
+    QRectF rect;
+    double scale = 1;
+};
+Legend placeLegend(const QRectF& plot, QSizeF size, const std::vector<QPointF>& sticks, double clear);  // the lines nmrshiftdb2's licence asks for wherever predicted shifts are shown
 QByteArray renderPng(const Document& doc, const ExportOptions& options = {});  // drawing in a text chunk
 QByteArray renderSvg(const Document& doc, const ExportOptions& options = {});
 QByteArray renderPdf(const Document& doc, const ExportOptions& options = {});  // vector, drawing attached

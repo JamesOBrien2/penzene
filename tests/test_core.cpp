@@ -1886,3 +1886,21 @@ TEST_CASE("predicted shifts follow the bonds, not where the atoms are drawn") {
     doc.atoms[2].z = 7;  // O -> N: a different molecule, a different answer
     CHECK(chem::predictShifts(doc)[1].carbon != before[1].carbon);
 }
+
+TEST_CASE("a spectrum's legend takes the emptier top corner and the sticks keep clear of it (#444)") {
+    const QRectF plot(0, 0, 400, 200);
+    const QSizeF size(100, 80);
+    auto clear = [&](const Legend& l, const std::vector<QPointF>& sticks) {
+        for (QPointF s : sticks)
+            if (s.x() > l.rect.left() && s.x() < l.rect.right()) CHECK(plot.bottom() - s.y() * l.scale * plot.height() >= l.rect.bottom() + 10 - 1e-9);
+    };
+    const std::vector<QPointF> right{{350, 1}, {380, 0.5}};  // tall sticks on the right: the legend goes left, nothing shrinks
+    Legend l = placeLegend(plot, size, right, 10);
+    CHECK(l.rect.left() == 0);
+    CHECK(l.scale == 1);
+    const std::vector<QPointF> both{{20, 1}, {350, 0.8}};  // under either corner: the one that shrinks them less
+    l = placeLegend(plot, size, both, 10);
+    CHECK(l.rect.right() == 400);
+    CHECK(l.scale == Catch::Approx((200 - 80 - 10) / (0.8 * 200)));
+    clear(l, both);
+}
