@@ -4,19 +4,19 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
-## Unreleased
+## 1.7.0 (2026-09-29)
 
-- **Arrows that follow**: a curved arrow drawn on an atom, lone pair or bond lights it up, settles on it and moves with it (#498). <!-- icon: refresh -->
-- A selected arrow has handles on its ends and at the top of its curve to reshape it; Format → Arrowhead Size (#534).
-- ChemDraw exports sit inside the page instead of at its top-left corner (#443).
-- **Edit in Word and PowerPoint** (Windows): a copied drawing pastes as a Penzene object; double-click it to edit it in Penzene (#229). <!-- icon: file-import -->
-- The Colour tool is in the Select group, since it paints bonds, arrows and text as well as atoms (#532).
 - **Tidier menus**: new Page, Arrange and Format menus; Copy As and Import submenus (#512). <!-- icon: menu-2 -->
-- Copy and paste within Penzene keeps brackets and ring fills (#523).
+- **Arrows that follow**: a curved arrow drawn on an atom, lone pair or bond lights it up, settles on it and moves with it (#498). <!-- icon: refresh -->
+- **Edit in Word and PowerPoint** (Windows): a copied drawing pastes as a Penzene object; double-click it to edit it in Penzene (#229). <!-- icon: file-import -->
+- A selected arrow has handles on its ends and at the top of its curve to reshape it; Format → Arrowhead Size (#534).
 - Alt+drag from empty space draws a lasso: a freehand loop that selects what it takes in (#499).
-- Reaction SMILES lines in a `.smi` batch file render as schemes, and `--descriptors` marks them `reaction` (#501).
 - Structure → Look Up on PubChem opens the selection's PubChem page in the browser, by InChIKey (#500).
 - Custom colours on atoms, bonds, text and arrows survive saving to ChemDraw files and reopening (#426).
+- ChemDraw exports sit inside the page instead of at its top-left corner (#443).
+- Reaction SMILES lines in a `.smi` batch file render as schemes, and `--descriptors` marks them `reaction` (#501).
+- Copy and paste within Penzene keeps brackets and ring fills (#523).
+- The Colour tool is in the Select group, since it paints bonds, arrows and text as well as atoms (#532).
 - Tool buttons work with screen readers and other accessibility tools: pressing one picks its tool and opens its group (#535).
 
 ## 1.6.0 (2026-09-29)
