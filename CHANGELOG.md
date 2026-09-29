@@ -8,6 +8,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 - **Tidier menus**: new Page, Arrange and Format menus; Copy As and Import submenus (#512). <!-- icon: menu-2 -->
 - Reaction SMILES lines in a `.smi` batch file render as schemes, and `--descriptors` marks them `reaction` (#501).
+- Structure → Look Up on PubChem opens the selection's PubChem page in the browser, by InChIKey (#500).
 
 ## 1.6.0 (2026-09-29)
 

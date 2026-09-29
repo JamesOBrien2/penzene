@@ -2120,6 +2120,12 @@ void MainWindow::buildMenus() {
         canvas_->commit(chem::clean2D(canvas_->document(), {sel.begin(), sel.end()}), tr("Clean"));
     });
     structure->addAction(tr("Chec&k Structure…"), QKeySequence(tr("Ctrl+Alt+K")), this, [this] { checkStructure(); });
+    auto* pubchem = structure->addAction(tr("Look Up on &PubChem"), this, [this] {  // in the browser; Penzene stays offline
+        const std::string key = chem::toInchiKey(canvas_->selectedSubset());
+        if (key.empty()) return statusBar()->showMessage(tr("No valid structure to look up"), 4000);
+        QDesktopServices::openUrl(QUrl("https://pubchem.ncbi.nlm.nih.gov/#query=" + QString::fromStdString(key)));
+    });
+    connect(structure, &QMenu::aboutToShow, this, [=, this] { pubchem->setEnabled(!canvas_->selectedSubset().atoms.empty()); });
     structure->addSeparator();
     structure->addAction(tr("Add Explicit &Hydrogens"), this, [this] {
         canvas_->commit(chem::addHydrogens(canvas_->document()), tr("Add hydrogens"));
