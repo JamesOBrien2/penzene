@@ -14,6 +14,7 @@
 #include <GraphMol/Descriptors/MolSurf.h>
 #include <algorithm>
 #include <map>
+#include <set>
 #include <type_traits>
 #include <GraphMol/inchi.h>
 #include <GraphMol/FileParsers/FileParsers.h>
@@ -1646,6 +1647,87 @@ QString hrmsLine(const Document& doc, Ion ion) {
     return QString("HRMS (%1) m/z: %2 calcd for %3 %4")
         .arg(ei ? "EI" : "ESI", what, QString::fromStdString(RDKit::Descriptors::calcMolFormula(*mol, true)))
         .arg(mz, 0, 'f', 4);
+}
+
+using Counts = std::map<int, int>;  // atomic number → how many
+
+static QString hill(const Counts& c) {
+    QString out;
+    auto put = [&](int z) {
+        if (c.count(z) && c.at(z) > 0) out += QString::fromStdString(symbol(z)) + (c.at(z) > 1 ? QString::number(c.at(z)) : "");
+    };
+    put(6), put(1);
+    std::vector<std::pair<std::string, int>> rest;  // alphabetical, as Hill orders the others
+    for (const auto& [z, n] : c)
+        if (z != 1 && z != 6) rest.push_back({symbol(z), z});
+    std::sort(rest.begin(), rest.end());
+    for (const auto& r : rest) put(r.second);
+    return out;
+}
+
+std::vector<EiIon> eiIons(const Document& doc) {
+    if (doc.atoms.empty()) return {};
+    auto mol = toRDKit(doc);
+    if (!perceive(*mol)) return {};
+    Counts m;
+    auto add = [&](Counts& c, const RDKit::Atom* a) { ++c[a->getAtomicNum()], c[1] += int(a->getTotalNumHs()); };
+    for (const auto* a : mol->atoms()) {
+        if (a->getAtomicNum() == 0) return {};
+        add(m, a);
+    }
+    auto mass = [](const Counts& c) {
+        double sum = 0;
+        for (const auto& [z, n] : c) {
+            const auto& iso = naturalIsotopes()[z];
+            if (iso.empty()) return 0.0;
+            sum += n * std::max_element(iso.begin(), iso.end(), [](auto& x, auto& y) { return x.second < y.second; })->first;
+        }
+        return sum;
+    };
+    std::vector<EiIon> out;
+    auto ion = [&](const Counts& c, const QString& from) {
+        const QString formula = hill(c) + "+";
+        if (mass(c) > 0 && std::none_of(out.begin(), out.end(), [&](const EiIon& i) { return i.formula == formula; }))
+            out.push_back({mass(c) - electron, formula, from});
+    };
+    auto loss = [&](const Counts& lost, const QString& from) {
+        Counts c = m;
+        for (const auto& [z, n] : lost)
+            if ((c[z] -= n) < 0) return;
+        ion(c, "M − " + hill(lost) + ", " + from);
+    };
+    auto has = [&](const char* smarts) {
+        const std::unique_ptr<RWMol> q(RDKit::SmartsToMol(smarts));
+        return RDKit::SubstructMatch(*mol, *q);
+    };
+    ion(m, "M⁺•");
+    if (!has("[CH3][CX4]").empty()) loss({{6, 1}, {1, 3}}, "methyl");
+    if (!has("[CX4][OX2H]").empty()) loss({{1, 2}, {8, 1}}, "alcohol");
+    if (!has("[CX3](=O)[OX2H]").empty()) loss({{1, 1}, {8, 1}}, "acid"), loss({{6, 1}, {1, 1}, {8, 2}}, "acid");
+    if (!has("[CX3](=O)[OX2][CH3]").empty()) loss({{6, 1}, {1, 3}, {8, 1}}, "methyl ester");
+    if (!has("[CX3](=O)[OX2][CH2][CH3]").empty()) loss({{6, 2}, {1, 5}, {8, 1}}, "ethyl ester");
+    if (!has("[CX4]([CH3])([CH3])[CH3]").empty()) ion({{6, 4}, {1, 9}}, "tert-butyl"), loss({{6, 4}, {1, 9}}, "tert-butyl");
+    if (!has("[Cl]").empty()) loss({{17, 1}}, "chlorine");
+    if (!has("[Br]").empty()) loss({{35, 1}}, "bromine");
+    if (!has("[CH3][CX3]=O").empty()) ion({{6, 2}, {1, 3}, {8, 1}}, "acetyl");
+    if (!has("[cH]1[cH][cH][cH][cH]c1[CH2]").empty()) ion({{6, 7}, {1, 7}}, "benzyl (tropylium)");
+    if (!has("[cH]1[cH][cH][cH][cH]c1[CX3]=O").empty()) ion({{6, 7}, {1, 5}, {8, 1}}, "benzoyl"), ion({{6, 6}, {1, 5}}, "phenyl");
+    // McLafferty: a γ-H moves to the carbonyl O and the alkene beyond Cα leaves.
+    for (const auto& match : has("[CX3](=O)[CX4]!@[CX4][#6;!H0]")) {
+        const int alpha = match[2].second, beta = match[3].second;
+        Counts alkene;
+        std::set<int> seen{alpha, beta};
+        std::vector<int> stack{beta};
+        while (!stack.empty()) {
+            const auto* a = mol->getAtomWithIdx(stack.back());
+            stack.pop_back();
+            add(alkene, a);
+            for (const auto* n : mol->atomNeighbors(a))
+                if (seen.insert(int(n->getIdx())).second) stack.push_back(int(n->getIdx()));
+        }
+        if (--alkene[1] >= 0) loss(alkene, "McLafferty");
+    }
+    return out;
 }
 
 QStringList descriptorColumns() {
