@@ -41,7 +41,7 @@
 #include <QDialogButtonBox>
 #include <QDialog>
 #include <QDoubleSpinBox>
-#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QPushButton>
 #include <QDockWidget>
 #include <QFileInfo>
@@ -329,6 +329,26 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     spectrum_->setAccessibleName(tr("Isotope pattern"));
     massLayout->addWidget(ion_);
     massLayout->addWidget(spectrum_, 1);
+    auto* massButtons = new QHBoxLayout;
+    auto* copyHrms = new QPushButton(tr("Copy HRMS Line"));
+    copyHrms->setToolTip(tr("The ion's calculated mass, for the supporting information"));
+    connect(copyHrms, &QPushButton::clicked, this, [this] {
+        QGuiApplication::clipboard()->setText(chem::hrmsLine(canvas_->selectedSubset(), chem::Ion(ion_->currentIndex())));
+    });
+    auto* exportPattern = new QPushButton(tr("Export CSV…"));
+    exportPattern->setToolTip(tr("The isotope pattern as m/z and intensity"));
+    connect(exportPattern, &QPushButton::clicked, this, [this] {
+        if (spectrum_->peaks.empty()) return;
+        const QString path = QFileDialog::getSaveFileName(this, tr("Export Isotope Pattern"), "isotope-pattern.csv", tr("CSV (*.csv)"));
+        QFile f(path);
+        if (path.isEmpty() || !f.open(QIODevice::WriteOnly | QIODevice::Text)) return;
+        QTextStream out(&f);
+        out << "mz,intensity\n";
+        for (const auto& k : spectrum_->peaks) out << QString::number(k.mz, 'f', 4) << ',' << QString::number(k.intensity, 'f', 2) << '\n';
+    });
+    massButtons->addWidget(copyHrms);
+    massButtons->addWidget(exportPattern);
+    massLayout->addLayout(massButtons);
     massCard->setMinimumWidth(300);
     massDock_->setWidget(massCard);
     addDockWidget(Qt::RightDockWidgetArea, massDock_);

@@ -1488,6 +1488,9 @@ TEST_CASE("mass spec panel shows the isotope pattern of the selection (#397)") {
         canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));
         emit canvas->documentChanged();
         QApplication::processEvents();
+        for (auto* b : dock->findChildren<QPushButton*>())
+            if (b->text() == "Copy HRMS Line") b->click();
+        CHECK(QGuiApplication::clipboard()->text() == "HRMS (ESI) m/z: [M+H]+ calcd for C9H9O4 181.0495");
         if (auto out = qEnvironmentVariable("PENZENE_MASS_SHOT"); !out.isEmpty())
             w.grab().save(QString(out).replace(".png", "-" + t.toLower() + ".png"));
     }

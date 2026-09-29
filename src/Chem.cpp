@@ -1531,6 +1531,8 @@ static std::vector<Peak> convolve(const std::vector<Peak>& a, const std::vector<
     return merged(std::move(out), 1e-7);  // pruned: the faint combinations never reach 0.1%
 }
 
+constexpr double electron = 0.000548579909;  // Da
+
 std::vector<Peak> isotopePattern(const Document& doc, Ion ion) {
     if (doc.atoms.empty()) return {};
     auto mol = toRDKit(doc);
@@ -1557,7 +1559,6 @@ std::vector<Peak> isotopePattern(const Document& doc, Ion ion) {
         if (one.empty()) return {};  // no stable isotope (Tc, Pm…)
         for (int i = 0; i < n; ++i) pattern = convolve(pattern, one);
     }
-    constexpr double electron = 0.000548579909;
     pattern = merged(std::move(pattern), 0.001);
     const double top = std::max_element(pattern.begin(), pattern.end(), [](const Peak& a, const Peak& b) {
                            return a.intensity < b.intensity;
@@ -1567,6 +1568,41 @@ std::vector<Peak> isotopePattern(const Document& doc, Ion ion) {
         p.intensity *= 100 / top;
     }
     return pattern;
+}
+
+QString hrmsLine(const Document& doc, Ion ion) {
+    if (doc.atoms.empty()) return {};
+    auto mol = toRDKit(doc);
+    if (!perceive(*mol)) return {};
+    for (const auto* a : mol->atoms())
+        if (a->getAtomicNum() == 0) return {};
+    const int drawn = RDKit::MolOps::getFormalCharge(*mol);  // calcExactMW takes its electrons off already
+    int charge = drawn;
+    auto add = [&](int z) {
+        auto* a = new RDKit::Atom(z);
+        a->setNoImplicit(true);
+        mol->addAtom(a, false, true);
+        ++charge;
+    };
+    if (ion == Ion::MplusH) add(1);
+    if (ion == Ion::MplusNa) add(11);
+    if (ion == Ion::MminusH) {
+        auto it = std::find_if(mol->atoms().begin(), mol->atoms().end(), [](const RDKit::Atom* a) { return a->getTotalNumHs() > 0; });
+        if (it == mol->atoms().end()) return {};
+        (*it)->setNumExplicitHs((*it)->getTotalNumHs() - 1);
+        (*it)->setNoImplicit(true);
+        --charge;
+    }
+    const bool ei = ion == Ion::M && charge == 0;  // the molecular ion M+ of electron impact
+    if (ei) charge = 1;
+    mol->updatePropertyCache(false);
+    const double mz = (RDKit::Descriptors::calcExactMW(*mol) - (charge - drawn) * electron) / std::abs(charge);
+    const char* label[] = {"[M]", "[M+H]+", "[M+Na]+", "[M-H]-"};
+    QString what = label[int(ion)];
+    if (ion == Ion::M) what += QString(std::abs(charge), charge > 0 ? '+' : '-');
+    return QString("HRMS (%1) m/z: %2 calcd for %3 %4")
+        .arg(ei ? "EI" : "ESI", what, QString::fromStdString(RDKit::Descriptors::calcMolFormula(*mol, true)))
+        .arg(mz, 0, 'f', 4);
 }
 
 QStringList descriptorColumns() {

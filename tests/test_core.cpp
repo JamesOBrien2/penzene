@@ -616,6 +616,16 @@ TEST_CASE("isotope pattern: aspirin's ions and a chlorine M+2 (#397)") {
     CHECK(chem::isotopePattern(*chem::fromSmiles("[Na+].[Cl-]"), chem::Ion::MminusH).empty());
 }
 
+TEST_CASE("the HRMS line for a supporting-information entry (#398)") {
+    const Document aspirin = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
+    CHECK(chem::hrmsLine(aspirin, chem::Ion::MplusH).toStdString() == "HRMS (ESI) m/z: [M+H]+ calcd for C9H9O4 181.0495");
+    CHECK(chem::hrmsLine(aspirin, chem::Ion::MplusNa).toStdString() == "HRMS (ESI) m/z: [M+Na]+ calcd for C9H8NaO4 203.0315");
+    CHECK(chem::hrmsLine(aspirin, chem::Ion::MminusH).toStdString() == "HRMS (ESI) m/z: [M-H]- calcd for C9H7O4 179.0350");
+    CHECK(chem::hrmsLine(aspirin, chem::Ion::M).toStdString() == "HRMS (EI) m/z: [M]+ calcd for C9H8O4 180.0417");
+    CHECK(chem::hrmsLine(*chem::fromSmiles("C[N+](C)(C)C"), chem::Ion::M).toStdString() == "HRMS (ESI) m/z: [M]+ calcd for C4H12N+ 74.0964");
+    CHECK(chem::hrmsLine(Document{}, chem::Ion::MplusH).isEmpty());
+}
+
 TEST_CASE("atom-map numbers survive SMILES, .penz and the ' hotkey (#99)") {
     auto doc = chem::fromSmiles("[CH3:1][OH:2]");
     REQUIRE(doc);
