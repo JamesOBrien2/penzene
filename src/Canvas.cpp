@@ -423,8 +423,16 @@ void Canvas::zoomBy(double factor) {
     if (s > 0.2 && s < 40) scale(factor, factor);
 }
 
-void Canvas::fitToDocument() { fit(doc_); }
+void Canvas::fitToDocument() {
+    if (!isVisible()) fitOnShow_ = true;  // no size yet (a file opened at launch, #545): fit when shown
+    else fit(doc_);
+}
 void Canvas::fitToSelection() { fit(selectedSubset()); }
+
+void Canvas::showEvent(QShowEvent* e) {
+    QGraphicsView::showEvent(e);
+    if (std::exchange(fitOnShow_, false)) fit(doc_);
+}
 
 void Canvas::fit(const Document& part) {
     if (part.empty()) return;

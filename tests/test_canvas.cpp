@@ -2607,6 +2607,20 @@ TEST_CASE("accessibility: named, focusable tools; arrow keys in the periodic tab
 
 }
 
+TEST_CASE("a file opened before the window shows is fitted to the window once it does (#545)") {
+    App app;
+    MainWindow w;
+    w.resize(1100, 750);
+    auto* canvas = w.findChild<Canvas*>();
+    REQUIRE(w.openFile(QString(PENZENE_TEST_DATA) + "/aspirin.mol"));  // as `penzene aspirin.mol` does
+    w.show();
+    QApplication::processEvents();
+    const QRect drawn = canvas->mapFromScene(documentBounds(canvas->document())).boundingRect();
+    const QSize view = canvas->viewport()->size();
+    CHECK((drawn.width() > view.width() / 2 || drawn.height() > view.height() / 2));  // it fills the view, not a corner of it
+    CHECK(canvas->viewport()->rect().contains(drawn));
+}
+
 TEST_CASE("accessibility: the hotspot is announced to screen readers (#112)") {
     Fixture f;
     f.canvas.setDocumentSilently(*chem::fromSmiles("CO"));
