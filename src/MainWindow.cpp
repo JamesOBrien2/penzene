@@ -2056,17 +2056,9 @@ void MainWindow::buildMenus() {
         a->setData(int(mode));
         carbonGroup->addAction(a);
     }
-    auto* implicitH = view->addAction(tr("Show &Implicit Hydrogens"));
-    implicitH->setCheckable(true);
-    connect(implicitH, &QAction::triggered, this, [=](bool on) {
-        setDisplay([on](Document& d) { d.hideImplicitH = !on; }, tr("Implicit hydrogens"));
-    });
-    connect(canvas_, &Canvas::documentChanged, this, [this, carbonGroup, implicitH] {
+    connect(canvas_, &Canvas::documentChanged, this, [this, carbonGroup] {
         for (auto* a : carbonGroup->actions()) a->setChecked(a->data().toInt() == int(canvas_->document().carbonLabels));
-        QSignalBlocker quiet(implicitH);
-        implicitH->setChecked(!canvas_->document().hideImplicitH);
     });
-    implicitH->setChecked(true);
     carbonGroup->actions().first()->setChecked(true);
     // Stereo labels belong to the document (saved, and in exports), so toggling is an edit.
     auto* stereo = view->addAction(tr("Show &Stereo Labels"));

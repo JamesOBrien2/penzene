@@ -4,6 +4,10 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
+## Unreleased
+
+- View → Show Implicit Hydrogens is removed: labels always show their implicit hydrogens (OH, NH₂).
+
 ## 1.5.0 (2026-09-28)
 
 - The nmrshiftdb2 Database License for the built-in NMR shift table is now in the bundled third-party notices, so About → Third-party licenses shows it.
