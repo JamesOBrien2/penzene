@@ -1741,7 +1741,7 @@ void MainWindow::buildTools() {
         p.drawRect(QRectF(4.5, 5.5, 15, 13));
     });
     startGroup(tr("Select"), select);
-    keys[" "] = add(select, tr("Select (drag to move, Alt+drag to rotate, double-click for fragment) — Space"),
+    keys[" "] = add(select, tr("Select (drag to move, Alt+drag to rotate, or to lasso from empty space; double-click for fragment) — Space"),
                     tool(T::Select));
     const IconMaker rotate3D = paintedIcon([](QPainter& p, QColor ink) {
         p.setPen(QPen(ink, 1.3));
@@ -2431,7 +2431,7 @@ moves off, so you can keep typing.</p>
 <tr><td><b>Enter</b></td><td>back to a hotspot on the selection</td></tr>
 <tr><td><b>Drag onto an atom</b></td><td>merge (Select tool) &nbsp;•&nbsp; <b>Shift+drag</b> move straight; draw a bond at any angle</td></tr>
 <tr><td><b>Ctrl+←↑→↓</b></td><td>duplicate across the next arrow that way (or alongside)</td></tr>
-<tr><td><b>Alt+← →</b></td><td>rotate 15° &nbsp;•&nbsp; <b>Alt+drag</b> rotate freely • <b>double-click</b> select fragment, or edit text</td></tr>
+<tr><td><b>Alt+← →</b></td><td>rotate 15° &nbsp;•&nbsp; <b>Alt+drag</b> rotate freely, or lasso from empty space • <b>double-click</b> select fragment, or edit text</td></tr>
 <tr><td><b>Ctrl+0</b></td><td>zoom to the selection (to everything with none)</td></tr>
 <tr><td><b>Shift+Alt+←↑→↓</b></td><td>rotate 15° out of the page (3D), keeping stereo &nbsp;•&nbsp; choose the Rotate in 3D tool from Select and drag freely</td></tr>
 </table>)"));

@@ -6,6 +6,7 @@
 #include <QGraphicsView>
 #include <QPainterPath>
 #include <QPicture>
+#include <QPolygonF>
 #include <QSet>
 #include <optional>
 #include <vector>
@@ -147,6 +148,7 @@ private:
     QRectF scaleBox_;
     QPointF pressPos_, curPos_;
     QPointF pressRaw_;  // where the mouse went down, before an orbital snaps pressPos_ to its atom
+    QPolygonF lasso_;   // an Alt-drag selection's loop; empty for the rectangle
     bool shift_ = false;  // held during the drag: free bond angle, or move along one axis
     int pressAtom_ = -1;
     Document beforeDrag_;
