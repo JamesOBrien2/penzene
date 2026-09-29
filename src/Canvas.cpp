@@ -307,7 +307,7 @@ void Canvas::setDocumentSilently(const Document& doc) {
     // Items added or removed (an erase, an undo) renumber the rest, so indices from
     // before would point at other atoms: drop them. Callers that know the new
     // numbering (insert, duplicate) set the selection afterwards.
-    if (doc.atoms.size() != doc_.atoms.size()) selectedAtoms_.clear(), hoverAtom_ = -1, highlight_.clear();
+    if (doc.atoms.size() != doc_.atoms.size()) selectedAtoms_.clear(), hoverAtom_ = -1;
     if (doc.bonds.size() != doc_.bonds.size()) hoverBond_ = -1;
     if (doc.arrows.size() != doc_.arrows.size()) selectedArrows_.clear();
     if (doc.texts.size() != doc_.texts.size()) selectedTexts_.clear();

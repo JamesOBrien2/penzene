@@ -33,7 +33,8 @@ public:
     const QSet<int>& selectedTexts() const { return selectedTexts_; }
     void setSelection(QSet<int> atoms, QSet<int> arrows = {}, QSet<int> texts = {});
     Document selectedSubset() const;  // selection (or everything) as a standalone doc
-    void setHighlight(QSet<int> atoms);  // lit without selecting them, e.g. the atoms behind an NMR stick
+    // Lit without selecting them, e.g. the atoms behind an NMR stick; whoever sets it clears it on documentChanged.
+    void setHighlight(QSet<int> atoms);
     const QSet<int>& highlight() const { return highlight_; }
     void deleteSelection();
     void setUndoStack(QUndoStack* undo) { undo_ = undo; }  // each page has its own history

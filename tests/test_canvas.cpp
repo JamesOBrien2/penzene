@@ -1546,8 +1546,11 @@ TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the 
     CHECK(view->accessibleDescription().split("; ").last().contains("3 H, C4"));  // the methyl, furthest upfield
     QTest::keyClick(view, Qt::Key_Right);
     CHECK_FALSE(canvas->highlight().isEmpty());
-    emit canvas->documentChanged();
+    canvas->commit(*chem::fromSmiles("CCO"), "Replace");  // an edit (or undo) that drops atoms: nothing stale stays lit
     CHECK(canvas->highlight().isEmpty());
+    QTest::keyClick(view, Qt::Key_Right);
+    REQUIRE_FALSE(canvas->highlight().isEmpty());
+    for (int i : canvas->highlight()) CHECK(i < 3);
     dock->hide();
     CHECK(canvas->highlight().isEmpty());
 }
