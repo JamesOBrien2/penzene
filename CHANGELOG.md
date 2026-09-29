@@ -9,6 +9,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - An aldehyde's C=O and a chain-end C=C sit toward their neighbour, so the single bond meets the double bond cleanly (#542).
 - Screen readers and automation tools can read the drawing: each atom, bond, arrow and text is named ("atom O3, 1 bond"), and pressing one selects it (#536).
 - Arrowhead sizes go out to ChemDraw files and come back, at the size ChemDraw draws them (#538).
+- Macrocycles and peptides are laid out more cleanly: cyclophane bridges stand clear of their rings and a peptide backbone runs straight (#502).
 
 ## 1.7.0 (2026-09-29)
 

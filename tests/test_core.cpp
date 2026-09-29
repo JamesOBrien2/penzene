@@ -134,6 +134,27 @@ TEST_CASE(".penz rejects bad arrows; v0.1 files still load") {
     CHECK(old->arrows.empty());
 }
 
+TEST_CASE("macrocycles and peptides are laid out cleanly (#502)") {
+    // A cyclophane's bridges leave their rings well clear of the ring bonds, not squeezed against one.
+    const Document phane = *chem::fromSmiles("C1Cc2ccc(cc2)CCc2ccc1cc2");  // [2.2]paracyclophane
+    double tightest = 180;  // degrees between a bridge bond and a ring bond at the same atom
+    for (const Bond& b : phane.bonds) {
+        for (int end : {b.a, b.b}) {
+            const int other = end == b.a ? b.b : b.a;
+            if (phane.neighbors(end).size() != 3 || phane.neighbors(other).size() != 2) continue;  // ring atom, bridge CH2
+            for (int n : phane.neighbors(end))
+                if (n != other)
+                    tightest = std::min(tightest, qRadiansToDegrees(std::acos(QPointF::dotProduct(
+                        unit(phane.atoms[other].pos - phane.atoms[end].pos), unit(phane.atoms[n].pos - phane.atoms[end].pos)))));
+        }
+    }
+    CHECK(tightest > 80);
+
+    // A peptide's backbone runs out end to end instead of folding back, where each C=O met the next NH.
+    const Document gfls = *chem::fromSmiles("NCC(=O)NC(Cc1ccccc1)C(=O)NC(CC(C)C)C(=O)NC(CO)C(=O)O");  // Gly-Phe-Leu-Ser
+    CHECK(len(gfls.atoms.front().pos - gfls.atoms.back().pos) / kBondLength > 9);  // N-terminus to the C-terminal OH
+}
+
 TEST_CASE("clean lays out each fragment in place and keeps arrows and text") {
     auto left = chem::fromSmiles("CCO"), right = chem::fromSmiles("CC=O");
     REQUIRE(left);
