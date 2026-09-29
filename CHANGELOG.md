@@ -4,6 +4,12 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
+## 1.9.0 (2026-09-29)
+
+- **Predicted NMR spectrum**: View → NMR Panel shows the ¹³C or ¹H spectrum of the selected molecule, with the molecule in its corner: one stick per set of equivalent atoms, ¹H split first order (s, d, t, q); point at a stick (or press Left and Right) to light its atoms, or at an atom to find its stick (#444, #552). <!-- icon: nmr-spectrum -->
+- **Compound numbers**: Arrange → Number Compounds puts a bold number under each molecule; they follow their molecules and renumber in scheme order as you edit, and 2a, 2b keep sharing a number (#504). <!-- icon: list-numbers -->
+- The NMR panel copies the prediction as a supporting-information line: "1H NMR (predicted) δ 3.69 (q, 2H), 1.22 (t, 3H)." (#566).
+
 ## 1.8.0 (2026-09-29)
 
 - **Mass spec for the SI**: copy an HRMS line ("[M+H]+ calcd for C9H9O4 181.0495"), export the isotope pattern as CSV, and list the EI ions to look for (#398, #554). <!-- icon: chart-bar -->
