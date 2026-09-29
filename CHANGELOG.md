@@ -4,31 +4,28 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
-## Unreleased
+## 1.6.0 (2026-09-29)
 
-- A charge no longer sits on a bond: when a bond leaves an atom toward the upper right (R₄N⁺, a nitro group, =N⁺=), its charge moves to the widest gap between the bonds instead (#494).
-- A bond between two labelled atoms dragged almost together no longer reappears across their labels (#496).
-- Delete, Cut and Move to Page no longer clear the page size (#492).
-- Batch rendering gives records whose names differ only by case their own files (`sample.svg`, `SAMPLE-2.svg`) instead of overwriting one with the other (#493).
-- Opening a file that has been moved or deleted says it doesn't exist, instead of that it isn't a structure file, and Open Recent drops it (unless its whole folder is missing, as on a drive that isn't plugged in).
-- Python: `read` of a missing file raises `FileNotFoundError` (still a `ValueError`, so existing `except ValueError` keeps working), and an unknown `style` names the styles it accepts.
-- Quitting on macOS no longer aborts inside Qt: the ChemDraw clipboard converter is left for Qt to delete, as it expects.
-- A wedge or hash's wide end lies along the bonds beside it instead of jutting past them or into a double bond (#509, #518).
-- Dragging an atom with Predicted NMR Shifts on no longer looks the shifts up again on every mouse move: they depend on the bonds, so the last answer is reused until the structure changes (#476).
-- `penzene --render` stops on a misspelt `--drawing-style` or `--format` and lists the choices, instead of drawing in ACS 1996, and says "could not write" when it can't write the output, instead of blaming the structure. A mistyped input file gives "no such file" and a failing exit from `--render` and `--descriptors`, rather than an error about the structure or a CSV row that says "unreadable" (#477).
-- A drawing recovered after a crash opens untitled, so Save no longer overwrites the file Penzene was opened with (#491).
-- A chair fused onto a bond of another chair (9 or 0) no longer crosses it, or lands on top of its atoms.
-- Arrange Scheme, Align and the other layout commands keep an orbital drawn on an atom with that atom.
-- A charge on an atom with one bond sits above it instead of straight across from the bond, where it read as another bond (#514).
-- Tool flyouts stay open until you close them with the ✕, so you can keep several on screen, drag each by any part that isn't a tool, and resize it from a corner, with the tools reflowing to fit. A flyout no longer moves when you click its rail button a second time.
-- Clicking an atom a little off centre with an orbital tool draws a full-size orbital, not a tiny one.
-- A triple bond leaves a gap where a bond in front crosses it, as single and double bonds do.
-- Ions and molecules in a SMILES with several parts (Na⁺ Cl⁻, 3 H₂O) are laid out in a row instead of on top of each other (#516).
-- Copy as Reaction SMILES says when a molecule in the reaction is invalid, instead of copying a reaction without it.
-- Structure → Align and Distribute → Center on Page moves the selection, or the whole drawing, to the middle of the page, keeping its spacing (Undo puts it back).
-- Pinch two fingers on a trackpad to zoom the drawing (right-click the canvas for Zoom In and Out), and the grid and rulers are on by default (View turns either off, and Penzene remembers).
-- Rotate in 3D is a tool in the Select flyout: drag a molecule out of the page and it keeps its stereochemistry. The two Turn Over commands are removed (Shift+Alt+drag and the arrow keys still turn it).
-- View → Show Implicit Hydrogens is removed: labels always show their implicit hydrogens (OH, NH₂).
+- **Floating flyouts**: tool flyouts stay open until closed; drag them anywhere and resize them from a corner. <!-- icon: layout-sidebar -->
+- **Rotate in 3D**: a Select-flyout tool that turns a molecule out of the page, keeping its stereochemistry. <!-- icon: rotate-3d -->
+- Pinch a trackpad to zoom; the canvas menu has Zoom In and Out, and the grid and rulers start on.
+- Structure → Align and Distribute → Center on Page centres the selection or the drawing.
+- Charges keep off bonds: in the widest gap, or above an atom with one bond (#494, #514).
+- Wedge and hash wide ends lie along the bonds beside them, clear of double bonds (#509, #518).
+- Ions and molecules from a multi-part SMILES (Na⁺ Cl⁻) are laid out in a row (#516).
+- A bond no longer reappears across two labels dragged together (#496).
+- A triple bond leaves a gap where a bond in front crosses it.
+- A chair fused onto another chair no longer overlaps it.
+- Orbitals move with their atom in Arrange Scheme and Align; an off-centre click draws a full-size one.
+- Deleting a selection keeps the page size (#492).
+- A drawing recovered after a crash opens untitled, so Save can't overwrite another file (#491).
+- Opening a moved or deleted file says so, and Open Recent drops it.
+- Copy as Reaction SMILES reports an invalid molecule instead of leaving it out.
+- Dragging with Predicted NMR Shifts on is smooth again (#476).
+- Quitting on macOS no longer crashes.
+- `--render` reports a bad `--drawing-style`, `--format`, input or output clearly, and names that differ only by case get their own files (#477, #493).
+- Python: `read` of a missing file raises `FileNotFoundError`; an unknown `style` lists the choices.
+- Removed: View → Show Implicit Hydrogens (labels always show them) and the Turn Over commands (Shift+Alt+drag still turns).
 
 ## 1.5.0 (2026-09-28)
 
