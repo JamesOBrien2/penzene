@@ -4,6 +4,9 @@
 #include "Online.h"
 #include "Templates.h"
 #include "WhatsNew.h"
+#ifdef Q_OS_WIN
+#include "OleServer.h"
+#endif
 
 #include <QActionGroup>
 #include <QButtonGroup>
@@ -195,7 +198,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
 #ifdef Q_OS_WIN
     // Registers itself with Qt's Windows plugin (only there: it asserts on any other), once. Never
     // deleted: its destructor would look for the plugin after QApplication has gone.
-    static const bool emf = QGuiApplication::platformName() == "windows" && new EmfClipboard;
+    static const bool emf = QGuiApplication::platformName() == "windows" && (new EmfClipboard) && (new EmbedClipboard);
     Q_UNUSED(emf);
 #endif
     undoGroup_ = new QUndoGroup(this);
@@ -533,6 +536,9 @@ MainWindow::~MainWindow() {
 
 void MainWindow::updateTitle() {
     QString name = path_.isEmpty() ? tr("Untitled") : QFileInfo(path_).fileName();
+#ifdef Q_OS_WIN
+    if (embeddedSave_) name = embeddedIn_.isEmpty() ? tr("Embedded drawing") : tr("Drawing in %1").arg(embeddedIn_);
+#endif
     setWindowTitle(name + "[*] — Penzene " PENZENE_BUILD);
     setWindowModified(!isClean());
 }
@@ -808,6 +814,15 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
 }
 
 bool MainWindow::save() {
+#ifdef Q_OS_WIN
+    if (embeddedSave_) {  // back into the Word or PowerPoint document (#229)
+        if (!embeddedSave_()) return false;
+        for (auto& p : pages_) p.undo->setClean();
+        pagesEdited_ = false;
+        updateTitle();
+        return true;
+    }
+#endif
     // MOL can't hold everything .penz will (text, arrows), so only .penz saves silently.
     return path_.endsWith(".penz", Qt::CaseInsensitive) ? saveTo(path_) : saveAs();
 }
@@ -1182,8 +1197,12 @@ bool MainWindow::copy() {
     Document doc = canvas_->selectedSubset();
     if (doc.empty() || !confirmStructure(doc, tr("Copy"), tr("Copy Anyway"))) return false;
     auto* mime = new QMimeData;
+    const QByteArray penz = doc.toJson();
 #ifdef Q_OS_WIN
-    mime->setData(kEmfMime, renderEmf(doc, exportOptions()));  // vector for Word and PowerPoint; first, ahead of the bitmap
+    // First, so Ctrl+V in Word and PowerPoint can embed an object that opens here (#229): EmbedClipboard
+    // offers the drawing as "Embed Source" once the installer has registered Penzene.
+    mime->setData(kPenzMime, penz);
+    mime->setData(kEmfMime, renderEmf(doc, exportOptions()));  // vector for Word and PowerPoint, ahead of the bitmap
 #endif
     // The PNG as exported, so the drawing in its text chunk survives: Qt re-encodes an image
     // it converts itself and drops it. The image stays for apps that only read a bitmap.
@@ -1195,7 +1214,7 @@ bool MainWindow::copy() {
     mime->setImageData(QImage::fromData(png, "PNG"));
     mime->setData("image/svg+xml", renderSvg(doc, exportOptions()));
     mime->setData("application/pdf", renderPdf(doc, exportOptions()));  // vector, for Office and Keynote
-    mime->setData(kPenzMime, doc.toJson());
+    mime->setData(kPenzMime, penz);  // already first on Windows, where this keeps its place
     // For pasting into ChemDraw (macOS maps this to its pasteboard type through ChemDrawPasteboard).
     if (const QByteArray cdx = doc.atoms.empty() ? QByteArray() : chem::toCdx(doc); !cdx.isEmpty())
         mime->setData("chemical/x-cdx", cdx);
@@ -2473,4 +2492,19 @@ QList<FORMATETC> EmfClipboard::formatsForMime(const QString& type, const QMimeDa
     if (type != kEmfMime) return {};
     return {FORMATETC{CF_ENHMETAFILE, nullptr, DVASPECT_CONTENT, -1, TYMED_ENHMF}};
 }
+
+void MainWindow::editEmbedded(const std::vector<Sheet>& sheets, std::function<bool()> save) {
+    setPages(sheets.empty() ? std::vector<Sheet>{{tr("Page 1"), Document{}}} : sheets);
+    canvas_->fitToDocument();
+    path_.clear();
+    embeddedSave_ = std::move(save);
+    updateTitle();
+}
+
+void MainWindow::setEmbeddedIn(const QString& document) {
+    embeddedIn_ = document;
+    updateTitle();
+}
+
+QByteArray MainWindow::embeddedPicture() const { return renderEmf(sheets()[0].doc, exportOptions()); }
 #endif
