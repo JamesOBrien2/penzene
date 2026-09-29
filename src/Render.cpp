@@ -1000,10 +1000,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         }
         if (!shifts.empty()) {
             QPointF at(documentBounds(doc).left(), documentBounds(doc).bottom() + 1.2 * fm.height());
-            for (const QString& line : {QObject::tr("Predicted shifts in ppm: 13C (1H); ~ marks a weaker match."),
-                                        QObject::tr("Contains information from nmrshiftdb2 (www.nmrshiftdb.org), which is made available here"),
-                                        QObject::tr("under the nmrshiftdb2 Database License (%1).")
-                                            .arg("https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/nmrshiftdb2datalicense.txt")}) {
+            for (const QString& line : QStringList{QObject::tr("Predicted shifts in ppm: 13C (1H); ~ marks a weaker match.")} + nmrshiftdbNotice()) {
                 drawText(p, line, at, f);
                 at.ry() += 1.2 * fm.height();
             }
@@ -1089,6 +1086,12 @@ static void paintFrame(QPainter& p, const Document& doc, const ExportOptions& o,
     p.translate(-r.topLeft());
     if (o.background.alpha()) p.fillRect(r, o.background);
     paintDocument(p, doc);
+}
+
+QStringList nmrshiftdbNotice() {
+    return {QObject::tr("Contains information from nmrshiftdb2 (www.nmrshiftdb.org), which is made available here"),
+            QObject::tr("under the nmrshiftdb2 Database License (%1).")
+                .arg("https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/nmrshiftdb2datalicense.txt")};
 }
 
 QImage renderImage(const Document& doc, const ExportOptions& o) {

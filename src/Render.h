@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QImage>
 #include <QPainterPath>
+#include <QStringList>
 #include <vector>
 
 class QPainter;
@@ -77,6 +78,7 @@ bool exportDocument(const Document& doc, const QString& path, const ExportOption
 // Replaces the file at `path` only once all of `data` is written.
 bool writeWhole(const QString& path, const QByteArray& data);
 QImage renderImage(const Document& doc, const ExportOptions& options = {});
+QStringList nmrshiftdbNotice();  // the lines nmrshiftdb2's licence asks for wherever predicted shifts are shown
 QByteArray renderPng(const Document& doc, const ExportOptions& options = {});  // drawing in a text chunk
 QByteArray renderSvg(const Document& doc, const ExportOptions& options = {});
 QByteArray renderPdf(const Document& doc, const ExportOptions& options = {});  // vector, drawing attached

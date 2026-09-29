@@ -33,6 +33,8 @@ public:
     const QSet<int>& selectedTexts() const { return selectedTexts_; }
     void setSelection(QSet<int> atoms, QSet<int> arrows = {}, QSet<int> texts = {});
     Document selectedSubset() const;  // selection (or everything) as a standalone doc
+    void setHighlight(QSet<int> atoms);  // lit without selecting them, e.g. the atoms behind an NMR stick
+    const QSet<int>& highlight() const { return highlight_; }
     void deleteSelection();
     void setUndoStack(QUndoStack* undo) { undo_ = undo; }  // each page has its own history
     void insert(Document fragment, const QString& text);  // centred in view, selected
@@ -148,6 +150,7 @@ private:
 
     QSet<int> selectedAtoms_, selectedArrows_, selectedTexts_;
     int hoverAtom_ = -1, hoverBond_ = -1;
+    QSet<int> highlight_;
     quint64 revision_ = 0;
     bool keyHotspot_ = false;  // G or > is picking: the arrow keys move the hotspot, not the selection
     edit::Hotspot arrowMark_;      // where > started a curved arrow

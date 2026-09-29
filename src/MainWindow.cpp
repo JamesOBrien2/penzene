@@ -130,6 +130,107 @@ protected:
     }
 };
 
+// The NMR panel's predicted spectrum: one stick per set of equivalent atoms, as tall as the atoms (or H)
+// it stands for, ppm falling left to right. The stick under the pointer, or stepped to with Left/Right,
+// is labelled and lights its atoms on the canvas.
+class NmrView : public QWidget {
+public:
+    std::vector<chem::NmrStick> sticks;
+    bool proton = false;
+    const Document* doc = nullptr;  // names the atoms
+    std::function<void(const std::vector<int>&)> light;
+    int current = -1;
+    NmrView() {
+        setMinimumSize(260, 200);
+        setMouseTracking(true);
+        setFocusPolicy(Qt::StrongFocus);
+    }
+    QString describe(int k) const {
+        const auto& s = sticks[k];
+        QStringList atoms;
+        for (int a : s.atoms) atoms << QString::fromStdString(chem::symbol(doc->atoms[a].z)) + QString::number(a + 1);
+        return QCoreApplication::translate("MainWindow", "δ %1%2, %3 %4, %5")
+            .arg(s.weak ? "~" : "")
+            .arg(s.ppm, 0, 'f', proton ? 2 : 1)
+            .arg(s.count)
+            .arg(proton ? "H" : "C", atoms.join(", "));
+    }
+    void setCurrent(int k) {
+        if (k == current) return;
+        current = k;
+        setAccessibleDescription(k >= 0 ? describe(k) : QString());
+        light(k >= 0 ? sticks[k].atoms : std::vector<int>{});
+        update();
+    }
+
+protected:
+    QRectF plot() const {
+        const QFontMetrics fm(font());
+        return QRectF(rect()).adjusted(8, fm.height() + 6, -8, -fm.height() - 8);
+    }
+    std::pair<double, double> range() const {  // ppm at the left and right edges
+        double left = proton ? 12 : 220, right = 0;
+        for (const auto& s : sticks) left = std::max(left, s.ppm + 1), right = std::min(right, s.ppm - 1);
+        return {left, right};
+    }
+    double x(double ppm) const {
+        const auto [l, r] = range();
+        return plot().left() + (l - ppm) / (l - r) * plot().width();
+    }
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QColor ink = palette().color(QPalette::WindowText);
+        if (sticks.empty()) {
+            p.setPen(ink);
+            p.drawText(rect(), Qt::AlignCenter | Qt::TextWordWrap,
+                       QCoreApplication::translate("MainWindow", "Draw or select a structure with predicted shifts."));
+            return;
+        }
+        const QFontMetrics fm(font());
+        const QRectF plot = this->plot();
+        const auto [l, r] = range();
+        p.setPen(QPen(ink, 1));
+        p.drawLine(plot.bottomLeft(), plot.bottomRight());
+        const int step = proton ? 1 : 20;
+        for (int v = int(std::floor(l / step)) * step; v >= r; v -= step) {
+            p.drawLine(QPointF(x(v), plot.bottom()), QPointF(x(v), plot.bottom() + 3));
+            const QString t = QString::number(v);
+            if (v % (2 * step) == 0) p.drawText(QPointF(x(v) - fm.horizontalAdvance(t) / 2.0, plot.bottom() + 4 + fm.ascent()), t);
+        }
+        int tallest = 1;
+        for (const auto& s : sticks) tallest = std::max(tallest, s.count);
+        auto top = [&](const chem::NmrStick& s) { return plot.bottom() - double(s.count) / tallest * plot.height(); };
+        for (size_t k = 0; k < sticks.size(); ++k) {
+            const auto& s = sticks[k];
+            const QColor c = int(k) == current ? ink : palette().color(QPalette::Highlight);
+            p.setPen(QPen(c, int(k) == current ? 3 : 2, s.weak ? Qt::DashLine : Qt::SolidLine, Qt::FlatCap));
+            p.drawLine(QPointF(x(s.ppm), plot.bottom()), QPointF(x(s.ppm), top(s)));
+        }
+        p.setPen(ink);
+        if (current >= 0) {
+            const QString t = describe(current).section(',', 0, 1);
+            const double left = std::clamp(x(sticks[current].ppm) - fm.horizontalAdvance(t) / 2.0, 0.0, width() - fm.horizontalAdvance(t) - 0.0);
+            p.drawText(QPointF(left, std::max(top(sticks[current]) - 4, double(fm.ascent()))), t);
+        }
+        p.drawText(QRectF(plot.left(), 0, plot.width(), fm.height() + 4), Qt::AlignRight, "δ / ppm");
+    }
+    void mouseMoveEvent(QMouseEvent* e) override {
+        int best = -1;
+        double nearest = 6;  // px
+        for (size_t k = 0; k < sticks.size(); ++k)
+            if (double d = std::abs(x(sticks[k].ppm) - e->position().x()); d < nearest) nearest = d, best = int(k);
+        setCurrent(best);
+    }
+    void leaveEvent(QEvent*) override { setCurrent(-1); }
+    void keyPressEvent(QKeyEvent* e) override {
+        const int n = int(sticks.size());
+        if (e->key() == Qt::Key_Right && n) setCurrent(std::min(current + 1, n - 1));
+        else if (e->key() == Qt::Key_Left && n) setCurrent(std::max(current - 1, 0));
+        else QWidget::keyPressEvent(e);
+    }
+};
+
 static QString uiStyle(const Theme& t) {
     const Chrome c = chrome(t);
     return QString(R"(
@@ -363,6 +464,35 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     connect(ion_, &QComboBox::currentIndexChanged, this, &MainWindow::updateMassSpec);
     connect(canvas_, &Canvas::documentChanged, this, &MainWindow::updateMassSpec);
     connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::updateMassSpec);
+    // NMR panel (#444): the predicted spectrum of the selection or everything.
+    nmrDock_ = new QDockWidget(tr("NMR"), this);
+    nmrDock_->setObjectName("nmr");
+    auto* nmrCard = new QFrame;
+    nmrCard->setObjectName("panelCard");
+    auto* nmrLayout = new QVBoxLayout(nmrCard);
+    nmrLayout->setContentsMargins(12, 12, 12, 12);
+    nucleus_ = new QComboBox;
+    nucleus_->addItems({"¹³C", "¹H"});
+    nucleus_->setAccessibleName(tr("Nucleus"));
+    nmr_ = new NmrView;
+    nmr_->setAccessibleName(tr("Predicted spectrum"));
+    nmr_->setToolTip(tr("Point at a stick, or press Left and Right, to light its atoms"));
+    nmr_->light = [this](const std::vector<int>& atoms) { canvas_->setHighlight(QSet<int>(atoms.begin(), atoms.end())); };
+    auto* notice = new QLabel(tr("Predicted; ~ and dashed mark a weaker match.") + " " + nmrshiftdbNotice().join(" "));
+    notice->setWordWrap(true);
+    notice->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    notice->setStyleSheet("font-size: 10px;");
+    nmrLayout->addWidget(nucleus_);
+    nmrLayout->addWidget(nmr_, 1);
+    nmrLayout->addWidget(notice);
+    nmrCard->setMinimumWidth(300);
+    nmrDock_->setWidget(nmrCard);
+    addDockWidget(Qt::RightDockWidgetArea, nmrDock_);
+    nmrDock_->hide();
+    connect(nmrDock_, &QDockWidget::visibilityChanged, this, &MainWindow::updateNmr);
+    connect(nucleus_, &QComboBox::currentIndexChanged, this, &MainWindow::updateNmr);
+    connect(canvas_, &Canvas::documentChanged, this, &MainWindow::updateNmr);
+    connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::updateNmr);
     buildTools();
     buildMenus();
     connect(undoGroup_, &QUndoGroup::cleanChanged, this, &MainWindow::updateTitle);
@@ -550,6 +680,20 @@ void MainWindow::updateMassSpec() {
     eiIons_->setText(tr("<b>EI ions to look for</b> (from the groups drawn; no intensities)") +
                      "<table cellspacing=\"4\">" + rows + "</table>");
     eiIons_->setVisible(!ions.empty());
+}
+
+void MainWindow::updateNmr() {
+    nmr_->current = -1;
+    canvas_->setHighlight({});
+    if (!nmrDock_->isVisible()) return;
+    const QSet<int>& selected = canvas_->selection();
+    nmr_->proton = nucleus_->currentIndex() == 1;
+    nmr_->doc = &canvas_->document();
+    nmr_->sticks = chem::nmrSticks(canvas_->document(), nmr_->proton, std::vector<int>(selected.begin(), selected.end()));
+    QStringList all;  // for screen readers; the stick in hand replaces it
+    for (int k = 0; k < int(nmr_->sticks.size()); ++k) all << nmr_->describe(k);
+    nmr_->setAccessibleDescription(all.join("; "));
+    nmr_->update();
 }
 
 // Formula and masses of the selection, or of everything.
@@ -2468,6 +2612,9 @@ void MainWindow::buildMenus() {
     auto* massToggle = massDock_->toggleViewAction();
     massToggle->setText(tr("&Mass Spec Panel"));
     view->addAction(massToggle);
+    auto* nmrToggle = nmrDock_->toggleViewAction();
+    nmrToggle->setText(tr("&NMR Panel"));
+    view->addAction(nmrToggle);
     view->addSeparator();
     auto* themeMenu = view->addMenu(tr("T&heme"));
     auto* themeGroup = themeGroup_ = new QActionGroup(this);

@@ -307,7 +307,7 @@ void Canvas::setDocumentSilently(const Document& doc) {
     // Items added or removed (an erase, an undo) renumber the rest, so indices from
     // before would point at other atoms: drop them. Callers that know the new
     // numbering (insert, duplicate) set the selection afterwards.
-    if (doc.atoms.size() != doc_.atoms.size()) selectedAtoms_.clear(), hoverAtom_ = -1;
+    if (doc.atoms.size() != doc_.atoms.size()) selectedAtoms_.clear(), hoverAtom_ = -1, highlight_.clear();
     if (doc.bonds.size() != doc_.bonds.size()) hoverBond_ = -1;
     if (doc.arrows.size() != doc_.arrows.size()) selectedArrows_.clear();
     if (doc.texts.size() != doc_.texts.size()) selectedTexts_.clear();
@@ -394,6 +394,11 @@ Document Canvas::selectedSubset() const {
     Document out = keepOnly(doc_, selectedAtoms_, selectedArrows_, selectedTexts_);
     out.page.clear();  // a selection exports as just the drawing; Delete keeps the page (#492)
     return out;
+}
+
+void Canvas::setHighlight(QSet<int> atoms) {
+    highlight_ = std::move(atoms);
+    viewport()->update();
 }
 
 void Canvas::deleteSelection() {
@@ -584,6 +589,11 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
     p->setPen(Qt::NoPen);
     p->setBrush(sel);
     for (int i : selectedAtoms_) p->drawEllipse(doc_.atoms[i].pos, 4, 4);
+    p->setPen(QPen(theme_.hotspot, 1.5));
+    p->setBrush(Qt::NoBrush);
+    for (int i : highlight_) p->drawEllipse(doc_.atoms[i].pos, 7, 7);
+    p->setPen(Qt::NoPen);
+    p->setBrush(sel);
 
     for (int i : selectedArrows_) p->strokePath(arrowPath(doc_.arrows[i]), QPen(sel, 4, Qt::SolidLine, Qt::RoundCap));
     for (int i : selectedTexts_) p->drawRect(textPath(doc_.texts[i], documentStyle(doc_)).boundingRect().adjusted(-1.5, -1.5, 1.5, 1.5));
