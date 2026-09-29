@@ -1859,6 +1859,17 @@ TEST_CASE("predicted spectra: one stick per set of equivalent atoms, for the cho
     auto ethanol = counts(chem::nmrSticks(d, true, {0, 1, 2}));
     std::sort(ethanol.begin(), ethanol.end());
     CHECK(ethanol == std::vector<int>{1, 2, 3});  // OH, CH2, CH3
+    QStringList split;  // first order: CH3 by CH2 a triplet, CH2 by CH3 a quartet (OH exchanges), OH a singlet
+    for (const auto& k : chem::nmrSticks(d, true, {0, 1, 2})) split << QString::number(k.count) + k.multiplicity();
+    split.sort();
+    CHECK(split == QStringList{"1s", "2q", "3t"});
+    CHECK(chem::nmrSticks(d, true, {3}).at(0).multiplicity() == "s");  // toluene's CH3: no H next door
+    CHECK(chem::nmrSticks(*chem::fromSmiles("C1CCCCC1"), true).at(0).multiplicity() == "s");  // equivalent H don't split each other
+    const QString h = chem::nmrLine(d, true, {0, 1, 2});  // for the SI (#566)
+    CHECK(h.startsWith("1H NMR (predicted) δ "));
+    CHECK(h.contains(QRegularExpression(R"(\d\.\d\d \(q, 2H\), .*\d\.\d\d \(t, 3H\)\.$)")));
+    CHECK(QRegularExpression(R"(^13C NMR \(predicted\) δ (\d+\.\d, ){4}\d+\.\d\.$)").match(chem::nmrLine(d, false, {3, 4, 5, 6, 7, 8, 9})).hasMatch());
+    CHECK(chem::nmrLine(*chem::fromSmiles("[Na+].[Cl-]"), true).isEmpty());
     CHECK(chem::nmrSticks(d, true).size() == proton.size() + 3);  // everything
 }
 

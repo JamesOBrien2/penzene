@@ -1531,7 +1531,7 @@ TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the 
     CHECK(view->accessibleDescription().split("; ").size() == 7);  // ethanol's 2 carbons, toluene's 5
     canvas->setSelection({3, 4, 5, 6, 7, 8, 9});
     CHECK(view->accessibleDescription().split("; ").size() == 5);
-    CHECK(view->accessibleDescription().contains("2 C, C7, C9"));  // the two meta carbons, one stick
+    CHECK(view->accessibleDescription().contains("2 C: C7, C9"));  // the two meta carbons, one stick
     view->setFocus();
     QTest::keyClick(view, Qt::Key_Right);
     CHECK(view->accessibleDescription().startsWith("δ 13"));  // the ipso carbon first, as a spectrum reads
@@ -1539,18 +1539,30 @@ TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the 
     if (auto out = qEnvironmentVariable("PENZENE_NMR_SHOT"); !out.isEmpty()) w.grab().save(out);
     QTest::keyClick(view, Qt::Key_Right);
     CHECK(canvas->highlight().size() == 2);
+    QEvent leave(QEvent::Leave);
+    QApplication::sendEvent(view, &leave);  // the pointer gone: every stick is read again
+    CHECK(view->accessibleDescription().split("; ").size() == 5);
+    QTest::keyClick(view, Qt::Key_Right);
     QTest::keyClick(view, Qt::Key_Left);
     CHECK(canvas->highlight() == QSet<int>{4});
+    dock->findChild<QPushButton*>()->click();
+    CHECK(QGuiApplication::clipboard()->text().startsWith("13C NMR (predicted) δ 13"));  // toluene's, not ethanol's
+    CHECK(QGuiApplication::clipboard()->text().count(", ") == 4);
     dock->findChild<QComboBox*>()->setCurrentIndex(1);  // 1H
     CHECK(canvas->highlight().isEmpty());
-    CHECK(view->accessibleDescription().split("; ").last().contains("3 H, C4"));  // the methyl, furthest upfield
+    CHECK(view->accessibleDescription().split("; ").last().contains("3 H, s: C4"));  // the methyl, furthest upfield
     QTest::keyClick(view, Qt::Key_Right);
     CHECK_FALSE(canvas->highlight().isEmpty());
     canvas->commit(*chem::fromSmiles("CCO"), "Replace");  // an edit (or undo) that drops atoms: nothing stale stays lit
     CHECK(canvas->highlight().isEmpty());
+    CHECK(view->accessibleDescription().contains("3 H, t: C1"));  // first order (#552)
+    if (auto out = qEnvironmentVariable("PENZENE_NMR_SHOT"); !out.isEmpty()) w.grab().save(QString(out).replace(".png", "-1h.png"));
     QTest::keyClick(view, Qt::Key_Right);
     REQUIRE_FALSE(canvas->highlight().isEmpty());
     for (int i : canvas->highlight()) CHECK(i < 3);
+    canvas->commit(*chem::fromSmiles("[Na+].[Cl-]"), "Replace");
+    dock->findChild<QPushButton*>()->click();  // nothing predicted: the clipboard keeps what it had
+    CHECK(QGuiApplication::clipboard()->text().startsWith("13C NMR"));
     dock->hide();
     CHECK(canvas->highlight().isEmpty());
 }
