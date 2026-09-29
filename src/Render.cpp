@@ -704,7 +704,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         const auto& a = doc.atoms[i];
         p.setPen(QPen(info[i].valenceError ? style.error : ink(a.color), lineWidth));
         if (labeled[i]) {
-            drawLabel(p, doc, int(i), doc.hideImplicitH ? 0 : info[i].hydrogens, hSide(int(i)), st);
+            drawLabel(p, doc, int(i), info[i].hydrogens, hSide(int(i)), st);
         } else if (a.charge) {
             QFont sub = labelFont(st, 0.7);
             QString c = QString(a.charge > 0 ? "+" : "−");
@@ -744,7 +744,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         std::vector<double> taken;
         for (int nb : neighbors(doc, bondsAt, int(i)))
             taken.push_back(std::atan2(doc.atoms[nb].pos.y() - a.pos.y(), doc.atoms[nb].pos.x() - a.pos.x()));
-        if (labeled[i] && info[i].hydrogens && !doc.hideImplicitH) {
+        if (labeled[i] && info[i].hydrogens) {
             const HSide s = hSide(int(i));
             taken.push_back(s == HSide::Right ? 0 : s == HSide::Left ? std::numbers::pi : s == HSide::Below ? std::numbers::pi / 2 : -std::numbers::pi / 2);
         }

@@ -56,8 +56,7 @@ Ctrl+Shift+K lays a structure out afresh, keeping its stereo and bond styles.
 
 ```{feature} letter-h
 :title: Hydrogens
-**Structure → Add or Remove Explicit Hydrogens**. **View → Carbon Labels** and **Show Implicit
-Hydrogens** change how they're shown.
+**Structure → Add or Remove Explicit Hydrogens**. **View → Carbon Labels** changes how carbons are shown.
 ```
 
 ```{feature} hexagon

@@ -416,11 +416,11 @@ TEST_CASE("explicit hydrogens and carbon/H display options (#97)") {
     CHECK(chem::removeHydrogens(wedgedH).atoms.size() == 4);
 
     eth->carbonLabels = Document::CarbonLabels::Terminal;
-    eth->hideImplicitH = true;
-    auto back = Document::fromJson(eth->toJson());
+    QJsonObject old = QJsonDocument::fromJson(eth->toJson()).object();
+    old["hideImplicitH"] = true;  // saved by 1.4: the labels keep their hydrogens now
+    auto back = Document::fromJson(QJsonDocument(old).toJson());
     REQUIRE(back);
     CHECK(back->carbonLabels == Document::CarbonLabels::Terminal);
-    CHECK(back->hideImplicitH);
 }
 
 TEST_CASE("CIP stereo labels, and E/Z read from the drawing (#94)") {
