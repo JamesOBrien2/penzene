@@ -149,11 +149,11 @@ public:
         const auto& s = sticks[k];
         QStringList atoms;
         for (int a : s.atoms) atoms << QString::fromStdString(chem::symbol(doc->atoms[a].z)) + QString::number(a + 1);
-        return QCoreApplication::translate("MainWindow", "δ %1%2, %3 %4, %5")
+        return QCoreApplication::translate("MainWindow", "δ %1%2, %3 %4: %5")
             .arg(s.weak ? "~" : "")
             .arg(s.ppm, 0, 'f', proton ? 2 : 1)
             .arg(s.count)
-            .arg(proton ? "H" : "C", atoms.join(", "));
+            .arg(proton ? "H, " + s.multiplicity() : "C", atoms.join(", "));
     }
     void setCurrent(int k) {
         if (k == current) return;
@@ -205,11 +205,22 @@ protected:
             const auto& s = sticks[k];
             const QColor c = int(k) == current ? ink : palette().color(QPalette::Highlight);
             p.setPen(QPen(c, int(k) == current ? 3 : 2, s.weak ? Qt::DashLine : Qt::SolidLine, Qt::FlatCap));
-            p.drawLine(QPointF(x(s.ppm), plot.bottom()), QPointF(x(s.ppm), top(s)));
+            // 1H: the multiplet's n + 1 lines, Pascal's triangle tall, drawn wider than a real J so it can be read.
+            const int n = proton ? std::min(s.coupled, 6) : 0;
+            std::vector<double> row{1};
+            for (int k = 0; k < n; ++k) {
+                row.push_back(0);
+                for (int j = k + 1; j > 0; --j) row[j] += row[j - 1];
+            }
+            const double peak = *std::max_element(row.begin(), row.end());
+            for (int j = 0; j <= n; ++j) {
+                const double at = x(s.ppm) + (j - n / 2.0) * 3;
+                p.drawLine(QPointF(at, plot.bottom()), QPointF(at, plot.bottom() - row[j] / peak * (plot.bottom() - top(s))));
+            }
         }
         p.setPen(ink);
         if (current >= 0) {
-            const QString t = describe(current).section(',', 0, 1);
+            const QString t = describe(current).section(':', 0, 0);
             const double left = std::clamp(x(sticks[current].ppm) - fm.horizontalAdvance(t) / 2.0, 0.0, width() - fm.horizontalAdvance(t) - 0.0);
             p.drawText(QPointF(left, std::max(top(sticks[current]) - 4, double(fm.ascent()))), t);
         }

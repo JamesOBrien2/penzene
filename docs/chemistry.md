@@ -80,8 +80,9 @@ goes into SMILES and MOL.
 :title: Predicted NMR shifts
 **Format → Predicted NMR Shifts** writes each carbon's predicted ¹³C shift beside it, and the ¹H shift
 of any atom with hydrogens in brackets, in ppm. A `~` marks a weaker match. **View → NMR Panel** draws
-the selection's (or the drawing's) predicted ¹³C or ¹H spectrum, one stick per set of equivalent atoms;
-point at a stick, or press Left and Right, to light its atoms. See [NMR prediction](#nmr-prediction).
+the selection's (or the drawing's) predicted ¹³C or ¹H spectrum, one stick per set of equivalent atoms,
+¹H sticks split first order (s, d, t, q, m) by the H on neighbouring carbons; point at a stick, or press
+Left and Right, to light its atoms. See [NMR prediction](#nmr-prediction).
 ```
 
 ```{feature} world-search
