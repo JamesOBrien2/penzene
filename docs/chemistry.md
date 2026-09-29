@@ -38,7 +38,7 @@ Labels get their hydrogens (OH, NH₂). An atom with too many bonds is drawn in 
 
 ```{feature} rotate-3d
 :title: Stereochemistry
-Wedges and hashes set stereocentres; E/Z comes from the drawing. **View → Show Stereo Labels**
+Wedges and hashes set stereocentres; E/Z comes from the drawing. **Format → Stereo Labels**
 shows CIP (R)/(S) and (E)/(Z).
 ```
 
@@ -56,37 +56,37 @@ Ctrl+Shift+K lays a structure out afresh, keeping its stereo and bond styles.
 
 ```{feature} letter-h
 :title: Hydrogens
-**Structure → Add or Remove Explicit Hydrogens**. **View → Carbon Labels** changes how carbons are shown.
+**Structure → Add or Remove Explicit Hydrogens**. **Format → Carbon Labels** changes how carbons are shown.
 ```
 
 ```{feature} hexagon
 :title: Aromatic circles
-The View menu draws benzene-like rings with a circle, for the whole drawing or for selected rings.
+The Format menu draws benzene-like rings with a circle, for the whole drawing or for selected rings.
 ```
 
 ```{feature} hash
 :title: Numbers
-**View → Atom Numbers** shows atom indices; `'` on an atom sets its reaction atom-map number, which
+**Format → Atom Numbers** shows atom indices; `'` on an atom sets its reaction atom-map number, which
 goes into SMILES and MOL.
 ```
 
 ```{feature} atom
 :title: Predicted NMR shifts
-**View → Predicted NMR Shifts** writes each carbon's predicted ¹³C shift beside it, and the ¹H shift
+**Format → Predicted NMR Shifts** writes each carbon's predicted ¹³C shift beside it, and the ¹H shift
 of any atom with hydrogens in brackets, in ppm. A `~` marks a weaker match. See
 [NMR prediction](#nmr-prediction).
 ```
 
 ```{feature} world-search
 :title: Names (online)
-**File → Import Name from PubChem** turns a name into a structure, and **Structure → Name from
-PubChem** copies a structure's IUPAC name. Both look the compound up on PubChem, so they need an
+**File → Import → Name** turns a name into a structure, and **Edit → Copy As → IUPAC
+Name** copies a structure's IUPAC name. Both look the compound up on PubChem, so they need an
 internet connection and only work for compounds PubChem knows.
 ```
 
 ```{feature} copy
 :title: Copy as
-SMILES, InChI, InChIKey and reaction SMILES (Edit menu).
+SMILES, InChI, InChIKey and reaction SMILES (Edit → Copy As).
 ```
 
 ::::

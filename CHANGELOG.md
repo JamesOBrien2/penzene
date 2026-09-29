@@ -4,6 +4,10 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
+## Unreleased
+
+- **Tidier menus**: new Page, Arrange and Format menus; Copy As and Import submenus (#512). <!-- icon: menu-2 -->
+
 ## 1.6.0 (2026-09-29)
 
 - **Floating flyouts**: tool flyouts stay open until closed; drag them anywhere and resize them from a corner. <!-- icon: layout-sidebar -->

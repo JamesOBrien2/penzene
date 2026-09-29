@@ -28,7 +28,7 @@ Help → Keyboard Shortcuts (F1).
 | k K | sulfonyl, t-Bu | same | ✓ |
 | . | attachment point | same (wavy bond to a bare point) | ✓ |
 | j J | η⁵-cyclopentadienyl, η⁶-benzene | same, flat ring bonded through its centre (ChemDraw draws it in perspective) | ≈ |
-| ' | atom number | atom-map number (next free); View → Atom Numbers shows indices | ≈ |
+| ' | atom number | atom-map number (next free); Format → Atom Numbers shows indices | ≈ |
 | + − | charge | same | ✓ |
 | g | select the atom | same | ✓ |
 | = | nickname dialog | label editor (abbreviations, SMILES, any text) | ≈ |

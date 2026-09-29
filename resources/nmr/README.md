@@ -1,7 +1,7 @@
 # NMR shift table
 
 `hose.tar.xz` holds `hose.tsv`: 13C and 1H chemical shifts keyed by HOSE code, which Penzene
-uses to predict shifts (View → Predicted NMR Shifts, #403).
+uses to predict shifts (Format → Predicted NMR Shifts, #403).
 
 Contains information from nmrshiftdb2 (www.nmrshiftdb.org), which is made available here under
 the nmrshiftdb2 Database License (https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/nmrshiftdb2datalicense.txt,

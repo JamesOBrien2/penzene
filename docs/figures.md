@@ -2,7 +2,7 @@
 
 ## Drawing styles
 
-**Structure → Drawing Style** sets a document's style. Exports
+**Format → Drawing Style** sets a document's style. Exports
 come out at the style's real size.
 
 | Style | Bond length | Line | Bold | Double-bond gap | Font |
@@ -23,7 +23,7 @@ Preferences sets the style for new documents.
 picture on the clipboard (vector PDF, PNG and SVG) together with MOL, CDX and the Penzene
 drawing, so Word, PowerPoint, Keynote and ChemDraw each get what they understand, and Office and
 Keynote get sharp vectors rather than pixels. It carries no plain text, so a plain paste into Office
-gives the picture; **Edit → Copy as SMILES** (⌥⌘C) gives the text.
+gives the picture; **Edit → Copy As → SMILES** (⌥⌘C) gives the text.
 ```
 
 ```{feature} file-type-pdf
@@ -53,14 +53,14 @@ are always black on clear or white.
 
 ## Page mode
 
-**View → Page** shows a page on the canvas: A4, US Letter, or an ACS or RSC single or double
+**Page → Page Size** shows a page on the canvas: A4, US Letter, or an ACS or RSC single or double
 column at the journal's maximum figure height. Lay a scheme out at its final size; Export, Copy and
 Print then take the whole page. A selection still exports just itself.
 
 ## Reaction schemes
 
 Draw molecules either side of a reaction arrow, with reagents over or under it, and use
-**Structure → Arrange Scheme** to line them up. **Edit → Copy as Reaction SMILES** and saving as
+**Arrange → Arrange Scheme** to line them up. **Edit → Copy As → Reaction SMILES** and saving as
 `.rxn` treat everything before the arrow as reactants, things over or under it as agents, and
 things after it as products.
 

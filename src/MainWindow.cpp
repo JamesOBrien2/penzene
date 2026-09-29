@@ -1983,10 +1983,6 @@ void MainWindow::buildMenus() {
         updateTitle();
         welcome_->show();
     });
-    file->addAction(tr("New &Page"), this, &MainWindow::addPage);
-    file->addAction(tr("Rena&me Page…"), this, [this] { renamePage(page_); });
-    auto* deletePageAction = file->addAction(tr("&Delete Page"), this, [this] { deletePage(page_); });
-    connect(file, &QMenu::aboutToShow, this, [=, this] { deletePageAction->setEnabled(pages_.size() > 1); });
     file->addAction(tr("&Open…"), QKeySequence::Open, this, [this] {
         if (!maybeSave()) return;
         QString p = QFileDialog::getOpenFileName(this, tr("Open"), {},
@@ -2007,8 +2003,9 @@ void MainWindow::buildMenus() {
     file->addAction(tr("&Save"), QKeySequence::Save, this, &MainWindow::save);
     file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, &MainWindow::saveAs);
     file->addSeparator();
-    file->addAction(tr("Import &SMILES…"), QKeySequence(tr("Ctrl+Shift+I")), this, &MainWindow::importSmiles);
-    file->addAction(tr("Import &Name from PubChem…"), this, &MainWindow::importName);
+    auto* importMenu = file->addMenu(tr("&Import"));
+    importMenu->addAction(tr("&SMILES…"), QKeySequence(tr("Ctrl+Shift+I")), this, &MainWindow::importSmiles);
+    importMenu->addAction(tr("&Name…"), this, &MainWindow::importName)->setStatusTip(tr("Look a name up on PubChem"));
     file->addAction(tr("&Export…"), QKeySequence(tr("Ctrl+E")), this, &MainWindow::exportImage);
     file->addAction(tr("Export &Descriptors…"), this, &MainWindow::exportDescriptors);
     file->addAction(tr("&Print…"), QKeySequence::Print, this, &MainWindow::print);
@@ -2023,27 +2020,21 @@ void MainWindow::buildMenus() {
     edit->addAction(u);
     edit->addAction(r);
     edit->addSeparator();
-    auto* moveTo = edit->addMenu(tr("Mo&ve to Page"));
-    connect(moveTo, &QMenu::aboutToShow, this, [=, this] {
-        moveTo->clear();
-        for (int i = 0; i < int(pages_.size()); ++i)
-            if (i != page_) moveTo->addAction(pages_[i].name, this, [=, this] { moveSelectionToPage(i); });
-        if (moveTo->isEmpty()) moveTo->addAction(tr("(add a page first)"))->setEnabled(false);
-    });
     edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] {
         if (copy()) canvas_->deleteSelection();  // a cancelled copy keeps the drawing
     });
     edit->addAction(tr("&Copy"), QKeySequence::Copy, this, &MainWindow::copy);
-    edit->addAction(tr("Copy as S&MILES"), QKeySequence(tr("Ctrl+Alt+C")), this, [this] {
+    auto* copyAs = edit->addMenu(tr("Copy A&s"));
+    copyAs->addAction(tr("&SMILES"), QKeySequence(tr("Ctrl+Alt+C")), this, [this] {
         QApplication::clipboard()->setText(QString::fromStdString(chem::toSmiles(canvas_->selectedSubset())));
     });
-    edit->addAction(tr("Copy as &InChI"), this, [this] {
+    copyAs->addAction(tr("&InChI"), this, [this] {
         QApplication::clipboard()->setText(QString::fromStdString(chem::toInchi(canvas_->selectedSubset())));
     });
-    edit->addAction(tr("Copy as InChI&Key"), this, [this] {
+    copyAs->addAction(tr("InChI&Key"), this, [this] {
         QApplication::clipboard()->setText(QString::fromStdString(chem::toInchiKey(canvas_->selectedSubset())));
     });
-    edit->addAction(tr("Copy as &Reaction SMILES"), this, [this] {
+    copyAs->addAction(tr("&Reaction SMILES"), this, [this] {
         if (const auto steps = chem::reactionsOf(canvas_->selectedSubset()); !steps.empty()) {
             const std::string smiles = chem::toReactionSmiles(steps);  // a line a step
             if (smiles.empty())
@@ -2053,75 +2044,7 @@ void MainWindow::buildMenus() {
         } else
             statusBar()->showMessage(tr("No reaction arrow in the drawing"), 4000);
     });
-    edit->addAction(tr("&Paste"), QKeySequence::Paste, this, &MainWindow::paste);
-    edit->addAction(tr("&Delete"), canvas_, &Canvas::deleteSelection);
-    edit->addSeparator();
-    edit->addAction(tr("Select &All"), QKeySequence::SelectAll, canvas_, &Canvas::selectAll);
-    edit->addSeparator();
-    auto* prefs = edit->addAction(tr("&Preferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
-    prefs->setMenuRole(QAction::PreferencesRole);  // the app menu on macOS
-
-    auto* structure = menuBar()->addMenu(tr("&Structure"));
-    structure->addAction(tr("Flip &Horizontal"), QKeySequence(tr("Ctrl+Shift+H")), this,
-                         [this] { canvas_->flipSelection(true); });
-    structure->addAction(tr("Arrange &Scheme"), this, [this] { canvas_->arrangeScheme(); });
-    auto* brackets = structure->addMenu(tr("&Brackets"));
-    for (bool square : {true, false})
-        brackets->addAction(square ? tr("&Square Brackets Around Selection…") : tr("&Round Brackets Around Selection…"), this,
-                            [this, square] {
-                                bool ok = false;
-                                const QString label = QInputDialog::getText(this, tr("Brackets"), tr("Subscript (e.g. n; may be empty):"),
-                                                                            QLineEdit::Normal, "n", &ok);
-                                if (ok) canvas_->bracketSelection(square, label.trimmed());
-                            });
-    brackets->addAction(tr("Remove &Brackets"), this, [this] { canvas_->removeBrackets(); });
-    structure->addAction(tr("Save Selection as T&emplate…"), this, &MainWindow::saveTemplate);
-    structure->addAction(tr("&Transform…"), this, [this] {
-        QDialog dialog(this);
-        dialog.setWindowTitle(tr("Transform"));
-        auto* form = new QFormLayout(&dialog);
-        auto spin = [&](const QString& label, double lo, double hi, double value, const QString& suffix) {
-            auto* s = new QDoubleSpinBox;
-            s->setRange(lo, hi), s->setValue(value), s->setSuffix(suffix), s->setDecimals(1);
-            form->addRow(label, s);
-            return s;
-        };
-        auto* angle = spin(tr("Rotate:"), -360, 360, 0, "°");
-        auto* scale = spin(tr("Scale:"), 5, 1000, 100, "%");
-        auto* sx = spin(tr("Stretch across:"), 5, 1000, 100, "%");
-        auto* sy = spin(tr("Stretch up and down:"), 5, 1000, 100, "%");
-        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-        form->addRow(buttons);
-        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-        if (dialog.exec() != QDialog::Accepted) return;
-        const double k = scale->value() / 100;
-        canvas_->transformSelection(QTransform().rotate(angle->value()).scale(k * sx->value() / 100, k * sy->value() / 100),
-                                    tr("Transform"));
-    });
-    structure->addAction(tr("Flip &Vertical"), QKeySequence(tr("Ctrl+Shift+V")), this,
-                         [this] { canvas_->flipSelection(false); });
-    structure->addAction(tr("&Invert Stereochemistry"), this, [this] { canvas_->invertStereo(); });
-    auto* arrange = structure->addMenu(tr("&Align and Distribute"));
-    using A = Canvas::Align;
-    for (auto [label, edge] : {std::pair{tr("Align &Left"), A::Left}, {tr("Align &Centres"), A::HCentre},
-                               {tr("Align &Right"), A::Right}, {tr("Align &Top"), A::Top},
-                               {tr("Align &Middles"), A::VCentre}, {tr("Align &Bottom"), A::Bottom}})
-        arrange->addAction(label, this, [this, edge] { canvas_->alignSelection(edge); });
-    arrange->addSeparator();
-    arrange->addAction(tr("Distribute &Horizontally"), this, [this] { canvas_->distributeSelection(true); });
-    arrange->addAction(tr("Distribute &Vertically"), this, [this] { canvas_->distributeSelection(false); });
-    arrange->addSeparator();
-    arrange->addAction(tr("Center on &Page"), this, [this] { canvas_->centerOnPage(); })
-        ->setStatusTip(tr("Move the selection, or the whole drawing, to the middle of the page"));
-    structure->addSeparator();
-    structure->addAction(tr("Add Explicit &Hydrogens"), this, [this] {
-        canvas_->commit(chem::addHydrogens(canvas_->document()), tr("Add hydrogens"));
-    });
-    structure->addAction(tr("Remove Explicit Hydro&gens"), this, [this] {
-        canvas_->commit(chem::removeHydrogens(canvas_->document()), tr("Remove hydrogens"));
-    });
-    structure->addAction(tr("&Name from PubChem"), this, [this] {
+    copyAs->addAction(tr("IUPAC &Name"), this, [this] {
         const Document doc = canvas_->selectedSubset();
         if (doc.atoms.empty()) return;
         QString error;
@@ -2138,163 +2061,34 @@ void MainWindow::buildMenus() {
         QApplication::clipboard()->setText(name);
         QMessageBox::information(this, tr("Name from PubChem"), tr("%1\n\n(copied to the clipboard)").arg(name));
     });
-    structure->addAction(tr("Chec&k Structure…"), QKeySequence(tr("Ctrl+Alt+K")), this, [this] { checkStructure(); });
-    structure->addAction(tr("&Clean Structure"), QKeySequence(tr("Ctrl+Shift+K")), this, [this] {
-        const auto& sel = canvas_->selection();  // selected molecules only, else everything
-        canvas_->commit(chem::clean2D(canvas_->document(), {sel.begin(), sel.end()}), tr("Clean"));
-    });
-    // Drawing style presets, like ChemDraw's document settings; stored in the .penz.
-    auto* styles = structure->addMenu(tr("Drawing &Style"));
-    auto* styleGroup = new QActionGroup(this);
-    for (const auto& st : drawingStyles()) {
-        auto* act = styles->addAction(st.name);
-        act->setCheckable(true);
-        styleGroup->addAction(act);
-        connect(act, &QAction::triggered, this, [this, name = st.name] {
-            Document next = canvas_->document();
-            next.style = name == drawingStyles()[0].name ? QString() : name;
-            next.labelRatio = 0;  // the style's own label size, not an imported file's (#203)
-            if (!(next == canvas_->document())) canvas_->commit(next, tr("Drawing style"));
-        });
-    }
-    auto syncStyle = [this, styleGroup] {
-        const QString current = drawingStyle(canvas_->document().style).name;
-        for (auto* act : styleGroup->actions()) act->setChecked(act->text() == current);
-    };
-    connect(canvas_, &Canvas::documentChanged, this, syncStyle);
-    syncStyle();
-    structure->addAction(tr("C&olour Selection"), this, [this] { canvas_->colourSelection(); });
-    structure->addAction(tr("Ring &Fill Colour…"), this, [this] {
-        QColor c = QColorDialog::getColor(canvas_->fillColor(), this, tr("Ring fill colour"));
-        if (c.isValid()) canvas_->setFillColor(c);
-    });
-    structure->addAction(tr("&Expand Abbreviations"), QKeySequence(tr("Ctrl+Shift+E")), canvas_,
-                         &Canvas::expandAbbreviations);
+    edit->addAction(tr("&Paste"), QKeySequence::Paste, this, &MainWindow::paste);
+    edit->addAction(tr("&Delete"), canvas_, &Canvas::deleteSelection);
+    edit->addSeparator();
+    edit->addAction(tr("Select &All"), QKeySequence::SelectAll, canvas_, &Canvas::selectAll);
+    edit->addSeparator();
+    auto* prefs = edit->addAction(tr("&Preferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
+    prefs->setMenuRole(QAction::PreferencesRole);  // the app menu on macOS
 
-    auto* view = menuBar()->addMenu(tr("&View"));
-    view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { canvas_->zoomBy(1.25); });
-    view->addAction(tr("Zoom &Out"), QKeySequence::ZoomOut, this, [this] { canvas_->zoomBy(0.8); });
-    view->addAction(tr("&Fit to Window"), QKeySequence(tr("Ctrl+0")), canvas_, &Canvas::fitToSelection)
-        ->setStatusTip(tr("Zoom to the selection, or to the whole drawing"));
-    view->addAction(tr("&Next Page"), QKeySequence(tr("Ctrl+PgDown")), this,
+    auto* page = menuBar()->addMenu(tr("&Page"));
+    page->addAction(tr("Ne&w Page"), this, &MainWindow::addPage);
+    page->addAction(tr("Rena&me Page…"), this, [this] { renamePage(page_); });
+    auto* deletePageAction = page->addAction(tr("&Delete Page"), this, [this] { deletePage(page_); });
+    connect(page, &QMenu::aboutToShow, this, [=, this] { deletePageAction->setEnabled(pages_.size() > 1); });
+    page->addSeparator();
+    auto* moveTo = page->addMenu(tr("Mo&ve Selection To"));
+    connect(moveTo, &QMenu::aboutToShow, this, [=, this] {
+        moveTo->clear();
+        for (int i = 0; i < int(pages_.size()); ++i)
+            if (i != page_) moveTo->addAction(pages_[i].name, this, [=, this] { moveSelectionToPage(i); });
+        if (moveTo->isEmpty()) moveTo->addAction(tr("(add a page first)"))->setEnabled(false);
+    });
+    page->addSeparator();
+    page->addAction(tr("&Next Page"), QKeySequence(tr("Ctrl+PgDown")), this,
                     [this] { showPage((page_ + 1) % int(pages_.size())); });
-    view->addAction(tr("&Previous Page"), QKeySequence(tr("Ctrl+PgUp")), this,
+    page->addAction(tr("&Previous Page"), QKeySequence(tr("Ctrl+PgUp")), this,
                     [this] { showPage((page_ + int(pages_.size()) - 1) % int(pages_.size())); });
-    // Guides are the user's own, not the document's: remembered, never saved or exported.
-    auto* grid = view->addAction(tr("&Grid"));
-    auto* rulers = view->addAction(tr("&Rulers"));
-    for (auto* a : {grid, rulers}) {
-        a->setCheckable(true);
-        a->setChecked(QSettings().value(a == grid ? "showGrid" : "showRulers", true).toBool());
-        connect(a, &QAction::toggled, this, [=, this] {
-            QSettings().setValue("showGrid", grid->isChecked());
-            QSettings().setValue("showRulers", rulers->isChecked());
-            canvas_->setGuides(grid->isChecked(), rulers->isChecked());
-        });
-    }
-    canvas_->setGuides(grid->isChecked(), rulers->isChecked());
-    view->addSeparator();
-    // Display options belong to the document (saved, and in exports), so changing one is an edit.
-    auto setDisplay = [this](auto change, const QString& what) {
-        Document next = canvas_->document();
-        change(next);
-        if (!(next == canvas_->document())) canvas_->commit(next, what);
-    };
-    auto* carbons = view->addMenu(tr("&Carbon Labels"));
-    auto* carbonGroup = new QActionGroup(carbons);
-    using CL = Document::CarbonLabels;
-    for (auto [text, mode] : {std::pair{tr("&None (skeletal)"), CL::None}, {tr("&Terminal CH₃"), CL::Terminal},
-                              {tr("&All Carbons"), CL::All}}) {
-        auto* a = carbons->addAction(text, this, [=] {
-            setDisplay([mode](Document& d) { d.carbonLabels = mode; }, tr("Carbon labels"));
-        });
-        a->setCheckable(true);
-        a->setData(int(mode));
-        carbonGroup->addAction(a);
-    }
-    connect(canvas_, &Canvas::documentChanged, this, [this, carbonGroup] {
-        for (auto* a : carbonGroup->actions()) a->setChecked(a->data().toInt() == int(canvas_->document().carbonLabels));
-    });
-    carbonGroup->actions().first()->setChecked(true);
-    // Stereo labels belong to the document (saved, and in exports), so toggling is an edit.
-    auto* stereo = view->addAction(tr("Show &Stereo Labels"));
-    stereo->setCheckable(true);
-    connect(stereo, &QAction::toggled, this, [this](bool on) {
-        if (canvas_->document().showStereo == on) return;
-        Document next = canvas_->document();
-        next.showStereo = on;
-        canvas_->commit(next, on ? tr("Show Stereo Labels") : tr("Hide Stereo Labels"));
-    });
-    connect(canvas_, &Canvas::documentChanged, stereo, [this, stereo] {
-        QSignalBlocker quiet(stereo);
-        stereo->setChecked(canvas_->document().showStereo);
-    });
-    auto* numbers = view->addAction(tr("Atom &Numbers"));
-    numbers->setCheckable(true);
-    numbers->setStatusTip(tr("Number every atom; ' on an atom sets its reaction map number"));
-    connect(numbers, &QAction::toggled, this, [this](bool on) {
-        if (canvas_->document().showAtomNumbers == on) return;
-        Document next = canvas_->document();
-        next.showAtomNumbers = on;
-        canvas_->commit(next, on ? tr("Show atom numbers") : tr("Hide atom numbers"));
-    });
-    connect(canvas_, &Canvas::documentChanged, numbers, [this, numbers] {
-        QSignalBlocker quiet(numbers);
-        numbers->setChecked(canvas_->document().showAtomNumbers);
-    });
-    auto* shifts = view->addAction(tr("Predicted N&MR Shifts"));
-    shifts->setCheckable(true);
-    shifts->setStatusTip(tr("13C and 1H shifts beside each atom, looked up in nmrshiftdb2 by HOSE code"));
-    connect(shifts, &QAction::toggled, this, [this](bool on) {
-        if (canvas_->document().showShifts == on) return;
-        Document next = canvas_->document();
-        next.showShifts = on;
-        canvas_->commit(next, on ? tr("Show predicted NMR shifts") : tr("Hide predicted NMR shifts"));
-    });
-    connect(canvas_, &Canvas::documentChanged, shifts, [this, shifts] {
-        QSignalBlocker quiet(shifts);
-        shifts->setChecked(canvas_->document().showShifts);
-    });
-    auto* circles = view->addAction(tr("&Aromatic Circles"));
-    circles->setCheckable(true);
-    connect(circles, &QAction::toggled, this, [this](bool on) {
-        if (canvas_->document().aromaticCircles == on) return;
-        Document next = canvas_->document();
-        next.aromaticCircles = on;
-        next.aromaticCircleOverrides.clear();
-        canvas_->commit(next, on ? tr("Aromatic circles") : tr("Kekulé rings"));
-    });
-    connect(canvas_, &Canvas::documentChanged, circles, [this, circles] {
-        QSignalBlocker quiet(circles);
-        circles->setChecked(canvas_->document().aromaticCircles);
-    });
-    auto* selectedCircles = view->addAction(tr("Circles for Selected &Rings"));
-    selectedCircles->setStatusTip(tr("Select every atom in an aromatic ring"));
-    connect(selectedCircles, &QAction::triggered, this, [this] {
-        Document next = canvas_->document();
-        const auto& selected = canvas_->selection();
-        for (auto ring : chem::aromaticRings(next)) {
-            if (!std::all_of(ring.begin(), ring.end(), [&](int i) { return selected.contains(i); })) continue;
-            std::sort(ring.begin(), ring.end());
-            auto it = std::find(next.aromaticCircleOverrides.begin(), next.aromaticCircleOverrides.end(), ring);
-            if (it == next.aromaticCircleOverrides.end()) next.aromaticCircleOverrides.push_back(ring);
-            else next.aromaticCircleOverrides.erase(it);
-        }
-        if (!(next == canvas_->document())) canvas_->commit(next, tr("Toggle aromatic circles"));
-    });
-    view->addSeparator();
-    auto* templatesToggle = templateDock_->toggleViewAction();
-    templatesToggle->setText(tr("&Templates"));
-    templatesToggle->setShortcut(QKeySequence(tr("Ctrl+Shift+T")));
-    view->addAction(templatesToggle);
-    auto* panelToggle = profileDock_->toggleViewAction();
-    panelToggle->setText(tr("&Properties Panel"));
-    panelToggle->setShortcut(QKeySequence(tr("Ctrl+I")));
-    view->addAction(panelToggle);
-    auto* massToggle = massDock_->toggleViewAction();
-    massToggle->setText(tr("&Mass Spec Panel"));
-    view->addAction(massToggle);
-    auto* pageMenu = view->addMenu(tr("&Page"));
+    page->addSeparator();
+    auto* pageMenu = page->addMenu(tr("Page &Size"));
     auto* pageGroup = new QActionGroup(pageMenu);
     QStringList pages{""};
     for (const auto& p : pageSizes()) pages << p.name;
@@ -2319,6 +2113,228 @@ void MainWindow::buildMenus() {
     connect(canvas_, &Canvas::documentChanged, pageGroup, [this, pageGroup] {
         for (auto* a : pageGroup->actions()) a->setChecked(a->data().toString() == canvas_->document().page);
     });
+
+    auto* structure = menuBar()->addMenu(tr("&Structure"));
+    structure->addAction(tr("&Clean Structure"), QKeySequence(tr("Ctrl+Shift+K")), this, [this] {
+        const auto& sel = canvas_->selection();  // selected molecules only, else everything
+        canvas_->commit(chem::clean2D(canvas_->document(), {sel.begin(), sel.end()}), tr("Clean"));
+    });
+    structure->addAction(tr("Chec&k Structure…"), QKeySequence(tr("Ctrl+Alt+K")), this, [this] { checkStructure(); });
+    structure->addSeparator();
+    structure->addAction(tr("Add Explicit &Hydrogens"), this, [this] {
+        canvas_->commit(chem::addHydrogens(canvas_->document()), tr("Add hydrogens"));
+    });
+    structure->addAction(tr("Remove Explicit Hydro&gens"), this, [this] {
+        canvas_->commit(chem::removeHydrogens(canvas_->document()), tr("Remove hydrogens"));
+    });
+    structure->addAction(tr("&Expand Abbreviations"), QKeySequence(tr("Ctrl+Shift+E")), canvas_,
+                         &Canvas::expandAbbreviations);
+    structure->addAction(tr("&Invert Stereochemistry"), this, [this] { canvas_->invertStereo(); });
+    structure->addSeparator();
+    auto* brackets = structure->addMenu(tr("&Brackets"));
+    for (bool square : {true, false})
+        brackets->addAction(square ? tr("&Square Brackets Around Selection…") : tr("&Round Brackets Around Selection…"), this,
+                            [this, square] {
+                                bool ok = false;
+                                const QString label = QInputDialog::getText(this, tr("Brackets"), tr("Subscript (e.g. n; may be empty):"),
+                                                                            QLineEdit::Normal, "n", &ok);
+                                if (ok) canvas_->bracketSelection(square, label.trimmed());
+                            });
+    brackets->addAction(tr("Remove &Brackets"), this, [this] { canvas_->removeBrackets(); });
+    structure->addAction(tr("Save Selection as &Template…"), this, &MainWindow::saveTemplate);
+
+    auto* arrangeMenu = menuBar()->addMenu(tr("&Arrange"));
+    arrangeMenu->addAction(tr("Flip &Horizontal"), QKeySequence(tr("Ctrl+Shift+H")), this,
+                         [this] { canvas_->flipSelection(true); });
+    arrangeMenu->addAction(tr("Flip &Vertical"), QKeySequence(tr("Ctrl+Shift+V")), this,
+                         [this] { canvas_->flipSelection(false); });
+    arrangeMenu->addAction(tr("&Transform…"), this, [this] {
+        QDialog dialog(this);
+        dialog.setWindowTitle(tr("Transform"));
+        auto* form = new QFormLayout(&dialog);
+        auto spin = [&](const QString& label, double lo, double hi, double value, const QString& suffix) {
+            auto* s = new QDoubleSpinBox;
+            s->setRange(lo, hi), s->setValue(value), s->setSuffix(suffix), s->setDecimals(1);
+            form->addRow(label, s);
+            return s;
+        };
+        auto* angle = spin(tr("Rotate:"), -360, 360, 0, "°");
+        auto* scale = spin(tr("Scale:"), 5, 1000, 100, "%");
+        auto* sx = spin(tr("Stretch across:"), 5, 1000, 100, "%");
+        auto* sy = spin(tr("Stretch up and down:"), 5, 1000, 100, "%");
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        form->addRow(buttons);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        if (dialog.exec() != QDialog::Accepted) return;
+        const double k = scale->value() / 100;
+        canvas_->transformSelection(QTransform().rotate(angle->value()).scale(k * sx->value() / 100, k * sy->value() / 100),
+                                    tr("Transform"));
+    });
+    arrangeMenu->addSeparator();
+    auto* align = arrangeMenu->addMenu(tr("&Align and Distribute"));
+    using A = Canvas::Align;
+    for (auto [label, edge] : {std::pair{tr("Align &Left"), A::Left}, {tr("Align &Centres"), A::HCentre},
+                               {tr("Align &Right"), A::Right}, {tr("Align &Top"), A::Top},
+                               {tr("Align &Middles"), A::VCentre}, {tr("Align &Bottom"), A::Bottom}})
+        align->addAction(label, this, [this, edge] { canvas_->alignSelection(edge); });
+    align->addSeparator();
+    align->addAction(tr("Distribute &Horizontally"), this, [this] { canvas_->distributeSelection(true); });
+    align->addAction(tr("Distribute &Vertically"), this, [this] { canvas_->distributeSelection(false); });
+    arrangeMenu->addAction(tr("Center on &Page"), this, [this] { canvas_->centerOnPage(); })
+        ->setStatusTip(tr("Move the selection, or the whole drawing, to the middle of the page"));
+    arrangeMenu->addSeparator();
+    arrangeMenu->addAction(tr("Arrange &Scheme"), this, [this] { canvas_->arrangeScheme(); });
+
+    auto* format = menuBar()->addMenu(tr("F&ormat"));
+    // Drawing style presets, like ChemDraw's document settings; stored in the .penz.
+    auto* styles = format->addMenu(tr("Drawing &Style"));
+    auto* styleGroup = new QActionGroup(this);
+    for (const auto& st : drawingStyles()) {
+        auto* act = styles->addAction(st.name);
+        act->setCheckable(true);
+        styleGroup->addAction(act);
+        connect(act, &QAction::triggered, this, [this, name = st.name] {
+            Document next = canvas_->document();
+            next.style = name == drawingStyles()[0].name ? QString() : name;
+            next.labelRatio = 0;  // the style's own label size, not an imported file's (#203)
+            if (!(next == canvas_->document())) canvas_->commit(next, tr("Drawing style"));
+        });
+    }
+    auto syncStyle = [this, styleGroup] {
+        const QString current = drawingStyle(canvas_->document().style).name;
+        for (auto* act : styleGroup->actions()) act->setChecked(act->text() == current);
+    };
+    connect(canvas_, &Canvas::documentChanged, this, syncStyle);
+    syncStyle();
+    // Display options belong to the document (saved, and in exports), so changing one is an edit.
+    auto setDisplay = [this](auto change, const QString& what) {
+        Document next = canvas_->document();
+        change(next);
+        if (!(next == canvas_->document())) canvas_->commit(next, what);
+    };
+    auto* carbons = format->addMenu(tr("&Carbon Labels"));
+    auto* carbonGroup = new QActionGroup(carbons);
+    using CL = Document::CarbonLabels;
+    for (auto [text, mode] : {std::pair{tr("&None (skeletal)"), CL::None}, {tr("&Terminal CH₃"), CL::Terminal},
+                              {tr("&All Carbons"), CL::All}}) {
+        auto* a = carbons->addAction(text, this, [=] {
+            setDisplay([mode](Document& d) { d.carbonLabels = mode; }, tr("Carbon labels"));
+        });
+        a->setCheckable(true);
+        a->setData(int(mode));
+        carbonGroup->addAction(a);
+    }
+    connect(canvas_, &Canvas::documentChanged, this, [this, carbonGroup] {
+        for (auto* a : carbonGroup->actions()) a->setChecked(a->data().toInt() == int(canvas_->document().carbonLabels));
+    });
+    carbonGroup->actions().first()->setChecked(true);
+    format->addSeparator();
+    // Stereo labels belong to the document (saved, and in exports), so toggling is an edit.
+    auto* stereo = format->addAction(tr("S&tereo Labels"));
+    stereo->setCheckable(true);
+    connect(stereo, &QAction::toggled, this, [this](bool on) {
+        if (canvas_->document().showStereo == on) return;
+        Document next = canvas_->document();
+        next.showStereo = on;
+        canvas_->commit(next, on ? tr("Show Stereo Labels") : tr("Hide Stereo Labels"));
+    });
+    connect(canvas_, &Canvas::documentChanged, stereo, [this, stereo] {
+        QSignalBlocker quiet(stereo);
+        stereo->setChecked(canvas_->document().showStereo);
+    });
+    auto* numbers = format->addAction(tr("Atom &Numbers"));
+    numbers->setCheckable(true);
+    numbers->setStatusTip(tr("Number every atom; ' on an atom sets its reaction map number"));
+    connect(numbers, &QAction::toggled, this, [this](bool on) {
+        if (canvas_->document().showAtomNumbers == on) return;
+        Document next = canvas_->document();
+        next.showAtomNumbers = on;
+        canvas_->commit(next, on ? tr("Show atom numbers") : tr("Hide atom numbers"));
+    });
+    connect(canvas_, &Canvas::documentChanged, numbers, [this, numbers] {
+        QSignalBlocker quiet(numbers);
+        numbers->setChecked(canvas_->document().showAtomNumbers);
+    });
+    auto* shifts = format->addAction(tr("Predicted N&MR Shifts"));
+    shifts->setCheckable(true);
+    shifts->setStatusTip(tr("13C and 1H shifts beside each atom, looked up in nmrshiftdb2 by HOSE code"));
+    connect(shifts, &QAction::toggled, this, [this](bool on) {
+        if (canvas_->document().showShifts == on) return;
+        Document next = canvas_->document();
+        next.showShifts = on;
+        canvas_->commit(next, on ? tr("Show predicted NMR shifts") : tr("Hide predicted NMR shifts"));
+    });
+    connect(canvas_, &Canvas::documentChanged, shifts, [this, shifts] {
+        QSignalBlocker quiet(shifts);
+        shifts->setChecked(canvas_->document().showShifts);
+    });
+    auto* circles = format->addAction(tr("&Aromatic Circles"));
+    circles->setCheckable(true);
+    connect(circles, &QAction::toggled, this, [this](bool on) {
+        if (canvas_->document().aromaticCircles == on) return;
+        Document next = canvas_->document();
+        next.aromaticCircles = on;
+        next.aromaticCircleOverrides.clear();
+        canvas_->commit(next, on ? tr("Aromatic circles") : tr("Kekulé rings"));
+    });
+    connect(canvas_, &Canvas::documentChanged, circles, [this, circles] {
+        QSignalBlocker quiet(circles);
+        circles->setChecked(canvas_->document().aromaticCircles);
+    });
+    auto* selectedCircles = format->addAction(tr("Circles in Selected &Rings"));
+    selectedCircles->setStatusTip(tr("Turn aromatic circles on or off in the rings whose atoms are all selected"));
+    connect(selectedCircles, &QAction::triggered, this, [this] {
+        Document next = canvas_->document();
+        const auto& selected = canvas_->selection();
+        for (auto ring : chem::aromaticRings(next)) {
+            if (!std::all_of(ring.begin(), ring.end(), [&](int i) { return selected.contains(i); })) continue;
+            std::sort(ring.begin(), ring.end());
+            auto it = std::find(next.aromaticCircleOverrides.begin(), next.aromaticCircleOverrides.end(), ring);
+            if (it == next.aromaticCircleOverrides.end()) next.aromaticCircleOverrides.push_back(ring);
+            else next.aromaticCircleOverrides.erase(it);
+        }
+        if (!(next == canvas_->document())) canvas_->commit(next, tr("Toggle aromatic circles"));
+    });
+    format->addSeparator();
+    format->addAction(tr("C&olour Selection"), this, [this] { canvas_->colourSelection(); });
+    format->addAction(tr("Ring &Fill Colour…"), this, [this] {
+        QColor c = QColorDialog::getColor(canvas_->fillColor(), this, tr("Ring fill colour"));
+        if (c.isValid()) canvas_->setFillColor(c);
+    });
+
+    auto* view = menuBar()->addMenu(tr("&View"));
+    view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { canvas_->zoomBy(1.25); });
+    view->addAction(tr("Zoom &Out"), QKeySequence::ZoomOut, this, [this] { canvas_->zoomBy(0.8); });
+    view->addAction(tr("&Fit to Window"), QKeySequence(tr("Ctrl+0")), canvas_, &Canvas::fitToSelection)
+        ->setStatusTip(tr("Zoom to the selection, or to the whole drawing"));
+    view->addSeparator();
+    // Guides are the user's own, not the document's: remembered, never saved or exported.
+    auto* grid = view->addAction(tr("&Grid"));
+    auto* rulers = view->addAction(tr("&Rulers"));
+    for (auto* a : {grid, rulers}) {
+        a->setCheckable(true);
+        a->setChecked(QSettings().value(a == grid ? "showGrid" : "showRulers", true).toBool());
+        connect(a, &QAction::toggled, this, [=, this] {
+            QSettings().setValue("showGrid", grid->isChecked());
+            QSettings().setValue("showRulers", rulers->isChecked());
+            canvas_->setGuides(grid->isChecked(), rulers->isChecked());
+        });
+    }
+    canvas_->setGuides(grid->isChecked(), rulers->isChecked());
+    view->addSeparator();
+    auto* templatesToggle = templateDock_->toggleViewAction();
+    templatesToggle->setText(tr("&Templates"));
+    templatesToggle->setShortcut(QKeySequence(tr("Ctrl+Shift+T")));
+    view->addAction(templatesToggle);
+    auto* panelToggle = profileDock_->toggleViewAction();
+    panelToggle->setText(tr("&Properties Panel"));
+    panelToggle->setShortcut(QKeySequence(tr("Ctrl+I")));
+    view->addAction(panelToggle);
+    auto* massToggle = massDock_->toggleViewAction();
+    massToggle->setText(tr("&Mass Spec Panel"));
+    view->addAction(massToggle);
+    view->addSeparator();
     auto* themeMenu = view->addMenu(tr("&Theme"));
     auto* themeGroup = themeGroup_ = new QActionGroup(this);
     const QString current = QSettings().value("theme", "System").toString();
