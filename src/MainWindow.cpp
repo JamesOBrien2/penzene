@@ -137,7 +137,7 @@ class NmrView : public QWidget {
 public:
     std::vector<chem::NmrStick> sticks;
     bool proton = false;
-    const Document* doc = nullptr;  // names the atoms
+    Document doc;  // the sticks' own: names their atoms, whatever the canvas holds by now
     std::function<void(const std::vector<int>&)> light;
     int current = -1;
     NmrView() {
@@ -148,7 +148,7 @@ public:
     QString describe(int k) const {
         const auto& s = sticks[k];
         QStringList atoms;
-        for (int a : s.atoms) atoms << QString::fromStdString(chem::symbol(doc->atoms[a].z)) + QString::number(a + 1);
+        for (int a : s.atoms) atoms << QString::fromStdString(chem::symbol(doc.atoms[a].z)) + QString::number(a + 1);
         return QCoreApplication::translate("MainWindow", "δ %1%2, %3 %4: %5")
             .arg(s.weak ? "~" : "")
             .arg(s.ppm, 0, 'f', proton ? 2 : 1)
@@ -519,6 +519,11 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     connect(nucleus_, &QComboBox::currentIndexChanged, this, &MainWindow::updateNmr);
     connect(canvas_, &Canvas::documentChanged, this, &MainWindow::updateNmr);
     connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::updateNmr);
+    connect(canvas_, &Canvas::hotspotAtomChanged, this, [this](int atom) {  // an atom under the pointer: its stick
+        const auto& s = nmr_->sticks;
+        const auto k = std::find_if(s.begin(), s.end(), [&](const chem::NmrStick& k) { return std::count(k.atoms.begin(), k.atoms.end(), atom); });
+        if (nmrDock_->isVisible()) nmr_->setCurrent(k == s.end() ? -1 : int(k - s.begin()));
+    });
     buildTools();
     buildMenus();
     connect(undoGroup_, &QUndoGroup::cleanChanged, this, &MainWindow::updateTitle);
@@ -714,7 +719,7 @@ void MainWindow::updateNmr() {
     if (!nmrDock_->isVisible()) return;
     const QSet<int>& selected = canvas_->selection();
     nmr_->proton = nucleus_->currentIndex() == 1;
-    nmr_->doc = &canvas_->document();
+    nmr_->doc = canvas_->document();
     nmr_->sticks = chem::nmrSticks(canvas_->document(), nmr_->proton, std::vector<int>(selected.begin(), selected.end()));
     nmr_->setAccessibleDescription(nmr_->reading());
     nmr_->update();

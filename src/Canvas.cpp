@@ -526,6 +526,7 @@ void Canvas::setHotspot(int atom, int bond) {
 }
 
 void Canvas::announceHotspot() {
+    if (hoverAtom_ != announcedAtom_) emit hotspotAtomChanged(announcedAtom_ = hoverAtom_);
     QString text;
     if (hoverAtom_ >= 0 && hoverAtom_ < int(doc_.atoms.size()))
         text = tr("Hotspot: %1").arg(describeAtom(doc_, hoverAtom_));

@@ -1548,6 +1548,11 @@ TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the 
     dock->findChild<QPushButton*>()->click();
     CHECK(QGuiApplication::clipboard()->text().startsWith("13C NMR (predicted) δ 13"));  // toluene's, not ethanol's
     CHECK(QGuiApplication::clipboard()->text().count(", ") == 4);
+    canvas->setHotspot(5);  // and the other way: an ortho carbon under the pointer marks its stick
+    CHECK(canvas->highlight() == QSet<int>{5, 9});
+    CHECK(view->accessibleDescription().startsWith("δ 12"));
+    canvas->setHotspot(-1);
+    CHECK(canvas->highlight().isEmpty());
     dock->findChild<QComboBox*>()->setCurrentIndex(1);  // 1H
     CHECK(canvas->highlight().isEmpty());
     CHECK(view->accessibleDescription().split("; ").last().contains("3 H, s: C4"));  // the methyl, furthest upfield

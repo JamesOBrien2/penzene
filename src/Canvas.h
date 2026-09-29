@@ -102,6 +102,7 @@ public:
 signals:
     void documentChanged();
     void selectionChanged();
+    void hotspotAtomChanged(int atom);  // under the pointer or the keys; -1 for none
     void toolKey(const QString& key);  // x bond, X chain, j benzene, t text, e arrow, space select
 
 protected:
@@ -153,6 +154,7 @@ private:
     int hoverAtom_ = -1, hoverBond_ = -1;
     QSet<int> highlight_;
     quint64 revision_ = 0;
+    int announcedAtom_ = -1;
     bool keyHotspot_ = false;  // G or > is picking: the arrow keys move the hotspot, not the selection
     edit::Hotspot arrowMark_;      // where > started a curved arrow
     Document shown_;  // as last drawn: the revision counts real changes

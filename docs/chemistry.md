@@ -82,7 +82,7 @@ goes into SMILES and MOL.
 of any atom with hydrogens in brackets, in ppm. A `~` marks a weaker match. **View → NMR Panel** draws
 the selection's (or the drawing's) predicted ¹³C or ¹H spectrum, one stick per set of equivalent atoms,
 ¹H sticks split first order (s, d, t, q, m) by the H on neighbouring carbons; point at a stick, or press
-Left and Right, to light its atoms. **Copy SI Line** copies the prediction as a supporting-information
+Left and Right, to light its atoms, or point at an atom to find its stick. **Copy SI Line** copies the prediction as a supporting-information
 line ("1H NMR (predicted) δ 3.69 (q, 2H), 1.22 (t, 3H)."), to replace with measured values. See [NMR prediction](#nmr-prediction).
 ```
 
