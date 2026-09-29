@@ -1838,6 +1838,30 @@ TEST_CASE("predicted 13C and 1H shifts: benzene, ethanol (#403)") {
     CHECK(ethanol[2].protonSpheres > 0);
 }
 
+TEST_CASE("predicted spectra: one stick per set of equivalent atoms, for the chosen molecule (#444)") {
+    const Document d = *chem::fromSmiles("CCO.Cc1ccccc1");  // ethanol, then toluene (atoms 3-9)
+    auto counts = [](const std::vector<chem::NmrStick>& sticks) {
+        std::vector<int> out;
+        for (const auto& k : sticks) out.push_back(k.count);
+        return out;
+    };
+    const std::vector<int> toluene{3, 4, 5, 6, 7, 8, 9};
+    const auto carbon = chem::nmrSticks(d, false, toluene);
+    CHECK(counts(carbon) == std::vector<int>{1, 2, 2, 1, 1});  // ipso, ortho, meta, para, CH3 (highest ppm first)
+    for (size_t k = 1; k < carbon.size(); ++k) CHECK(carbon[k - 1].ppm >= carbon[k].ppm);
+    for (const auto& k : carbon)
+        for (int a : k.atoms) CHECK(a >= 3);  // the drawing's own indices, so a stick can light its atoms
+    const auto proton = chem::nmrSticks(d, true, toluene);
+    int hydrogens = 0;
+    for (const auto& k : proton) hydrogens += k.count;
+    CHECK(hydrogens == 8);
+    CHECK(proton.back().count == 3);  // the CH3, furthest upfield
+    auto ethanol = counts(chem::nmrSticks(d, true, {0, 1, 2}));
+    std::sort(ethanol.begin(), ethanol.end());
+    CHECK(ethanol == std::vector<int>{1, 2, 3});  // OH, CH2, CH3
+    CHECK(chem::nmrSticks(d, true).size() == proton.size() + 3);  // everything
+}
+
 TEST_CASE("predicted shifts follow the bonds, not where the atoms are drawn") {
     auto doc = *chem::fromSmiles("CCO");
     const auto before = chem::predictShifts(doc);
