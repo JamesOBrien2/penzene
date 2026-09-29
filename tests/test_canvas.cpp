@@ -2105,8 +2105,10 @@ TEST_CASE("keyboard: bend and flip a curved arrow, and place an arrow or text af
     CHECK(std::abs(f.doc().arrows[0].bend / drawn.bend - 1.25) < 1e-9);
     key(Qt::Key_Down, Qt::AltModifier);
     CHECK(std::abs(f.doc().arrows[0].bend - drawn.bend) < 1e-9);
+    f.canvas.setTool(Canvas::Tool::Bond);  // as selected by a screen reader's Press, with another tool on (#561)
     f.canvas.bendArrow(-1);  // Arrange → Flip Curved Arrow
     CHECK(std::abs(f.doc().arrows[0].bend + drawn.bend) < 1e-9);
+    f.canvas.setTool(Canvas::Tool::Select);
 
     // After the molecule: a reaction arrow, then text at the new arrow's right.
     f.canvas.setSelection({0, 1, 2});

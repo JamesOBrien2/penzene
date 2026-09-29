@@ -125,7 +125,7 @@ int descriptors(const QStringList& args) {
     p.addOption({"peptide", "Read inputs that aren't files as peptide sequences (GFLS or Gly-Phe-Leu-Ser)."});
     p.addPositionalArgument("inputs", "SMILES, .smi, .sdf, .inchi, .mol, .penz or .cdxml");
     if (!p.parse(args) || p.positionalArguments().isEmpty()) {
-        std::fprintf(stderr, "usage: penzene --descriptors IN... [--columns a,b,...] [--out FILE.csv]\n");
+        std::fprintf(stderr, "usage: penzene --descriptors IN... [--columns a,b,...] [--out FILE.csv] [--peptide]\n");
         return 2;
     }
     const QStringList columns = p.value("columns").split(',', Qt::SkipEmptyParts);
