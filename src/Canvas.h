@@ -106,6 +106,7 @@ protected:
     void contextMenuEvent(QContextMenuEvent* e) override;
     bool event(QEvent* e) override;          // keys: then announce the hotspot
     bool viewportEvent(QEvent* e) override;  // the mouse: likewise
+    void showEvent(QShowEvent* e) override;
 
 private:
     int atomAt(QPointF p) const;
@@ -121,6 +122,7 @@ private:
     std::vector<QPointF> dragPath() const;
 
     Document doc_;
+    bool fitOnShow_ = false;
     QPicture picture_;
     Theme theme_;
     bool grid_ = false, rulers_ = false;
