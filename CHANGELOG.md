@@ -6,6 +6,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- **Arrows that follow**: a curved arrow drawn on an atom, lone pair or bond lights it up, settles on it and moves with it (#498). <!-- icon: refresh -->
+- A selected arrow has handles on its ends and at the top of its curve to reshape it; Format → Arrowhead Size (#534).
 - ChemDraw exports sit inside the page instead of at its top-left corner (#443).
 - **Edit in Word and PowerPoint** (Windows): a copied drawing pastes as a Penzene object; double-click it to edit it in Penzene (#229). <!-- icon: file-import -->
 - The Colour tool is in the Select group, since it paints bonds, arrows and text as well as atoms (#532).

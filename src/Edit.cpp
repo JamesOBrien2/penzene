@@ -6,6 +6,7 @@
 #include <QLineF>
 #include <QRegularExpression>
 #include <algorithm>
+#include <tuple>
 
 namespace edit {
 
@@ -50,6 +51,65 @@ int atomNear(const Document& doc, QPointF p, double r, int skip) {
         if (int(i) != skip && d < r) r = d, best = int(i);
     }
     return best;
+}
+
+// In bond lengths: an arrow end rests on an atom within reach of it (an end drawn beside a label
+// counts), and settles this far from a labelled one.
+constexpr double kReach = 0.75, kLabelGap = 0.55;
+
+// Whichever is nearer, an atom or a bond's middle: a lone pair sits beside its atom, and an
+// arrow from a π bond starts along it.
+std::array<int, 2> anchorAt(const Document& doc, QPointF p) {
+    std::array<int, 2> best{-1, -1};
+    double r = kReach * kBondLength;
+    if (int i = atomNear(doc, p, r); i >= 0) best = {i, -1}, r = len(doc.atoms[i].pos - p);
+    for (const Bond& b : doc.bonds) {
+        const QPointF a = doc.atoms[b.a].pos, ab = doc.atoms[b.b].pos - a;
+        const double t = std::clamp(QPointF::dotProduct(p - a, ab) / std::max(1e-9, QPointF::dotProduct(ab, ab)), 0.0, 1.0);
+        if (const double mid = len(a + ab / 2 - p); len(a + ab * t - p) < kBondLength / 3 && mid < r) best = {b.a, b.b}, r = mid;
+    }
+    return best;
+}
+
+// The atom, or the middle of the bond.
+static QPointF anchorPos(const Document& doc, std::array<int, 2> at) {
+    return at[1] < 0 ? doc.atoms[at[0]].pos : (doc.atoms[at[0]].pos + doc.atoms[at[1]].pos) / 2;
+}
+
+
+QPointF snapToAnchor(const Document& doc, std::array<int, 2> at, QPointF p, QPointF other) {
+    if (at[0] < 0) return p;
+    const QPointF c = anchorPos(doc, at);
+    if (at[1] >= 0) return c;
+    const QPointF d = len(p - c) > 0.15 * kBondLength ? p - c : other - c;
+    const Atom& atom = doc.atoms[at[0]];
+    const double gap = (atom.z != 6 || !atom.label.isEmpty() ? kLabelGap : 0.35) * kBondLength;  // clear of a label
+    return len(d) < 1e-6 ? c : c + unit(d) * gap;
+}
+
+// ponytail: an end that follows is shifted, not turned, with its atoms: an electron pair drawn
+// beside an atom stays on the same side of it when only the structure is rotated.
+void followAnchors(const Document& before, Document& after) {
+    if (before.atoms.size() != after.atoms.size() || before.arrows.size() != after.arrows.size()) return;
+    for (size_t k = 0; k < after.arrows.size(); ++k) {
+        Arrow& a = after.arrows[k];
+        const Arrow& was = before.arrows[k];
+        if (a.fromAt != was.fromAt || a.toAt != was.toAt) continue;  // not the same arrow (restacked), or just anchored
+        const double chord = len(a.to - a.from);
+        const bool slid = len((a.from - was.from) - (a.to - was.to)) < 1e-6 && a.bend == was.bend;  // moved, not turned or flipped
+        bool followed = false;
+        for (auto [end, from, at] : {std::tuple{&a.from, was.from, &a.fromAt}, std::tuple{&a.to, was.to, &a.toAt}}) {
+            if ((*at)[0] < 0) continue;
+            const QPointF moved = anchorPos(after, *at) - anchorPos(before, *at);
+            if (len(moved) < 1e-6) {
+                if (len(*end - from) > 1e-6 && len(*end - anchorPos(after, *at)) > kReach * kBondLength)
+                    *at = anchorAt(after, *end);  // the arrow moved off: onto what's there now
+            } else if (slid) {
+                *end = from + moved, followed = true;  // the structure moved under it (Arrange: each its own way)
+            }  // else turned, flipped or scaled with its atoms: already in place
+        }
+        if (followed && chord > 1e-9) a.bend *= len(a.to - a.from) / chord;  // the curve keeps its shape
+    }
 }
 
 // Returns the atom at `p`, creating one if nothing is close enough.
@@ -206,6 +266,9 @@ void mergeAtoms(Document& doc, const std::vector<std::pair<int, int>>& keepDrop)
     doc.bonds = std::move(bonds);
     for (auto& f : doc.fills)
         for (int& i : f.atoms) i = target[i];
+    for (auto& a : doc.arrows)  // a curved arrow on the dropped atom rests on the kept one
+        for (int* i : {&a.fromAt[0], &a.fromAt[1], &a.toAt[0], &a.toAt[1]})
+            if (*i >= 0) *i = target[*i];
     auto moveOnto = [&](std::vector<int>& ids) {  // the kept atom takes the dropped one's place
         for (int& i : ids) i = target[i];
         std::sort(ids.begin(), ids.end());

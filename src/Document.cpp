@@ -69,6 +69,9 @@ QByteArray Document::toJson() const {
         if (a.look != OrbitalLook::Outline) o["look"] = kLook[int(a.look)];
         if (a.behind) o["behind"] = true;
         if (a.crossed) o["crossed"] = true;
+        if (a.head != 1) o["head"] = a.head;
+        for (auto [key, at] : {std::pair{"fromAt", a.fromAt}, std::pair{"toAt", a.toAt}})
+            if (at[0] >= 0) o[key] = at[1] >= 0 ? QJsonArray{at[0], at[1]} : QJsonArray{at[0]};
         ar.append(o);
     }
     for (const auto& t : texts) {
@@ -214,6 +217,13 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         a.look = OrbitalLook(look - std::begin(kLook));
         a.behind = o["behind"].toBool();
         a.crossed = o["crossed"].toBool();
+        if (const double head = o["head"].toDouble(1); std::isfinite(head)) a.head = std::clamp(head, 0.25, 4.0);
+        for (auto [key, at] : {std::pair{"fromAt", &a.fromAt}, std::pair{"toAt", &a.toAt}}) {
+            const QJsonArray v = o[key].toArray();
+            for (int k = 0; k < std::min<int>(2, v.size()); ++k) (*at)[k] = v[k].toInt(-1);
+            auto atom = [&](int i) { return i >= 0 && i < int(doc.atoms.size()); };
+            if (!atom((*at)[0]) || ((*at)[1] != -1 && !atom((*at)[1]))) *at = {-1, -1};  // not this drawing's: a free end
+        }
         doc.arrows.push_back(a);
     }
     for (const auto& v : root["texts"].toArray()) {
@@ -256,7 +266,12 @@ void Document::append(const Document& o, QPointF shift) {
     const int base = int(atoms.size());
     for (auto a : o.atoms) a.pos += shift, atoms.push_back(a);
     for (auto b : o.bonds) b.a += base, b.b += base, bonds.push_back(b);
-    for (auto a : o.arrows) a.from += shift, a.to += shift, arrows.push_back(a);
+    for (auto a : o.arrows) {
+        a.from += shift, a.to += shift;
+        for (int* i : {&a.fromAt[0], &a.fromAt[1], &a.toAt[0], &a.toAt[1]})
+            if (*i >= 0) *i += base;
+        arrows.push_back(a);
+    }
     for (auto t : o.texts) t.pos += shift, texts.push_back(t);
     for (auto f : o.fills) {
         for (int& i : f.atoms) i += base;
@@ -340,6 +355,12 @@ void Document::removeAtoms(const std::vector<int>& drop) {
     });
     for (auto& ring : aromaticCircleOverrides)
         for (int& i : ring) i = remap[i];
+    for (auto& a : arrows)
+        for (auto* at : {&a.fromAt, &a.toAt}) {
+            if ((*at)[0] < 0) continue;
+            const bool gone = remap[(*at)[0]] < 0 || ((*at)[1] >= 0 && remap[(*at)[1]] < 0);  // its atom, or its bond
+            *at = gone ? std::array{-1, -1} : std::array{remap[(*at)[0]], (*at)[1] < 0 ? -1 : remap[(*at)[1]]};
+        }
 }
 
 // Direction pointing away from all of the atom's bonds: the bisector of the

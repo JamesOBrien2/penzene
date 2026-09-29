@@ -2327,6 +2327,10 @@ void MainWindow::buildMenus() {
         QColor c = QColorDialog::getColor(canvas_->fillColor(), this, tr("Ring fill colour"));
         if (c.isValid()) canvas_->setFillColor(c);
     });
+    auto* heads = format->addMenu(tr("Arrow&head Size"));
+    for (auto [name, size] : {std::pair{tr("&Small"), 0.6}, {tr("&Normal"), 1.0}, {tr("&Large"), 1.5}, {tr("&Extra Large"), 2.2}})
+        heads->addAction(name, this, [this, size] { canvas_->setArrowHead(size); });
+    connect(format, &QMenu::aboutToShow, this, [=, this] { heads->setEnabled(!canvas_->selectedArrows().isEmpty()); });
 
     auto* view = menuBar()->addMenu(tr("&View"));
     view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { canvas_->zoomBy(1.25); });

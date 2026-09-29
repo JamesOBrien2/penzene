@@ -499,11 +499,12 @@ static QPen solid(QPen pen) {
     return pen;
 }
 
-static void drawHead(QPainter& p, QPointF tip, QPointF dir, int sides = 0) {
-    QPointF d = unit(dir), n = perp(d), base = tip - d * kHeadLength, notch = tip - d * (kHeadLength * 0.8);
-    QPolygonF head = sides > 0   ? QPolygonF{tip, base + n * kHeadWidth, notch}
-                     : sides < 0 ? QPolygonF{tip, notch, base - n * kHeadWidth}
-                                 : QPolygonF{tip, base + n * kHeadWidth, notch, base - n * kHeadWidth};
+static void drawHead(QPainter& p, QPointF tip, QPointF dir, int sides, double size) {
+    const double length = kHeadLength * size, width = kHeadWidth * size;
+    QPointF d = unit(dir), n = perp(d), base = tip - d * length, notch = tip - d * (length * 0.8);
+    QPolygonF head = sides > 0   ? QPolygonF{tip, base + n * width, notch}
+                     : sides < 0 ? QPolygonF{tip, notch, base - n * width}
+                                 : QPolygonF{tip, base + n * width, notch, base - n * width};
     const QPen shaft = p.pen();
     p.setPen(solid(shaft));
     p.setBrush(shaft.color());
@@ -570,20 +571,21 @@ static void drawArrow(QPainter& p, const Arrow& a) {
         return;
     }
     QPointF d = unit(a.to - a.from), n = perp(d);
+    const double headLength = kHeadLength * a.head, headWidth = kHeadWidth * a.head;
     if (a.kind == ArrowKind::Equilibrium) {  // ⇌: two half-headed lines
         QPointF o = n * kEquilibriumGap;
-        p.drawLine(a.from - o, a.to - o - d * kHeadLength * 0.8);
-        drawHead(p, a.to - o, d, -1);
-        p.drawLine(a.to + o, a.from + o + d * kHeadLength * 0.8);
-        drawHead(p, a.from + o, -d, -1);
+        p.drawLine(a.from - o, a.to - o - d * headLength * 0.8);
+        drawHead(p, a.to - o, d, -1, a.head);
+        p.drawLine(a.to + o, a.from + o + d * headLength * 0.8);
+        drawHead(p, a.from + o, -d, -1, a.head);
         return;
     }
     if (a.kind == ArrowKind::Retro) {  // ⇒: open double arrow
-        QPointF o = n * kEquilibriumGap, back = a.to - d * kHeadLength;
+        QPointF o = n * kEquilibriumGap, back = a.to - d * headLength;
         p.drawLine(a.from + o, back + o + d * kEquilibriumGap);
         p.drawLine(a.from - o, back - o + d * kEquilibriumGap);
         p.setPen(solid(p.pen()));
-        p.drawPolyline(QPolygonF{back + n * (kHeadWidth + kEquilibriumGap), a.to, back - n * (kHeadWidth + kEquilibriumGap)});
+        p.drawPolyline(QPolygonF{back + n * (headWidth + kEquilibriumGap), a.to, back - n * (headWidth + kEquilibriumGap)});
         return;
     }
     // Heads follow the tangent at each end; the shaft stops inside them so it
@@ -591,17 +593,17 @@ static void drawArrow(QPainter& p, const Arrow& a) {
     // A head is aimed along the chord it covers, not the tangent at the tip: on a tight curve the
     // tangent turns the head off the shaft, which then leaves through one barb.
     std::vector<QPointF> pts = arrowPoints(a);
-    const QPointF endDir = pts.back() - pointBack(pts, kHeadLength * 0.8);
-    const QPointF startDir = pts.front() - pointBack(std::vector<QPointF>(pts.rbegin(), pts.rend()), kHeadLength * 0.8);
-    trimEnd(pts, kHeadLength * 0.7);
+    const QPointF endDir = pts.back() - pointBack(pts, headLength * 0.8);
+    const QPointF startDir = pts.front() - pointBack(std::vector<QPointF>(pts.rbegin(), pts.rend()), headLength * 0.8);
+    trimEnd(pts, headLength * 0.7);
     if (a.kind == ArrowKind::Resonance) {
         std::reverse(pts.begin(), pts.end());
-        trimEnd(pts, kHeadLength * 0.7);
+        trimEnd(pts, headLength * 0.7);
     }
     p.drawPolyline(pts.data(), int(pts.size()));
     // Fishhook: the barb sits on the outside of the curve.
-    drawHead(p, a.to, endDir, a.kind == ArrowKind::Fishhook ? (a.bend >= 0 ? -1 : 1) : 0);
-    if (a.kind == ArrowKind::Resonance) drawHead(p, a.from, startDir);
+    drawHead(p, a.to, endDir, a.kind == ArrowKind::Fishhook ? (a.bend >= 0 ? -1 : 1) : 0, a.head);
+    if (a.kind == ArrowKind::Resonance) drawHead(p, a.from, startDir, 0, a.head);
 }
 
 // Formula-style text, as chemists type it (and mhchem reads it): digits after a letter or

@@ -1,6 +1,7 @@
 #include "Canvas.h"
 #include "Chem.h"
 #include "Edit.h"
+#include "Geometry.h"
 #include "MainWindow.h"
 #include "Online.h"
 #include "WhatsNew.h"
@@ -56,6 +57,9 @@
 #include <QTextBrowser>
 #include <QWidgetAction>
 #include <QUndoStack>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/reporters/catch_reporter_event_listener.hpp>
 #include <catch2/reporters/catch_reporter_registrars.hpp>
@@ -480,6 +484,102 @@ TEST_CASE("allene and alkyne centres are linear") {
     h.hover(h.doc().atoms[1].pos);
     h.key("1");
     CHECK(angleAt(h.doc(), 1, 0, 2) > 179);
+}
+
+TEST_CASE("a curved arrow stays on the atoms and bonds it's drawn between (#498)") {
+    Fixture f;
+    Document d;  // H3C–C=O, a little off the grid so Clean moves it
+    const QPointF c(kBondLength, 2), o = c + QPointF(0.5, -0.866) * kBondLength;
+    d.atoms = {{{0, 0}}, {c}, {o, 8}};
+    d.bonds = {{0, 1}, {1, 2, 2}};
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Arrow);
+    f.canvas.setArrow(ArrowKind::Reaction, true);
+    f.drag(c + (o - c) * 0.4, o + QPointF(0.6, -0.2) * kBondLength);  // from along the C=O bond to beside the O
+    f.canvas.setArrow(ArrowKind::Reaction, false);
+    f.drag({0, 60}, {40, 60});
+    REQUIRE(f.doc().arrows.size() == 2);
+    CHECK(f.doc().arrows[0].fromAt == std::array{1, 2});
+    CHECK(f.doc().arrows[0].toAt == std::array{2, -1});
+    CHECK(len(f.doc().arrows[0].from - (c + o) / 2) < 1e-6);  // snapped to the bond's middle
+    CHECK(std::abs(len(f.doc().arrows[0].to - o) - 0.55 * kBondLength) < 1e-6);  // and to just off the O's label
+    CHECK(f.doc().arrows[1].fromAt == std::array{-1, -1});  // a reaction arrow rests on nothing
+    f.canvas.setArrow(ArrowKind::Reaction, true);
+    f.click(arrowPath(f.doc().arrows[0]).pointAtPercent(0.5));  // flipped, it still rests on them
+    CHECK(f.doc().arrows[0].toAt == std::array{2, -1});
+    CHECK(f.doc().arrows[0].fromAt == std::array{1, 2});
+
+    // Drag the O: the end on it moves as far, the one on the bond half as far.
+    f.canvas.setTool(Canvas::Tool::Select);
+    Document was = f.doc();
+    f.drag(d.atoms[2].pos, d.atoms[2].pos + QPointF(10, 0));
+    QPointF moved = f.doc().atoms[2].pos - was.atoms[2].pos;
+    REQUIRE(len(moved) > 5);
+    CHECK(len(f.doc().arrows[0].to - (was.arrows[0].to + moved)) < 1e-6);
+    CHECK(len(f.doc().arrows[0].from - (was.arrows[0].from + moved / 2)) < 1e-6);
+    CHECK(f.doc().arrows[1] == was.arrows[1]);
+    was = f.doc();
+    f.drag(c, c + QPointF(0, 8));  // now the C: the O's end stays
+    moved = f.doc().atoms[1].pos - was.atoms[1].pos;
+    REQUIRE(len(moved) > 5);
+    CHECK(len(f.doc().arrows[0].from - (was.arrows[0].from + moved / 2)) < 1e-6);
+    CHECK(f.doc().arrows[0].to == was.arrows[0].to);
+
+    // Clean moves the atoms too.
+    was = f.doc();
+    f.canvas.commit(chem::clean2D(f.doc()), "Clean");
+    moved = f.doc().atoms[2].pos - was.atoms[2].pos;
+    REQUIRE(len(moved) > 0.5);
+    CHECK(len(f.doc().arrows[0].to - (was.arrows[0].to + moved)) < 1e-6);
+
+    // Saved and opened again, it still knows.
+    CHECK(Document::fromJson(f.doc().toJson())->arrows == f.doc().arrows);
+
+    // Delete the O: the arrow stays, with both ends free (the C=O bond went too).
+    f.canvas.setSelection({2});
+    f.canvas.deleteSelection();
+    REQUIRE(f.doc().arrows.size() == 2);
+    CHECK(f.doc().arrows[0].fromAt == std::array{-1, -1});
+    CHECK(f.doc().arrows[0].toAt == std::array{-1, -1});
+}
+
+TEST_CASE("a lone selected curved arrow reshapes by its handles; heads come in sizes (#534)") {
+    Fixture f;
+    Document d;
+    d.atoms = {{{0, 0}}, {{60, 0}, 8}, {{0, 60}, 7}};
+    Arrow a{{10, 0}, {50, 0}};
+    a.bend = 10, a.fromAt = {0, -1}, a.toAt = {1, -1};
+    d.arrows = {a};
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Select);
+    f.canvas.setSelection({}, {0});
+    auto top = [&] { return arrowPath(f.doc().arrows[0]).boundingRect().top(); };
+    REQUIRE(std::abs(top() + 10) < 0.5);
+
+    f.drag({30, -10}, {32, -30});  // the curve's handle: its top goes where it's dropped
+    CHECK(std::abs(top() + 30) < 0.5);
+    f.drag({30, -30}, {30, 12});  // and through the chord, to the other side
+    CHECK(std::abs(arrowPath(f.doc().arrows[0]).boundingRect().bottom() - 12) < 0.5);
+
+    f.drag({50, 0}, {4, 64});  // an end dropped by the N rests on it, just off it
+    CHECK(f.doc().arrows[0].toAt == std::array{2, -1});
+    CHECK(std::abs(len(f.doc().arrows[0].to - QPointF(0, 60)) - 0.55 * kBondLength) < 1e-6);
+    f.drag(f.doc().arrows[0].to, {-5, 62});  // moved round the N, it stays on it
+    CHECK(f.doc().arrows[0].toAt == std::array{2, -1});
+    const QPointF end = f.doc().arrows[0].to;
+    f.drag({0, 60}, {20, 60});  // and follows it
+    CHECK(len(f.doc().arrows[0].to - (end + QPointF(20, 0))) < 1e-6);
+
+    f.canvas.setSelection({}, {0});
+    f.canvas.setArrowHead(1.5);
+    CHECK(f.doc().arrows[0].head == 1.5);
+    CHECK(Document::fromJson(f.doc().toJson())->arrows == f.doc().arrows);
+    QJsonObject file = QJsonDocument::fromJson(f.doc().toJson()).object();  // a file asking for a huge head
+    QJsonArray arrows = file["arrows"].toArray();
+    QJsonObject huge = arrows[0].toObject();
+    huge["head"] = 1e9;
+    arrows[0] = huge, file["arrows"] = arrows;
+    CHECK(Document::fromJson(QJsonDocument(file).toJson())->arrows[0].head == 4);
 }
 
 TEST_CASE("arrows: draw, restyle, select, move, delete; text subscripts") {

@@ -85,6 +85,7 @@ public:
     void setColour(QColor c) { colour_ = c; }
     QColor colour() const { return colour_; }
     void colourSelection();  // the current colour on the selected atoms, bonds, arrows and text
+    void setArrowHead(double size);  // on the selected arrows, relative to the usual
 
 signals:
     void documentChanged();
@@ -138,13 +139,17 @@ private:
     void announceHotspot();
 
     // Drag state
-    enum class Drag { None, Bond, Chain, Arrow, Ring, Move, Rotate, Rubber, Pan, Scale, Rotate3D } drag_ = Drag::None;
+    enum class Drag { None, Bond, Chain, Arrow, Ring, Move, Rotate, Rubber, Pan, Scale, Rotate3D, Reshape } drag_ = Drag::None;
     std::vector<int> moleculesOfSelection() const;  // whole molecules; all atoms if none selected
     std::optional<chem::Pose3D> pose_;  // during a 3D rotation drag
     // Scale handles around the selection: corners scale, edges stretch along one axis.
     QRectF selectionBox() const;  // empty unless something with extent is selected
     int handleAt(QPointF p) const;  // 0..7 clockwise from the top-left corner, or -1
     int scaleHandle_ = -1;
+    // A lone selected arrow is reshaped instead: handles on its ends and at the top of its curve.
+    int reshapedArrow() const;  // its index, or -1
+    int reshapeHandleAt(QPointF p) const;  // 0 from, 1 to, 2 the curve, or -1
+    int reshaping_ = -1, reshape_ = -1;  // during the drag: the arrow, and its handle
     QRectF scaleBox_;
     QPointF pressPos_, curPos_;
     QPointF pressRaw_;  // where the mouse went down, before an orbital snaps pressPos_ to its atom
