@@ -324,6 +324,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     ion_ = new QComboBox;
     ion_->addItems({"[M]", "[M+H]⁺", "[M+Na]⁺", "[M−H]⁻"});
     ion_->setCurrentIndex(1);
+    ion_->setAccessibleName(tr("Ion"));  // macOS reads the current item; Windows needs a name
     spectrum_ = new SpectrumView;
     spectrum_->setAccessibleName(tr("Isotope pattern"));
     massLayout->addWidget(ion_);
