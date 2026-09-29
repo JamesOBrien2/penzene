@@ -949,6 +949,21 @@ TEST_CASE("colour atoms, bonds, arrows and text; exports keep the colour (#82)")
     CHECK(sawRed);
 }
 
+TEST_CASE("copy and paste within Penzene keeps what ChemDraw files don't, such as brackets") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    Document d = *chem::fromSmiles("CCO");
+    d.brackets.push_back({{0, 1}, true, "n"});
+    canvas->setDocumentSilently(d);
+    canvas->selectAll();
+    for (const QString text : {"&Copy", "&Paste"})
+        for (auto* a : w.findChildren<QAction*>())
+            if (a->text() == text) a->trigger();
+    REQUIRE(canvas->document().atoms.size() == 6);
+    CHECK(canvas->document().brackets.size() == 2);
+}
+
 TEST_CASE("choosing a tool explains it in the status bar (#93)") {
     App app;
     MainWindow w;

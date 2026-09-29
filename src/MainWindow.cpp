@@ -1232,14 +1232,15 @@ QList<QByteArray> ChemDrawPasteboard::convertFromMime(const QString&, const QVar
 
 void MainWindow::paste() {
     const QMimeData* mime = QApplication::clipboard()->mimeData();
+    // Our own first: Penzene's copy also offers CDX, which drops brackets and fills.
+    if (auto doc = Document::fromJson(mime->data(kPenzMime)); doc && !doc->empty())
+        return canvas_->insert(*doc, tr("Paste"));
     // ChemDraw: CDX as chemical/x-cdx (macOS, via ChemDrawPasteboard) or its
     // Windows clipboard format; CDXML where an app offers that.
     for (const QString& type : mime->formats())
         if (type == "chemical/x-cdx" || type == "chemical/x-cdxml" || type.contains("ChemDraw Interchange Format"))
             if (auto doc = chem::fromChemDraw(mime->data(type)); doc && !doc->empty())
                 return canvas_->insert(*doc, tr("Paste"));
-    if (auto doc = Document::fromJson(mime->data(kPenzMime)); doc && !doc->empty())
-        return canvas_->insert(*doc, tr("Paste"));
     // A figure Penzene exported, copied from another app or as a file: the drawing inside it.
     for (const char* type : {"image/svg+xml", "application/pdf", "image/png", kWinPngMime})
         if (auto doc = Document::fromEmbedded(mime->data(type)); doc && !doc->empty())

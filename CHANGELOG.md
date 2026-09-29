@@ -7,6 +7,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 ## Unreleased
 
 - **Tidier menus**: new Page, Arrange and Format menus; Copy As and Import submenus (#512). <!-- icon: menu-2 -->
+- Copy and paste within Penzene keeps brackets and ring fills (#523).
 - Reaction SMILES lines in a `.smi` batch file render as schemes, and `--descriptors` marks them `reaction` (#501).
 
 ## 1.6.0 (2026-09-29)
