@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Clicking an atom a little off centre with an orbital tool draws a full-size orbital, not a tiny one.
 - A triple bond leaves a gap where a bond in front crosses it, as single and double bonds do.
 - Copy as Reaction SMILES says when a molecule in the reaction is invalid, instead of copying a reaction without it.
 - Structure → Align and Distribute → Center on Page moves the selection, or the whole drawing, to the middle of the page, keeping its spacing (Undo puts it back).

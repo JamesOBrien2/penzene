@@ -498,7 +498,7 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
         return;
     }
     if (e->button() != Qt::LeftButton) return;
-    pressPos_ = curPos_ = mapToScene(e->pos());
+    pressPos_ = curPos_ = pressRaw_ = mapToScene(e->pos());
     pressAtom_ = atomAt(pressPos_);
     int bond = pressAtom_ < 0 ? bondAt(pressPos_) : -1;
     beforeDrag_ = doc_;
@@ -650,7 +650,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
     if (e->button() != Qt::LeftButton) return;
     curPos_ = mapToScene(e->pos());
     shift_ = e->modifiers() & Qt::ShiftModifier;
-    const bool click = len(curPos_ - pressPos_) < 3 / transform().m11();
+    const bool click = len(curPos_ - pressRaw_) < 3 / transform().m11();
     const int bond = pressAtom_ < 0 ? bondAt(pressPos_) : -1;
     const Drag drag = std::exchange(drag_, Drag::None);
     preview_.clear();
