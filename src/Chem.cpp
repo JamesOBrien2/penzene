@@ -1052,7 +1052,10 @@ QByteArray toCdxml(const Document& doc) {
     w.writeStartDocument();
     w.writeDTD(R"(<!DOCTYPE CDXML SYSTEM "http://www.cambridgesoft.com/xml/cdxml.dtd">)");
     int id = 1;
-    auto pt = [](QPointF p) { return QString("%1 %2").arg(p.x(), 0, 'f', 2).arg(p.y(), 0, 'f', 2); };
+    // Placed as ChemDraw places its own: across the middle of a US Letter page, an inch from the top (#443).
+    const QRectF box = documentBounds(doc);
+    const QPointF shift(std::round(std::max(306 - box.center().x(), 72 - box.left())), std::round(72 - box.top()));  // whole points: coordinates keep their decimals
+    auto pt = [shift](QPointF p) { p += shift; return QString("%1 %2").arg(p.x(), 0, 'f', 2).arg(p.y(), 0, 'f', 2); };
     auto pt3 = [&](QPointF p) { return pt(p) + " 0"; };
     w.writeStartElement("CDXML");
     w.writeAttribute("BondLength", QString::number(kBondLength));
