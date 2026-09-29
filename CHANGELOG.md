@@ -8,6 +8,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 - ChemDraw exports sit inside the page instead of at its top-left corner (#443).
 - **Edit in Word and PowerPoint** (Windows): a copied drawing pastes as a Penzene object; double-click it to edit it in Penzene (#229). <!-- icon: file-import -->
+- The Colour tool is in the Select group, since it paints bonds, arrows and text as well as atoms (#532).
 - **Tidier menus**: new Page, Arrange and Format menus; Copy As and Import submenus (#512). <!-- icon: menu-2 -->
 - Copy and paste within Penzene keeps brackets and ring fills (#523).
 - Reaction SMILES lines in a `.smi` batch file render as schemes, and `--descriptors` marks them `reaction` (#501).
