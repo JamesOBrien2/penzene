@@ -296,7 +296,21 @@ static void layout(RWMol& mol) {
     params.useRingTemplates = true;
     RDDepict::preferCoordGen = true;  // honoured only where forceRDKit is off
     params.forceRDKit = !forCoordGen(mol);
-    RDDepict::compute2DCoords(mol, params);
+    if (params.forceRDKit) {
+        RDDepict::compute2DCoords(mol, params);
+    } else {  // with the H of each N-H, O-H… in a chain as an atom, so side chains keep off where its label goes (#559)
+        std::vector<unsigned> hetero;
+        for (const auto* a : mol.atoms())
+            if (a->getAtomicNum() != 6 && a->getDegree() >= 2 && a->getTotalNumHs()) hetero.push_back(a->getIdx());
+        RWMol withH(mol);
+        RDKit::MolOps::addHs(withH, false, false, &hetero);
+        RDDepict::compute2DCoords(withH, params);
+        auto* conf = new RDKit::Conformer(mol.getNumAtoms());
+        conf->set3D(false);
+        for (unsigned i = 0; i < mol.getNumAtoms(); ++i) conf->setAtomPos(i, withH.getConformer().getAtomPos(i));
+        mol.clearConformers();
+        mol.addConformer(conf, true);
+    }
     // RDKit packs separate fragments by their atoms alone, so the labels of ions and small
     // molecules run into each other (Na⁺Cl⁻, 3 H₂O): line them up left to right instead.
     std::vector<std::vector<int>> frags;
