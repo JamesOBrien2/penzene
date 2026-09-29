@@ -183,9 +183,12 @@ static std::optional<QPointF> chargeDirection(const Document& doc, int i, int hy
     for (size_t k = 0; k < taken.size(); ++k) {
         const auto [from, u] = taken[k];
         const auto [to, v] = taken[(k + 1) % taken.size()];
-        const double width = (k + 1 < taken.size() ? to : to + 2 * std::numbers::pi) - from, mid = from + width / 2;
-        const double sc = width - 0.25 * away(mid, upRight) - (u >= 0 && v >= 0 && width < std::numbers::pi && ring(u, v) ? 10 : 0);
-        if (sc > score) best = mid, score = sc;
+        const double width = (k + 1 < taken.size() ? to : to + 2 * std::numbers::pi) - from;
+        // As near the upper right as the gap allows, 60° clear of its edges: opposite a lone bond it reads as a bond (−O–N⁺).
+        const double clear = std::min(width / 2, std::numbers::pi / 3);
+        const double at = std::clamp(from + std::fmod(upRight - from + 4 * std::numbers::pi, 2 * std::numbers::pi), from + clear, from + width - clear);
+        const double sc = width - 0.25 * away(at, upRight) - (u >= 0 && v >= 0 && width < std::numbers::pi && ring(u, v) ? 10 : 0);
+        if (sc > score) best = at, score = sc;
     }
     return QPointF(std::cos(best), std::sin(best));
 }
