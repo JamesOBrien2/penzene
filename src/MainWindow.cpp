@@ -187,7 +187,10 @@ static QString uiStyle(const Theme& t) {
 
 MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_, this)) {
 #ifdef Q_OS_MACOS
-    static ChemDrawPasteboard chemDraw;  // registers itself with Qt, once
+    // Registers itself with Qt, once. Qt deletes its converters when QApplication goes, so this
+    // one must be on the heap: a static was freed there, aborting on quit.
+    static auto* chemDraw = new ChemDrawPasteboard;
+    Q_UNUSED(chemDraw);
 #endif
 #ifdef Q_OS_WIN
     // Registers itself with Qt's Windows plugin (only there: it asserts on any other), once. Never
