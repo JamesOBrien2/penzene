@@ -8,6 +8,7 @@
 #include "Render.h"
 
 #include <QApplication>
+#include <QNativeGestureEvent>
 #include <QSettings>
 #include <QStatusBar>
 #include <QFileDialog>
@@ -2593,6 +2594,20 @@ TEST_CASE("an export that can't be written in full leaves the old file whole (#3
     }
 }
 #endif
+
+TEST_CASE("A trackpad pinch zooms the canvas: spread in, pinch out (#452)") {
+    Fixture f;
+    auto pinch = [&](double value) {
+        QNativeGestureEvent e(Qt::ZoomNativeGesture, QPointingDevice::primaryPointingDevice(), 2, {10, 10}, {10, 10},
+                              {10, 10}, value, {}, {});
+        QApplication::sendEvent(f.canvas.viewport(), &e);
+    };
+    const double before = f.canvas.transform().m11();
+    pinch(0.2);
+    CHECK(std::abs(f.canvas.transform().m11() / before - 1.2) < 1e-9);
+    pinch(-0.2);
+    CHECK(f.canvas.transform().m11() < before * 1.2);
+}
 
 TEST_CASE("View shows a light grid and rulers, measured at the final size (#219)") {
     Fixture f;

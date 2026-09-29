@@ -4,6 +4,7 @@
 #include "Geometry.h"
 
 #include <QImage>
+#include <QNativeGestureEvent>
 #include <QInputDialog>
 #include <QApplication>
 #include <QClipboard>
@@ -263,6 +264,13 @@ bool Canvas::event(QEvent* e) {
 }
 
 bool Canvas::viewportEvent(QEvent* e) {
+    if (e->type() == QEvent::NativeGesture) {  // trackpad pinch: spread to zoom in, centred under the fingers
+        auto* g = static_cast<QNativeGestureEvent*>(e);
+        if (g->gestureType() == Qt::ZoomNativeGesture) {
+            zoomBy(1 + g->value());
+            return true;
+        }
+    }
     const bool done = QGraphicsView::viewportEvent(e);
     announceHotspot();
     return done;
@@ -1497,6 +1505,8 @@ QMenu* Canvas::contextMenuAt(QPointF at) {
         });
     } else {
         menu->addAction(tr("Select All"), this, &Canvas::selectAll);
+        menu->addAction(tr("Zoom In"), this, [this] { zoomBy(1.25); });
+        menu->addAction(tr("Zoom Out"), this, [this] { zoomBy(0.8); });
         menu->addAction(tr("Fit to Window"), this, &Canvas::fitToDocument);
     }
     // Layers: the arrow, shape or orbital under the cursor, else the selected ones.

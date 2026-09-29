@@ -2035,7 +2035,7 @@ void MainWindow::buildMenus() {
     auto* rulers = view->addAction(tr("&Rulers"));
     for (auto* a : {grid, rulers}) {
         a->setCheckable(true);
-        a->setChecked(QSettings().value(a == grid ? "showGrid" : "showRulers").toBool());
+        a->setChecked(QSettings().value(a == grid ? "showGrid" : "showRulers", true).toBool());
         connect(a, &QAction::toggled, this, [=, this] {
             QSettings().setValue("showGrid", grid->isChecked());
             QSettings().setValue("showRulers", rulers->isChecked());
