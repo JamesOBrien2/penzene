@@ -1049,8 +1049,9 @@ TEST_CASE("recent files, autosave and crash recovery (#91)") {
     QFile::remove(crashed);
     REQUIRE(QFile::rename(MainWindow::autosavePath(), crashed));
 
-    // A fresh window after the crash offers the autosave back; answer Yes.
+    // A fresh window after the crash, opened on a file, offers the autosave back; answer Yes.
     MainWindow after;
+    REQUIRE(after.openFile(QString(PENZENE_TEST_DATA) + "/aspirin.mol"));
     QTimer::singleShot(0, &after, [] {
         if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
             box->button(QMessageBox::Yes)->click();
@@ -1058,6 +1059,7 @@ TEST_CASE("recent files, autosave and crash recovery (#91)") {
     after.offerRecovery();
     auto* c2 = after.findChild<Canvas*>();
     CHECK(chem::toSmiles(c2->document()) == "CCO");
+    CHECK(after.windowTitle().startsWith("Untitled"));  // so Save doesn't overwrite aspirin.mol (#491)
     CHECK_FALSE(QFile::exists(crashed));  // offered once only
 
     after.autosave();  // once changes are saved (the stack is clean), autosave removes its copy

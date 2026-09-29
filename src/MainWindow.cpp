@@ -737,6 +737,7 @@ void MainWindow::offerRecovery() {
         setPages(sheets);
         canvas_->commit(first, tr("Recover"));  // unsaved, so Save asks where to put it
         pagesEdited_ = sheets.size() > 1;
+        path_.clear();  // not the file opened at launch, which Save would overwrite (#491)
         updateTitle();
         return;
     }
