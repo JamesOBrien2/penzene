@@ -2130,6 +2130,9 @@ TEST_CASE("keyboard: bend and flip a curved arrow, and place an arrow or text af
     CHECK(f.doc().texts[0].pos.x() > f.doc().arrows[1].to.x());
 
     key(Qt::Key_Escape);
+    f.canvas.setHotspot(2);
+    REQUIRE(f.canvas.nextPlace());
+    CHECK(len(*f.canvas.nextPlace() - f.doc().atoms[2].pos) >= kBondLength);  // beside the hotspot, not on top of it
     f.canvas.setHotspot(-1);
     CHECK_FALSE(f.canvas.nextPlace());  // nothing to place it by
 }

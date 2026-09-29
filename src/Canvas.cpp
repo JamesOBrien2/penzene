@@ -1638,8 +1638,9 @@ void Canvas::bendArrow(double factor) {
 
 std::optional<QPointF> Canvas::nextPlace() const {
     if (const QRectF box = selectionBox(); !box.isNull()) return QPointF(box.right() + kBondLength, box.center().y());
-    if (hoverAtom_ >= 0) return doc_.atoms[hoverAtom_].pos;
-    if (hoverBond_ >= 0) return (doc_.atoms[doc_.bonds[hoverBond_].a].pos + doc_.atoms[doc_.bonds[hoverBond_].b].pos) / 2;
+    const QPointF clear(kBondLength, 0);  // beside the hotspot, not on it
+    if (hoverAtom_ >= 0) return doc_.atoms[hoverAtom_].pos + clear;
+    if (hoverBond_ >= 0) return (doc_.atoms[doc_.bonds[hoverBond_].a].pos + doc_.atoms[doc_.bonds[hoverBond_].b].pos) / 2 + clear;
     return std::nullopt;
 }
 
