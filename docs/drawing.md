@@ -112,4 +112,6 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
 - Pages are saved together in a `.penz` file. Other formats (MOL, ChemDraw) hold one page, so save
   as `.penz`, or export the page you want.
 - **View → Grid** and **View → Rulers** measure the drawing at its final size: 5 mm grid squares,
-  and rulers in centimetres from the page's corner.
+  and rulers in centimetres from the page's corner. Both start on; turn either off there and
+  Penzene remembers. On a trackpad, spread two fingers to zoom in and pinch to zoom out, and drag
+  with two fingers to pan.
