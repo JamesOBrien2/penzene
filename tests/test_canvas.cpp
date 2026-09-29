@@ -1539,6 +1539,10 @@ TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the 
     if (auto out = qEnvironmentVariable("PENZENE_NMR_SHOT"); !out.isEmpty()) w.grab().save(out);
     QTest::keyClick(view, Qt::Key_Right);
     CHECK(canvas->highlight().size() == 2);
+    QEvent leave(QEvent::Leave);
+    QApplication::sendEvent(view, &leave);  // the pointer gone: every stick is read again
+    CHECK(view->accessibleDescription().split("; ").size() == 5);
+    QTest::keyClick(view, Qt::Key_Right);
     QTest::keyClick(view, Qt::Key_Left);
     CHECK(canvas->highlight() == QSet<int>{4});
     dock->findChild<QPushButton*>()->click();

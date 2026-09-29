@@ -155,10 +155,16 @@ public:
             .arg(s.count)
             .arg(proton ? "H, " + s.multiplicity() : "C", atoms.join(", "));
     }
+    QString reading() const {  // for screen readers: the stick in hand, else all of them
+        QStringList all;
+        for (int k = 0; k < int(sticks.size()); ++k)
+            if (current < 0 || k == current) all << describe(k);
+        return all.join("; ");
+    }
     void setCurrent(int k) {
         if (k == current) return;
         current = k;
-        setAccessibleDescription(k >= 0 ? describe(k) : QString());
+        setAccessibleDescription(reading());
         light(k >= 0 ? sticks[k].atoms : std::vector<int>{});
         update();
     }
@@ -710,9 +716,7 @@ void MainWindow::updateNmr() {
     nmr_->proton = nucleus_->currentIndex() == 1;
     nmr_->doc = &canvas_->document();
     nmr_->sticks = chem::nmrSticks(canvas_->document(), nmr_->proton, std::vector<int>(selected.begin(), selected.end()));
-    QStringList all;  // for screen readers; the stick in hand replaces it
-    for (int k = 0; k < int(nmr_->sticks.size()); ++k) all << nmr_->describe(k);
-    nmr_->setAccessibleDescription(all.join("; "));
+    nmr_->setAccessibleDescription(nmr_->reading());
     nmr_->update();
 }
 
