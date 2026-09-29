@@ -22,6 +22,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Tool flyouts stay open until you close them with the ✕, so you can keep several on screen, drag each by any part that isn't a tool, and resize it from a corner, with the tools reflowing to fit. A flyout no longer moves when you click its rail button a second time.
 - Clicking an atom a little off centre with an orbital tool draws a full-size orbital, not a tiny one.
 - A triple bond leaves a gap where a bond in front crosses it, as single and double bonds do.
+- Ions and molecules in a SMILES with several parts (Na⁺ Cl⁻, 3 H₂O) are laid out in a row instead of on top of each other (#516).
 - Copy as Reaction SMILES says when a molecule in the reaction is invalid, instead of copying a reaction without it.
 - Structure → Align and Distribute → Center on Page moves the selection, or the whole drawing, to the middle of the page, keeping its spacing (Undo puts it back).
 - Pinch two fingers on a trackpad to zoom the drawing (right-click the canvas for Zoom In and Out), and the grid and rulers are on by default (View turns either off, and Penzene remembers).
