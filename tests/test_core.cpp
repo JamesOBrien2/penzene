@@ -1370,6 +1370,10 @@ TEST_CASE(".penz files from every release still open, and save back the same (#1
         auto again = Document::fromJson(doc->toJson());
         REQUIRE(again);
         CHECK(again->toJson() == doc->toJson());
+        f.seek(0);
+        const auto sheets = sheetsFromJson(f.readAll());  // and every page, through this version's format
+        REQUIRE_FALSE(sheets.empty());
+        CHECK(sheetsFromJson(sheetsToJson(sheets)) == sheets);
     }
 }
 
@@ -1450,6 +1454,48 @@ TEST_CASE("a .penz file keeps its pages, and older versions still open the first
     pages[0] = second;
     root["pages"] = pages;
     CHECK(sheetsFromJson(QJsonDocument(root).toJson()).empty());
+}
+
+TEST_CASE(".penz version 2: pages as documents, shared settings at the top (#404)") {
+    Document a, b, c;
+    a.addAtom({0, 0}), b.addAtom({0, 0}, 8), c.addAtom({0, 0}, 7);
+    a.style = b.style = c.style = "RSC";
+    a.showStereo = b.showStereo = true;  // not c's: stays on the pages
+    c.page = "A4";
+    const std::vector<Sheet> sheets{{"One", a}, {"Two", b}, {"Three", c}};
+    const QByteArray json = sheetsToJson(sheets);
+    const QJsonObject root = QJsonDocument::fromJson(json).object();
+    CHECK(root["format"].toString() == "penzene");
+    CHECK(root["version"].toInt() == 2);
+    CHECK(root["style"].toString() == "RSC");
+    CHECK_FALSE(root.contains("showStereo"));
+    const QJsonArray pages = root["pages"].toArray();
+    REQUIRE(pages.size() == 3);
+    CHECK_FALSE(pages[0].toObject().contains("style"));
+    CHECK(pages[0].toObject()["showStereo"].toBool());
+    CHECK(pages[2].toObject()["name"].toString() == "Three");
+    CHECK(sheetsFromJson(json) == sheets);
+    CHECK(Document::fromJson(json) == a);  // a single document (pz.read, the command line) is page 1
+    CHECK(sheetsFromJson(R"({"format":"penzene","version":2,"pages":[]})").empty());
+    CHECK(sheetsFromJson(R"({"format":"penzene","version":3,"pages":[{}]})").empty());
+}
+
+TEST_CASE(".penz version 1 files open with every page, and save for Penzene 1 (#404)") {
+    QFile f(QString(PENZENE_TEST_DATA) + "/penz/v1.4.0.penz");  // two pages, the #219 layout
+    REQUIRE(f.open(QIODevice::ReadOnly));
+    const auto sheets = sheetsFromJson(f.readAll());
+    REQUIRE(sheets.size() == 2);
+    CHECK(sheets[0].name == "Aspirin");
+    CHECK(sheets[1].name == "Salicylic acid");
+    CHECK(sheets[0].doc.style == "ACS 1996");
+    CHECK(sheets[1].doc.atoms.size() == 11);
+
+    const QByteArray v1 = sheetsToJsonV1(sheets);
+    const QJsonObject root = QJsonDocument::fromJson(v1).object();
+    CHECK(root["version"].toInt() == 1);
+    for (const auto& p : root["pages"].toArray()) CHECK(p.toObject()["version"].toInt() == 1);
+    CHECK(Document::fromJson(v1) == sheets[0].doc);  // what Penzene before pages reads
+    CHECK(sheetsFromJson(v1) == sheets);             // and 1.2 to 1.4, every page
 }
 
 TEST_CASE("a ChemDraw text of size 0 saves a .penz that opens again (#316)") {
@@ -1980,6 +2026,49 @@ TEST_CASE("a spectrum's legend takes the emptier top corner and the sticks keep 
     CHECK(l.rect.right() == 400);
     CHECK(l.scale == Catch::Approx((200 - 80 - 10) / (0.8 * 200)));
     clear(l, both);
+}
+
+TEST_CASE(".penz schema describes every field the app writes (#573)") {
+    QFile f(QString(PENZENE_TEST_DATA) + "/../../docs/_static/penz.schema.json");
+    REQUIRE(f.open(QIODevice::ReadOnly));
+    const QJsonObject defs = QJsonDocument::fromJson(f.readAll()).object()["$defs"].toObject();
+    auto properties = [&](const QString& def) { return defs[def].toObject()["properties"].toObject(); };
+    auto described = [](const QJsonObject& written, const QJsonObject& schema) {
+        for (const QString& key : written.keys()) {
+            INFO(key.toStdString());
+            CHECK(schema.contains(key));
+        }
+    };
+    Document d = *chem::fromSmiles("C[C@H](N)C(=O)O");  // every feature, so every field is written
+    Atom& a = d.atoms[1];
+    a.charge = 1, a.label = "Me", a.color = Qt::red, a.map = 1, a.lonePairs = 1, a.radicals = 1, a.partial = 1;
+    a.isotope = 13, a.stereoGroup = StereoGroup::And, a.stereoGroupNumber = 1;
+    d.bonds[0].stereo = BondStereo::Wedge, d.bonds[0].position = BondPosition::Left, d.bonds[0].color = Qt::red;
+    Arrow arrow;
+    arrow.to = {50, 0}, arrow.bend = 5, arrow.color = Qt::red, arrow.dashed = arrow.behind = arrow.crossed = true;
+    arrow.look = OrbitalLook::Shaded, arrow.head = 2, arrow.fromAt = {0, -1}, arrow.toAt = {1, 2};
+    d.arrows.push_back(arrow);
+    Text text{{0, 40}, "1"};
+    text.scale = 2, text.color = Qt::red, text.compound = true, text.anchor = 0;
+    d.texts.push_back(text);
+    d.fills.push_back({{0, 1, 2}, Qt::red});
+    d.brackets.push_back({{0, 1}, false, "n"});
+    d.style = "ACS 1996", d.carbonLabels = Document::CarbonLabels::All, d.labelRatio = 0.5;
+    d.showStereo = d.showAtomNumbers = d.showShifts = d.aromaticCircles = true;
+    d.page = "A4", d.aromaticCircleOverrides = {{0, 1, 2}};
+    const QJsonObject root = QJsonDocument::fromJson(d.toJson()).object();
+    QJsonObject page = properties("page");
+    page["format"] = page["version"] = true;
+    described(root, page);
+    for (const auto& [key, def] : {std::pair{"atoms", "atom"}, {"bonds", "bond"}, {"arrows", "arrow"}, {"texts", "text"},
+                                   {"fills", "fill"}, {"brackets", "bracket"}}) {
+        REQUIRE(!root[key].toArray().isEmpty());
+        for (const auto& o : root[key].toArray()) described(o.toObject(), properties(def));
+    }
+    described(root["page"].toObject(), page["page"].toObject()["properties"].toObject());
+    QJsonObject v2 = properties("v2");
+    v2["format"] = true;
+    described(QJsonDocument::fromJson(sheetsToJson({{"A", d}, {"B", d}})).object(), v2);
 }
 
 TEST_CASE("a molecule's predicted shifts don't depend on the others on the page (#575)") {

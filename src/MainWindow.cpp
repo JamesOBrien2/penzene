@@ -822,6 +822,7 @@ void MainWindow::setPages(const std::vector<Sheet>& sheets) {
     }
     page_ = 0;
     pagesEdited_ = false;
+    penz1_ = false;
     undo_ = first;
     canvas_->setUndoStack(undo_);
     undoGroup_->setActiveStack(undo_);
@@ -1022,7 +1023,7 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
     const auto& doc = canvas_->document();
     QByteArray data;
     if (path.endsWith(".penz", Qt::CaseInsensitive)) {
-        data = sheetsToJson(sheets());
+        data = penz1_ ? sheetsToJsonV1(sheets()) : sheetsToJson(sheets());
     } else if (pages_.size() > 1) {
         QMessageBox::warning(this, tr("Save"),
                              tr("%1 holds one page. Save as a Penzene document (.penz) to keep all %2 pages, or export this page.")
@@ -1098,13 +1099,16 @@ bool MainWindow::save() {
 
 bool MainWindow::saveAs() {
     const QString v3000 = tr("MDL Molfile V3000 (*.mol)");
+    const QString penz1 = tr("Penzene 1.x (*.penz)");  // version 1, which Penzene 1.x opens (#404)
     QString filter;
     QString path = QFileDialog::getSaveFileName(this, tr("Save As"), path_,
-                                                tr("Penzene document (*.penz);;MDL Molfile (*.mol);;") + v3000 +
+                                                tr("Penzene document (*.penz);;") + penz1 + tr(";;MDL Molfile (*.mol);;") + v3000 +
                                                     tr(";;MDL SD file, one record per molecule (*.sdf);;MDL Rxnfile (*.rxn);;MDL RD file, every reaction step (*.rdf);;ChemDraw XML (*.cdxml);;"
                                                        "ChemDraw, molecules only (*.cdx)"),
                                                 &filter);
-    return !path.isEmpty() && saveTo(path, filter == v3000);
+    if (path.isEmpty()) return false;
+    penz1_ = filter == penz1;  // Save keeps writing what Save As chose
+    return saveTo(path, filter == v3000);
 }
 
 bool MainWindow::maybeSave() {

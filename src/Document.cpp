@@ -155,6 +155,10 @@ std::optional<Document> Document::fromEmbedded(const QByteArray& file) {
 
 std::optional<Document> Document::fromJson(const QByteArray& data) {
     auto root = QJsonDocument::fromJson(data).object();
+    if (root["format"].toString() == "penzene" && root["version"].toInt() == 2) {  // its first page
+        const auto sheets = sheetsFromJson(data);
+        return sheets.empty() ? std::nullopt : std::optional(sheets[0].doc);
+    }
     if (root["format"].toString() != "penzene" || root["version"].toInt() != 1)
         return std::nullopt;
     Document doc;
@@ -399,27 +403,69 @@ QPointF Document::awayDirection(int atom) const {
     return {std::cos(bestMid), std::sin(bestMid)};
 }
 
+static QJsonObject sheetObject(const Sheet& s) {
+    QJsonObject o = QJsonDocument::fromJson(s.doc.toJson()).object();
+    o["name"] = s.name;
+    return o;
+}
+
+// Document settings: at the top of a version 2 file when every page has the same, else on each page.
+static const char* kShared[] = {"style", "carbonLabels", "labelRatio", "showStereo",
+                                "showAtomNumbers", "showShifts", "aromaticCircles"};
+
 QByteArray sheetsToJson(const std::vector<Sheet>& sheets) {
-    auto object = [](const Sheet& s) {
-        QJsonObject o = QJsonDocument::fromJson(s.doc.toJson()).object();
-        o["name"] = s.name;
-        return o;
-    };
-    QJsonObject root = object(sheets.at(0));
+    QJsonArray pages;
+    for (const Sheet& s : sheets) {
+        QJsonObject o = sheetObject(s);
+        o.remove("format"), o.remove("version");
+        pages.append(o);
+    }
+    QJsonObject root{{"format", "penzene"}, {"version", 2}};
+    for (const char* key : kShared) {
+        const QJsonValue first = pages.at(0).toObject().value(key);
+        if (!std::all_of(pages.begin(), pages.end(), [&](const QJsonValue& p) { return p.toObject().value(key) == first; }))
+            continue;
+        if (!first.isUndefined()) root[key] = first;
+        for (qsizetype i = 0; i < pages.size(); ++i) {
+            QJsonObject o = pages.at(i).toObject();
+            o.remove(key);
+            pages[i] = o;
+        }
+    }
+    root["pages"] = pages;
+    return QJsonDocument(root).toJson(QJsonDocument::Indented);
+}
+
+QByteArray sheetsToJsonV1(const std::vector<Sheet>& sheets) {
+    QJsonObject root = sheetObject(sheets.at(0));
     QJsonArray rest;
-    for (size_t i = 1; i < sheets.size(); ++i) rest.append(object(sheets[i]));
+    for (size_t i = 1; i < sheets.size(); ++i) rest.append(sheetObject(sheets[i]));
     if (!rest.isEmpty()) root["pages"] = rest;
     return QJsonDocument(root).toJson(QJsonDocument::Indented);
 }
 
 std::vector<Sheet> sheetsFromJson(const QByteArray& data) {
     const QJsonObject root = QJsonDocument::fromJson(data).object();
-    auto first = Document::fromJson(data);
-    if (!first) return {};
     auto name = [](const QJsonObject& o, size_t n) {
         const QString s = o["name"].toString().trimmed();
         return s.isEmpty() ? QObject::tr("Page %1").arg(n) : s;
     };
+    if (root["format"].toString() == "penzene" && root["version"].toInt() == 2) {
+        std::vector<Sheet> sheets;
+        for (const auto& v : root["pages"].toArray()) {
+            QJsonObject o{{"format", "penzene"}, {"version", 1}};  // each page reads as a version 1 document
+            for (const char* key : kShared)
+                if (root.contains(key)) o[key] = root[key];
+            const QJsonObject page = v.toObject();
+            for (auto it = page.begin(); it != page.end(); ++it) o[it.key()] = it.value();
+            auto doc = Document::fromJson(QJsonDocument(o).toJson());
+            if (!doc) return {};  // a damaged page: refuse the file rather than drop the page on the next save
+            sheets.push_back({name(page, sheets.size() + 1), *doc});
+        }
+        return sheets;  // none: refused, as there's nothing to open
+    }
+    auto first = Document::fromJson(data);
+    if (!first) return {};
     std::vector<Sheet> sheets{{name(root, 1), *first}};
     for (const auto& v : root["pages"].toArray()) {
         auto doc = Document::fromJson(QJsonDocument(v.toObject()).toJson());
