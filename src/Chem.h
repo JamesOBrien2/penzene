@@ -91,6 +91,13 @@ std::vector<Peak> isotopePattern(const Document& doc, Ion ion);  // by m/z; empt
 // The ion's calculated mass as a supporting-information line, e.g. "HRMS (ESI) m/z: [M+H]+ calcd
 // for C9H9O4 181.0495"; [M] of a neutral molecule is EI's M+. Empty if it can't be worked out.
 QString hrmsLine(const Document& doc, Ion ion);
+// The textbook EI ions a chemist looks for, from the groups present (M − 15 for a methyl, m/z 91 for a
+// benzyl, McLafferty…), M⁺• first: candidates to check, not a predicted spectrum.
+struct EiIon {
+    double mz;
+    QString formula, from;  // "C7H7+", "benzyl (tropylium)"
+};
+std::vector<EiIon> eiIons(const Document& doc);
 std::string toInchi(const Document& doc);                   // "" if invalid
 // One CSV row per record: identifiers and descriptors (docs/cli.md defines them). A record that
 // isn't valid chemistry keeps its row, with the reason under "error". columns: a subset, in order.

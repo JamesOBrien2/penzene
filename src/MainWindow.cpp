@@ -329,6 +329,10 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     spectrum_->setAccessibleName(tr("Isotope pattern"));
     massLayout->addWidget(ion_);
     massLayout->addWidget(spectrum_, 1);
+    eiIons_ = new QLabel;
+    eiIons_->setWordWrap(true);
+    eiIons_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    massLayout->addWidget(eiIons_);
     auto* massButtons = new QHBoxLayout;
     auto* copyHrms = new QPushButton(tr("Copy HRMS Line"));
     copyHrms->setToolTip(tr("The ion's calculated mass, for the supporting information"));
@@ -537,6 +541,13 @@ void MainWindow::updateMassSpec() {
         sticks << QString("%1 (%2%)").arg(k.mz, 0, 'f', 4).arg(k.intensity, 0, 'f', 1);
     spectrum_->setAccessibleDescription(sticks.join(", "));
     spectrum_->update();
+    const auto ions = ion_->currentIndex() == int(chem::Ion::M) ? chem::eiIons(canvas_->selectedSubset()) : std::vector<chem::EiIon>{};
+    QString rows;
+    for (const auto& i : ions)
+        rows += QString("<tr><td>%1</td><td>%2</td><td>%3</td></tr>").arg(i.mz, 0, 'f', 4).arg(i.formula, i.from.toHtmlEscaped());
+    eiIons_->setText(tr("<b>EI ions to look for</b> (from the groups drawn; no intensities)") +
+                     "<table cellspacing=\"4\">" + rows + "</table>");
+    eiIons_->setVisible(!ions.empty());
 }
 
 // Formula and masses of the selection, or of everything.

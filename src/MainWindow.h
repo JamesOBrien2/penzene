@@ -158,6 +158,7 @@ private:
     class QDockWidget* massDock_;
     class QComboBox* ion_;
     class SpectrumView* spectrum_;
+    class QLabel* eiIons_;  // under [M]: the EI ions worth checking
     std::vector<std::pair<QAction*, std::function<QIcon()>>> icons_;
     std::vector<class QFrame*> flyouts_;  // the tool rail's group flyouts
 };

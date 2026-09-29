@@ -1480,7 +1480,15 @@ TEST_CASE("mass spec panel shows the isotope pattern of the selection (#397)") {
         REQUIRE(spectrum);
         CHECK(spectrum->accessibleDescription().startsWith("181.0495 (100.0%), 182.05"));
         auto* ion = dock->findChild<QComboBox*>();
+        ion->setCurrentIndex(0);  // [M]: EI, with the ions to look for
+        QLabel* ei = nullptr;
+        for (auto* l : dock->findChildren<QLabel*>())
+            if (l->text().contains("EI ions")) ei = l;
+        REQUIRE(ei);
+        CHECK(ei->isVisible());
+        CHECK(ei->text().contains("43.0178"));  // aspirin's acetyl
         ion->setCurrentIndex(3);  // [M−H]⁻
+        CHECK_FALSE(ei->isVisible());
         CHECK(spectrum->accessibleDescription().startsWith("179.0350 (100.0%)"));
         canvas->setDocumentSilently(*chem::fromSmiles("Clc1ccccc1"));
         emit canvas->documentChanged();

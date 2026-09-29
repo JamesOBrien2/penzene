@@ -652,6 +652,27 @@ TEST_CASE("isotope pattern: aspirin's ions and a chlorine M+2 (#397)") {
     CHECK(chem::isotopePattern(*chem::fromSmiles("[Na+].[Cl-]"), chem::Ion::MminusH).empty());
 }
 
+TEST_CASE("EI ions to look for, from the groups present (#554)") {
+    auto find = [](const std::vector<chem::EiIon>& ions, const QString& formula) {
+        auto it = std::find_if(ions.begin(), ions.end(), [&](const chem::EiIon& i) { return i.formula == formula; });
+        return it == ions.end() ? 0.0 : it->mz;
+    };
+    const auto ester = chem::eiIons(*chem::fromSmiles("COC(=O)Cc1ccccc1"));  // methyl phenylacetate
+    REQUIRE_FALSE(ester.empty());
+    CHECK(ester[0].formula == "C9H10O2+");
+    CHECK(std::abs(find(ester, "C7H7+") - 91.0542) < 1e-4);   // tropylium
+    CHECK(std::abs(find(ester, "C8H7O+") - 119.0491) < 1e-4);  // M − OMe
+    CHECK(find(ester, "C8H7O2+") == 0);                        // its methyl is on O, so no M − 15
+    const auto ketone = chem::eiIons(*chem::fromSmiles("CC(=O)CCCC"));  // 2-hexanone
+    CHECK(std::abs(find(ketone, "C3H6O+") - 58.0413) < 1e-4);  // McLafferty: propene lost
+    CHECK(std::abs(find(ketone, "C2H3O+") - 43.0178) < 1e-4);  // acetyl
+    const auto ethanol = chem::eiIons(*chem::fromSmiles("CCO"));
+    CHECK(find(ethanol, "C7H7+") == 0);
+    CHECK(find(ethanol, "C2H4+") > 0);  // M − H2O
+    CHECK(chem::eiIons(Document{}).empty());
+    CHECK(chem::eiIons(*chem::fromSmiles("CC(=O)[O-]")).empty());
+}
+
 TEST_CASE("the HRMS line for a supporting-information entry (#398)") {
     const Document aspirin = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
     CHECK(chem::hrmsLine(aspirin, chem::Ion::MplusH).toStdString() == "HRMS (ESI) m/z: [M+H]+ calcd for C9H9O4 181.0495");
