@@ -1668,7 +1668,7 @@ static QString hill(const Counts& c) {
 std::vector<EiIon> eiIons(const Document& doc) {
     if (doc.atoms.empty()) return {};
     auto mol = toRDKit(doc);
-    if (!perceive(*mol)) return {};
+    if (!perceive(*mol) || RDKit::MolOps::getFormalCharge(*mol)) return {};  // EI ionises neutral molecules
     Counts m;
     auto add = [&](Counts& c, const RDKit::Atom* a) { ++c[a->getAtomicNum()], c[1] += int(a->getTotalNumHs()); };
     for (const auto* a : mol->atoms()) {

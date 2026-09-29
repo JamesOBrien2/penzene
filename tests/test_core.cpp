@@ -670,6 +670,7 @@ TEST_CASE("EI ions to look for, from the groups present (#554)") {
     CHECK(find(ethanol, "C7H7+") == 0);
     CHECK(find(ethanol, "C2H4+") > 0);  // M − H2O
     CHECK(chem::eiIons(Document{}).empty());
+    CHECK(chem::eiIons(*chem::fromSmiles("CC(=O)[O-]")).empty());
 }
 
 TEST_CASE("the HRMS line for a supporting-information entry (#398)") {
