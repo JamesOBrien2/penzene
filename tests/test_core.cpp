@@ -1106,6 +1106,31 @@ TEST_CASE("a wedge's wide end meets the bond beside it instead of jutting past i
     CHECK(ink == 0);
 }
 
+TEST_CASE("a charge on an atom with one bond sits above it, not across from the bond") {
+    // Straight across from its only bond, a minus reads as another bond (−F–C).
+    auto render = [](const Document& d) {
+        QImage img(400, 400, QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter p(&img);
+        p.translate(200, 200);
+        p.scale(20, 20);
+        paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+        return img;
+    };
+    Document d;
+    d.atoms = {{{0, 0}, 9, -1}, {{kBondLength, 0}}};
+    d.bonds = {{0, 1}};
+    const QImage with = render(d);
+    d.atoms[0].charge = 0;
+    const QImage without = render(d);
+    QRect glyph;
+    for (int y = 0; y < 400; ++y)
+        for (int x = 0; x < 400; ++x)
+            if (qGray(with.pixel(x, y)) < 128 && qGray(without.pixel(x, y)) >= 128) glyph |= QRect(x, y, 1, 1);
+    REQUIRE(glyph.isValid());
+    CHECK(glyph.bottom() < 200);
+}
+
 TEST_CASE(".penz files from every release still open, and save back the same (#117)") {
     const QStringList files = QDir(QString(PENZENE_TEST_DATA) + "/penz").entryList({"v*.penz"});
     CHECK(files.size() >= 8);  // v0.1.0 to v0.8.0, plus one per later release

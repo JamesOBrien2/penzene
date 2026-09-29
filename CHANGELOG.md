@@ -19,6 +19,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - A drawing recovered after a crash opens untitled, so Save no longer overwrites the file Penzene was opened with (#491).
 - A chair fused onto a bond of another chair (9 or 0) no longer crosses it, or lands on top of its atoms.
 - Arrange Scheme, Align and the other layout commands keep an orbital drawn on an atom with that atom.
+- A charge on an atom with one bond sits above it instead of straight across from the bond, where it read as another bond (#514).
 - Tool flyouts stay open until you close them with the ✕, so you can keep several on screen, drag each by any part that isn't a tool, and resize it from a corner, with the tools reflowing to fit. A flyout no longer moves when you click its rail button a second time.
 - Clicking an atom a little off centre with an orbital tool draws a full-size orbital, not a tiny one.
 - A triple bond leaves a gap where a bond in front crosses it, as single and double bonds do.
