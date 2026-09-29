@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- A chair fused onto a bond of another chair (9 or 0) no longer crosses it, or lands on top of its atoms.
 - Arrange Scheme, Align and the other layout commands keep an orbital drawn on an atom with that atom.
 - Tool flyouts stay open until you close them with the ✕, so you can keep several on screen, drag each by any part that isn't a tool, and resize it from a corner, with the tools reflowing to fit. A flyout no longer moves when you click its rail button a second time.
 - Clicking an atom a little off centre with an orbital tool draws a full-size orbital, not a tiny one.
