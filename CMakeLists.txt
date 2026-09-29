@@ -92,6 +92,10 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets Network PrintSupport Test)
 # The app's widgets; tests link this too, so they exercise the same code.
 add_library(penzene_ui STATIC src/Canvas.cpp src/MainWindow.cpp src/Online.cpp src/Templates.cpp src/WhatsNew.cpp)
 target_link_libraries(penzene_ui PUBLIC penzene_core Qt6::Widgets Qt6::Network Qt6::PrintSupport)
+if(WIN32)  # drawings embedded in Word and PowerPoint, edited here (#229)
+    target_sources(penzene_ui PRIVATE src/OleServer.cpp)
+    target_link_libraries(penzene_ui PRIVATE ole32 uuid advapi32 user32 gdi32)
+endif()
 qt_add_resources(penzene_ui "changelog" PREFIX "/" FILES CHANGELOG.md)  # What's New
 qt_add_resources(penzene_ui "licenses" PREFIX "/" FILES THIRD_PARTY_LICENSES.md)
 # The logo (window icon, What's New) and What's New's icons, with the widgets so tests see them too.

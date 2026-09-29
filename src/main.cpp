@@ -1,6 +1,9 @@
 #include "Canvas.h"
 #include "Chem.h"
 #include "MainWindow.h"
+#ifdef Q_OS_WIN
+#include "OleServer.h"
+#endif
 
 #include <QApplication>
 #include <QCommandLineParser>
@@ -175,6 +178,14 @@ int main(int argc, char** argv) {
     QApplication::setWindowIcon(QIcon(":/logo.svg"));
     QApplication::setStyle(themedStyle());
     MainWindow::installTranslations(QSettings().value("language").toString());  // Preferences → Language
+#ifdef Q_OS_WIN
+    // Started by OLE to edit a drawing embedded in Word or PowerPoint (#229): shown when asked.
+    if (const QString arg = app.arguments().value(1);
+        !arg.compare("-Embedding", Qt::CaseInsensitive) || !arg.compare("/Embedding", Qt::CaseInsensitive)) {
+        MainWindow w;
+        return ole::serve(w);
+    }
+#endif
     MainWindow w;
     if (argc == 2) w.openFile(QString::fromLocal8Bit(argv[1]));
     w.show();

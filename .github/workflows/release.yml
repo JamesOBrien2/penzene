@@ -191,6 +191,14 @@ jobs:
           $p = Start-Process installed/penzene.exe -ArgumentList "--render","c1ccccc1O","installed.svg" -NoNewWindow -PassThru
           if (!$p.WaitForExit(120000)) { $p.Kill(); throw "installed app hung" }
           if (!(Test-Path installed.svg)) { throw "installed app failed to render" }
+          # Registered for Word and PowerPoint's embedded drawings (#229); /CURRENTUSER writes HKCU.
+          $clsid = "HKCU:\Software\Classes\CLSID\{F6858801-14D9-488C-B79A-8C7D07452862}"
+          foreach ($key in "LocalServer32", "InprocHandler32", "Insertable", "Verb\0", "DefaultIcon") {
+            if (!(Test-Path "$clsid\$key")) { throw "installer did not register $key (#229)" }
+          }
+          $server = (Get-ItemProperty "$clsid\LocalServer32").'(default)'
+          if ($server -notlike "*installed\penzene.exe*") { throw "LocalServer32 is $server, not the installed penzene.exe" }
+          if ((Get-ItemProperty "HKCU:\Software\Classes\Penzene.Drawing\CLSID").'(default)' -ne "{F6858801-14D9-488C-B79A-8C7D07452862}") { throw "Penzene.Drawing has no CLSID" }
       - uses: actions/upload-artifact@v4
         with: {name: windows, path: "penzene-windows-x64*"}
 

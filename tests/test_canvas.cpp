@@ -3219,6 +3219,85 @@ TEST_CASE("Windows copy offers an Enhanced Metafile for Office (#394)") {
     CHECK(GetEnhMetaFileBits(medium.hEnhMetaFile, 0, nullptr) == UINT(emf.size()));
     DeleteEnhMetaFile(medium.hEnhMetaFile);
 }
+
+#include "OleServer.h"
+
+// COM without the registry or Office: the object as Word or PowerPoint drives it, in process.
+TEST_CASE("A drawing embedded in Word or PowerPoint opens, draws and saves (#229)") {
+    App app;
+    REQUIRE(SUCCEEDED(OleInitialize(nullptr)));  // offscreen, Qt hasn't
+    const std::vector<Sheet> sheets{{"Page 1", *chem::fromSmiles("c1ccccc1O")}, {"Two", *chem::fromSmiles("CCO")}};
+    IStorage* storage = ole::embedSource(sheets);  // what Copy offers as "Embed Source"
+    REQUIRE(storage);
+    CLSID clsid{};
+    REQUIRE(SUCCEEDED(ReadClassStg(storage, &clsid)));
+    CHECK(IsEqualCLSID(clsid, ole::kClsid));
+
+    MainWindow w;
+    IUnknown* object = ole::newObject(w);
+    IPersistStorage* persist = nullptr;
+    IDataObject* data = nullptr;
+    IOleObject* oleObject = nullptr;
+    REQUIRE(SUCCEEDED(object->QueryInterface(IID_IPersistStorage, reinterpret_cast<void**>(&persist))));
+    REQUIRE(SUCCEEDED(object->QueryInterface(IID_IDataObject, reinterpret_cast<void**>(&data))));
+    REQUIRE(SUCCEEDED(object->QueryInterface(IID_IOleObject, reinterpret_cast<void**>(&oleObject))));
+    object->Release();
+    REQUIRE(persist->Load(storage) == S_OK);
+    REQUIRE(w.sheets().size() == 2);
+    CHECK(w.sheets()[1].name == "Two");
+    CHECK(w.sheets()[0].doc.atoms.size() == 7);
+    CHECK(persist->IsDirty() == S_FALSE);
+    CHECK(oleObject->SetHostNames(L"PowerPoint", L"Talk.pptx") == S_OK);
+    CHECK(w.windowTitle().contains("Talk.pptx"));
+
+    // The picture the container caches: an EMF, and an old-style metafile of the same size.
+    FORMATETC emfFormat{CF_ENHMETAFILE, nullptr, DVASPECT_CONTENT, -1, TYMED_ENHMF};
+    STGMEDIUM medium{};
+    REQUIRE(data->GetData(&emfFormat, &medium) == S_OK);
+    REQUIRE(medium.tymed == TYMED_ENHMF);
+    ENHMETAHEADER header{};
+    REQUIRE(GetEnhMetaFileHeader(medium.hEnhMetaFile, sizeof header, &header));
+    const LONG width = header.rclFrame.right - header.rclFrame.left, height = header.rclFrame.bottom - header.rclFrame.top;
+    CHECK(width > 0);
+    CHECK(height > 0);
+    ReleaseStgMedium(&medium);
+    FORMATETC wmfFormat{CF_METAFILEPICT, nullptr, DVASPECT_CONTENT, -1, TYMED_MFPICT};
+    REQUIRE(data->GetData(&wmfFormat, &medium) == S_OK);
+    REQUIRE(medium.tymed == TYMED_MFPICT);
+    const auto* pict = static_cast<const METAFILEPICT*>(GlobalLock(medium.hMetaFilePict));
+    CHECK(pict->hMF);
+    CHECK(pict->xExt == width);
+    GlobalUnlock(medium.hMetaFilePict);
+    ReleaseStgMedium(&medium);
+    SIZEL size{};
+    REQUIRE(oleObject->GetExtent(DVASPECT_CONTENT, &size) == S_OK);
+    CHECK(size.cx == width);
+    CHECK(size.cy == height);
+    FORMATETC png{CLIPFORMAT(RegisterClipboardFormatW(L"PNG")), nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+    CHECK(data->QueryGetData(&png) == DV_E_FORMATETC);
+
+    // Saved into the container's storage, as OleSave does, and loaded again: the same pages.
+    CHECK(ole::embedSource({}) == nullptr);
+    IStorage* saved = ole::embedSource({{"Page 1", Document{}}});
+    REQUIRE(saved);
+    REQUIRE(persist->Save(saved, FALSE) == S_OK);
+    CHECK(persist->SaveCompleted(nullptr) == S_OK);
+    MainWindow again;
+    IUnknown* second = ole::newObject(again);
+    IPersistStorage* persist2 = nullptr;
+    REQUIRE(SUCCEEDED(second->QueryInterface(IID_IPersistStorage, reinterpret_cast<void**>(&persist2))));
+    second->Release();
+    REQUIRE(persist2->Load(saved) == S_OK);
+    CHECK(again.sheets() == w.sheets());
+
+    // Insert → Object: an empty drawing, one page.
+    CHECK(persist2->InitNew(saved) == S_OK);
+    CHECK(again.sheets().size() == 1);
+    CHECK(again.sheets()[0].doc.empty());
+
+    for (IUnknown* u : std::initializer_list<IUnknown*>{persist, data, oleObject, persist2, storage, saved}) u->Release();
+    OleUninitialize();
+}
 #endif
 
 TEST_CASE("the predicted shifts view is saved and drawn with its notice (#403)") {

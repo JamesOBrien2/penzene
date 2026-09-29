@@ -51,6 +51,22 @@ are always black on clear or white.
 
 ::::
 
+## Editing a drawing in Word or PowerPoint (Windows)
+
+Penzene installed with the Windows installer registers a **Penzene Drawing Object**, as ChemDraw
+does. Copy a drawing and paste it into Word or PowerPoint: Ctrl+V gives the object, and
+**Paste Special** also lists it by that name. You can also add a new, empty one with **Insert → Object**.
+The document shows the picture and keeps the drawing (every page, as a `.penz`) inside the
+`.docx` or `.pptx`, so the picture still shows on a computer without Penzene.
+
+Double-click the object to open it in a Penzene window titled "Drawing in …". Edit it, then
+**File → Save** (Ctrl+S) or close the window and choose Save: the picture in the document updates.
+Save the Word or PowerPoint file to keep the change. The picture is page 1, drawn with the export
+settings in Preferences.
+
+The portable `.zip` doesn't register Penzene, so from it Copy pastes a picture. macOS Office has no
+embedded objects; there, a pasted PDF or PNG from Penzene opens back up in Penzene (see above).
+
 ## Page mode
 
 **Page → Page Size** shows a page on the canvas: A4, US Letter, or an ACS or RSC single or double

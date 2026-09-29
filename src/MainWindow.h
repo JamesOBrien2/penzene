@@ -74,6 +74,16 @@ public:
     static QStringList languages();
     static bool installTranslations(const QString& language);
     QWidget* checkStructure();  // lists problems; clicking one selects its atoms
+    std::vector<Sheet> sheets() const;  // every page, the one on the canvas as it is now
+    bool isClean() const;               // no unsaved change on any page
+    bool save();
+#ifdef Q_OS_WIN
+    // A drawing embedded in Word or PowerPoint (#229, OleServer.cpp): its pages replace the
+    // window's, and Save calls save, which puts them back in the document, instead of a file.
+    void editEmbedded(const std::vector<Sheet>& sheets, std::function<bool()> save);
+    void setEmbeddedIn(const QString& document);  // named in the title
+    QByteArray embeddedPicture() const;  // page 1 as an EMF, rendered as Copy renders it
+#endif
 
 protected:
     void closeEvent(QCloseEvent* e) override;
@@ -88,7 +98,6 @@ private:
     void buildWelcome();
     void paintExamples();
     bool saveTo(const QString& path, bool v3000 = false);
-    bool save();
     bool saveAs();
     bool maybeSave();
     // With the preference on: lists doc's problems (Check Structure's) and asks whether to go on.
@@ -122,14 +131,16 @@ private:
     class QUndoGroup* undoGroup_;
     class QTabBar* pageTabs_;
     void setPages(const std::vector<Sheet>& sheets);  // New, Open: every page replaced, no history
-    std::vector<Sheet> sheets() const;
     void showPage(int i);
     void addPage();
     void renamePage(int i);
     void deletePage(int i);
     void moveSelectionToPage(int i);
-    bool isClean() const;  // no unsaved change on any page
     QString path_;
+#ifdef Q_OS_WIN
+    std::function<bool()> embeddedSave_;
+    QString embeddedIn_;
+#endif
     QLabel* info_;
     class QFrame* welcome_ = nullptr;
     class QAction* shortcutsAction_ = nullptr;
