@@ -1082,6 +1082,30 @@ TEST_CASE("a bond between two labels closer than their clearances isn't drawn ov
     CHECK(render(d) == alone);
 }
 
+TEST_CASE("a wedge's wide end meets the bond beside it instead of jutting past it (#509)") {
+    // A cyclopropane-like corner: the wedge ends at b, whose other bond turns back 60° from it.
+    Document d;
+    const QPointF b(14.4, 0), u(-0.5, std::sqrt(3.0) / 2);
+    d.atoms = {{QPointF(0, 0)}, {b}, {b + u * 14.4}};
+    d.bonds = {{0, 1, 1, BondStereo::Wedge}, {1, 2}};
+    const double k = 20;
+    QImage img(800, 800, QImage::Format_ARGB32);
+    img.fill(Qt::white);
+    QPainter p(&img);
+    p.translate(400, 400);
+    p.scale(k, k);
+    p.translate(-b);
+    paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+    p.end();
+    const QPointF out(u.y(), -u.x());  // across the b–c bond, away from the wedge's narrow end
+    REQUIRE(QPointF::dotProduct(out, QPointF(0, 0) - b) < 0);
+    int ink = 0;
+    for (double t = 0; t < 4; t += 0.1)
+        for (double s = 0.5; s < 1.5; s += 0.1)
+            ink += qGray(img.pixel(((u * t + out * s) * k + QPointF(400, 400)).toPoint())) < 128;
+    CHECK(ink == 0);
+}
+
 TEST_CASE(".penz files from every release still open, and save back the same (#117)") {
     const QStringList files = QDir(QString(PENZENE_TEST_DATA) + "/penz").entryList({"v*.penz"});
     CHECK(files.size() >= 8);  // v0.1.0 to v0.8.0, plus one per later release
