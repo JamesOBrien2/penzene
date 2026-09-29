@@ -1627,8 +1627,9 @@ void Canvas::colourSelection() {
 }
 
 void Canvas::bendArrow(double factor) {
-    const int i = reshapedArrow();
-    if (i < 0 || !doc_.arrows[i].bend) return;
+    if (selectedArrows_.size() != 1 || !selectedAtoms_.isEmpty() || !selectedTexts_.isEmpty()) return;  // whatever the tool (#561)
+    const int i = *selectedArrows_.begin();
+    if (!doc_.arrows[i].bend) return;
     Document next = doc_;
     double& bend = next.arrows[i].bend;
     bend = std::copysign(std::max(std::abs(bend * factor), 0.2 * kBondLength), bend * factor);  // never straight
@@ -1637,8 +1638,9 @@ void Canvas::bendArrow(double factor) {
 
 std::optional<QPointF> Canvas::nextPlace() const {
     if (const QRectF box = selectionBox(); !box.isNull()) return QPointF(box.right() + kBondLength, box.center().y());
-    if (hoverAtom_ >= 0) return doc_.atoms[hoverAtom_].pos;
-    if (hoverBond_ >= 0) return (doc_.atoms[doc_.bonds[hoverBond_].a].pos + doc_.atoms[doc_.bonds[hoverBond_].b].pos) / 2;
+    const QPointF clear(kBondLength, 0);  // beside the hotspot, not on it
+    if (hoverAtom_ >= 0) return doc_.atoms[hoverAtom_].pos + clear;
+    if (hoverBond_ >= 0) return (doc_.atoms[doc_.bonds[hoverBond_].a].pos + doc_.atoms[doc_.bonds[hoverBond_].b].pos) / 2 + clear;
     return std::nullopt;
 }
 

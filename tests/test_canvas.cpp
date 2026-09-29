@@ -2118,8 +2118,10 @@ TEST_CASE("keyboard: bend and flip a curved arrow, and place an arrow or text af
     CHECK(std::abs(f.doc().arrows[0].bend / drawn.bend - 1.25) < 1e-9);
     key(Qt::Key_Down, Qt::AltModifier);
     CHECK(std::abs(f.doc().arrows[0].bend - drawn.bend) < 1e-9);
+    f.canvas.setTool(Canvas::Tool::Bond);  // as selected by a screen reader's Press, with another tool on (#561)
     f.canvas.bendArrow(-1);  // Arrange → Flip Curved Arrow
     CHECK(std::abs(f.doc().arrows[0].bend + drawn.bend) < 1e-9);
+    f.canvas.setTool(Canvas::Tool::Select);
 
     // After the molecule: a reaction arrow, then text at the new arrow's right.
     f.canvas.setSelection({0, 1, 2});
@@ -2141,6 +2143,9 @@ TEST_CASE("keyboard: bend and flip a curved arrow, and place an arrow or text af
     CHECK(f.doc().texts[0].pos.x() > f.doc().arrows[1].to.x());
 
     key(Qt::Key_Escape);
+    f.canvas.setHotspot(2);
+    REQUIRE(f.canvas.nextPlace());
+    CHECK(len(*f.canvas.nextPlace() - f.doc().atoms[2].pos) >= kBondLength);  // beside the hotspot, not on top of it
     f.canvas.setHotspot(-1);
     CHECK_FALSE(f.canvas.nextPlace());  // nothing to place it by
 }
