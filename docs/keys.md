@@ -10,7 +10,7 @@ Generated from Help → Keyboard Shortcuts in the app. Point at an atom or bond 
 |---|---|
 | `←↑→↓` | atom → bond → atom; with **Shift**: atom → atom, bond → bond (with a selection: nudge it, below) |
 | `Space` / `g` | select the hotspot's molecule / just its atom or bond |
-| `G` | add the hotspot's atom or bond to the selection; the arrow keys go on to the next (`Esc` when done) |
+| `G` | add the hotspot's atom or bond to the selection; the arrow keys go on to the next (Esc when done) |
 | `>` … `>` | a curved arrow from the first hotspot to the second |
 | `Esc` | clear hotspot and selection |
 
