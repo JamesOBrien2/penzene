@@ -162,7 +162,7 @@ struct Shift {
 };
 std::vector<Shift> predictShifts(const Document& doc);  // one per atom with a prediction, in atom order
 // A predicted 13C or 1H spectrum as sticks, one per set of equivalent atoms, highest ppm first; count is the
-// carbons or hydrogens under it. `only`: just these atoms (predicted in the whole drawing, as bonded there).
+// carbons or hydrogens under it. `only`: a molecule's atoms, predicted on their own.
 struct NmrStick {
     double ppm = 0;
     int count = 0;

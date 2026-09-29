@@ -1867,7 +1867,7 @@ TEST_CASE("predicted spectra: one stick per set of equivalent atoms, for the cho
     for (const auto& k : chem::nmrSticks(d, true, {0, 1, 2})) split << QString::number(k.count) + k.multiplicity();
     split.sort();
     CHECK(split == QStringList{"1s", "2q", "3t"});
-    CHECK(chem::nmrSticks(d, true, {3}).at(0).multiplicity() == "s");  // toluene's CH3: no H next door
+    CHECK(proton.back().multiplicity() == "s");  // toluene's CH3: no H next door
     CHECK(chem::nmrSticks(*chem::fromSmiles("C1CCCCC1"), true).at(0).multiplicity() == "s");  // equivalent H don't split each other
     const QString h = chem::nmrLine(d, true, {0, 1, 2});  // for the SI (#566)
     CHECK(h.startsWith("1H NMR (predicted) δ "));
@@ -1907,4 +1907,15 @@ TEST_CASE("a spectrum's legend takes the emptier top corner and the sticks keep 
     CHECK(l.rect.right() == 400);
     CHECK(l.scale == Catch::Approx((200 - 80 - 10) / (0.8 * 200)));
     clear(l, both);
+}
+
+TEST_CASE("a molecule's spectrum doesn't depend on the others on the page") {
+    Document d = *chem::fromSmiles("CCO");
+    const auto alone = chem::nmrSticks(d, false, {0, 1, 2});
+    const int c = d.addAtom({100, 0});  // a five-bonded carbon elsewhere: no valid molecule
+    for (int k = 0; k < 5; ++k) d.bonds.push_back({c, d.addAtom({100.0 + k, 10})});
+    const auto sticks = chem::nmrSticks(d, false, {0, 1, 2});
+    REQUIRE(sticks.size() == alone.size());
+    REQUIRE(sticks.size() == 2);
+    for (size_t k = 0; k < sticks.size(); ++k) CHECK(sticks[k].ppm == alone[k].ppm);
 }

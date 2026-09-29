@@ -2390,14 +2390,23 @@ std::vector<Shift> predictShifts(const Document& doc) {
 }
 
 std::vector<NmrStick> nmrSticks(const Document& doc, bool proton, const std::vector<int>& only) {
+    // Predicted on the chosen atoms alone, so a molecule RDKit can't read elsewhere on the page can't blank it.
     const std::set<int> wanted(only.begin(), only.end());
+    const std::vector<int> kept(wanted.begin(), wanted.end());  // the part's atom i is the drawing's kept[i]
+    Document part = doc;
+    if (!kept.empty()) {
+        std::vector<int> others;
+        for (int i = 0; i < int(doc.atoms.size()); ++i)
+            if (!wanted.count(i)) others.push_back(i);
+        part.removeAtoms(others);
+    }
     std::map<int, NmrStick> byClass;  // atoms the molecule can't tell apart make one stick
-    for (const Shift& s : predictShifts(doc)) {
-        if (!(proton ? s.protonSpheres : s.carbonSpheres) || (!wanted.empty() && !wanted.count(s.atom))) continue;
+    for (const Shift& s : predictShifts(part)) {
+        if (!(proton ? s.protonSpheres : s.carbonSpheres)) continue;
         NmrStick& k = byClass[s.symmetry];
         k.ppm = proton ? s.proton : s.carbon;
         k.count += proton ? s.hydrogens : 1;
-        k.atoms.push_back(s.atom);
+        k.atoms.push_back(kept.empty() ? s.atom : kept[s.atom]);
         k.weak = (proton ? s.protonSpheres : s.carbonSpheres) < 3;
         k.coupled = s.coupled;
     }
