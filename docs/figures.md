@@ -80,6 +80,11 @@ Draw molecules either side of a reaction arrow, with reagents over or under it, 
 `.rxn` treat everything before the arrow as reactants, things over or under it as agents, and
 things after it as products.
 
+**Arrange → Number Compounds** puts a bold number under each selected molecule (or every molecule)
+that has none. The numbers follow their molecules and stay in scheme order, row by row and left to
+right, as you edit: insert a step and the later numbers move up. Edit one to add a letter; **2a** and
+**2b** keep sharing their number.
+
 ```{image} _static/scheme-light.png
 :alt: A reaction scheme: salicylic acid to aspirin with Ac₂O and H₂SO₄ over the arrow
 :class: shot only-light

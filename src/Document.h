@@ -91,6 +91,8 @@ struct Text {
     QString text;
     double scale = 1;  // relative to the drawing style's label size
     QColor color;
+    bool compound = false;  // a compound number (#504): bold, renumbered in scheme order on every edit
+    int anchor = -1;        // an atom of the molecule it numbers, which it follows; -1 = free
     bool operator==(const Text&) const = default;
 };
 
