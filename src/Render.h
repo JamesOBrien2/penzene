@@ -85,6 +85,7 @@ QByteArray renderEmf(const Document& doc, const ExportOptions& options = {});  /
 #endif
 QPainterPath arrowPath(const Arrow& a);
 QFont labelFont(const DrawingStyle& s, double scale = 1);
+constexpr double kHeadLength = 6;  // an arrowhead of size 1, in drawing units
 constexpr int kTabSpaces = 8;  // text tab stops, in spaces: the canvas and the text dialog agree
 QPainterPath textPath(const Text& t, const DrawingStyle& s = drawingStyles()[0]);
 // How one line of text is set, character by character: formula counts subscripted, charges

@@ -399,7 +399,7 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
 
 // ---- arrows and text
 
-constexpr double kHeadLength = 6, kHeadWidth = 2.2, kEquilibriumGap = 1.6;
+constexpr double kHeadWidth = 2.2, kEquilibriumGap = 1.6;
 
 // Quadratic control point: puts the curve's midpoint `bend` to the left of from->to.
 // Points along the arrow. A curve is a circular arc through both ends whose

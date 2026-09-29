@@ -866,6 +866,29 @@ TEST_CASE("a no-reaction arrow is crossed, draws its cross, and keeps it through
     CHECK(chem::toCdxml(crossed).contains("NoGo=\"Cross\""));
 }
 
+TEST_CASE("arrowhead size goes out to ChemDraw and comes back (#538)") {
+    Document d = *chem::fromSmiles("CCO");
+    d.arrows.push_back({{40, 0}, {100, 0}});
+    d.arrows[0].head = 1.5;
+    const QByteArray xml = chem::toCdxml(d);
+    CHECK(xml.contains("HeadSize=\"900\""));  // 9 pt at ChemDraw's 1 pt line: 1.5 × our 6
+    CHECK(xml.contains("ArrowheadCenterSize=\"788\""));
+    CHECK(xml.contains("ArrowheadWidth=\"225\""));
+    CHECK(std::abs(chem::fromChemDraw(xml)->arrows[0].head - 1.5) < 1e-9);
+    CHECK(std::abs(chem::fromChemDraw(chem::toCdx(d))->arrows[0].head - 1.5) < 1e-9);
+
+    // ChemDraw draws a head HeadSize % of the line width long: 1000 on a 0.6 pt line is our 6
+    auto head = [](const char* root, const char* arrow) {
+        const QString xml = QString(R"(<CDXML BondLength="14.4" %1><page><arrow Tail3D="0 0 0" Head3D="100 0 0" )"
+                                    R"(ArrowheadHead="Full" ArrowheadType="Solid" %2/></page></CDXML>)").arg(root, arrow);
+        return chem::fromChemDraw(xml.toUtf8())->arrows.at(0).head;
+    };
+    CHECK(std::abs(head(R"(LineWidth="0.6")", R"(HeadSize="1000")") - 1) < 1e-9);
+    CHECK(std::abs(head(R"(LineWidth="0.6")", "") - 1) < 1e-9);
+    CHECK(std::abs(head(R"(LineWidth="0.6")", R"(HeadSize="1000" LineWidth="1.2")") - 2) < 1e-9);
+    CHECK(std::abs(head(R"(LineWidth="0.6")", R"(HeadSize="2250")") - 2.25) < 1e-9);
+}
+
 TEST_CASE("a huge arrow bend is drawn with a bounded number of points (#314)") {
     Arrow a{{0, 0}, {10, 0}};
     a.bend = 1e7;  // from a file: this took 2.9 GB to draw

@@ -466,6 +466,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
                                                std::vector<QPointF>& lonePairs, FileInks& inks) {
     QXmlStreamReader r(xml);
     double scale = kBondLength / 30;  // CDXML's default BondLength
+    double lineWidth = 1;  // and LineWidth, in points
     struct Open { QString tag; int label = -1; };  // label: index into `labels` for label <n>s
     std::vector<Open> stack;
     std::vector<LabelNode> labels;
@@ -534,6 +535,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         if (tag == "CDXML") {
             const double bond = at.hasAttribute("BondLength") ? std::max(1.0, at.value("BondLength").toDouble()) : 30;
             scale = kBondLength / bond;
+            if (const double w = at.value("LineWidth").toDouble(); w > 0) lineWidth = w;
             // The file's labels relative to its bonds, which may be far from our styles' (#203).
             if (at.hasAttribute("LabelSize")) doc.labelRatio = at.value("LabelSize").toDouble() / bond;
         } else if (tag == "b") {
@@ -623,6 +625,10 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             const auto head = at.value("ArrowheadHead"), tail = at.value("ArrowheadTail");
             Arrow a{point(at.value("Tail3D")), point(at.value("Head3D"))};
             a.crossed = at.value("NoGo") == u"Cross";
+            // ChemDraw's head is HeadSize % of the line width long (1000 when not given).
+            const double width = at.value("LineWidth").toDouble() > 0 ? at.value("LineWidth").toDouble() : lineWidth;
+            const double size = (at.hasAttribute("HeadSize") ? at.value("HeadSize").toDouble() : 1000) / 100 * width * scale / kHeadLength;
+            if (size > 0) a.head = std::clamp(size, 0.25, 4.0);
             if (head.isEmpty() && tail.isEmpty()) {  // a plain line
                 a.kind = ArrowKind::Line;
                 a.dashed = at.value("LineType").contains(u"Dash");
@@ -1195,6 +1201,10 @@ QByteArray toCdxml(const Document& doc) {
         }
         if (a.kind != ArrowKind::Retro) w.writeAttribute("ArrowheadType", "Solid");
         if (a.crossed) w.writeAttribute("NoGo", "Cross");
+        // At ChemDraw's 1 pt line (no LineWidth is written), a head kHeadLength long; notch and width in its proportions.
+        const double head = a.head * kHeadLength * 100;
+        for (auto [name, share] : {std::pair{"HeadSize", 1.0}, {"ArrowheadCenterSize", 0.875}, {"ArrowheadWidth", 0.25}})
+            w.writeAttribute(name, QString::number(std::lround(head * share)));
         paint(a.color);
         if (std::abs(a.bend) > 1e-6 && a.kind != ArrowKind::Equilibrium) {
             // The circle through both ends and the arc's midpoint (bend off the chord, as read back).
