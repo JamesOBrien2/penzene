@@ -92,8 +92,8 @@ int render(const QStringList& args) {
             if (path.isEmpty()) {
                 const QString safe = QString(name).replace(QRegularExpression("[^A-Za-z0-9._-]+"), "_");
                 QString stem = safe;
-                for (int k = 2; used.contains(stem); ++k) stem = safe + QString("-%1").arg(k);
-                used.insert(stem);
+                for (int k = 2; used.contains(stem.toLower()); ++k) stem = safe + QString("-%1").arg(k);
+                used.insert(stem.toLower());  // Sample and SAMPLE are one file on macOS and Windows (#493)
                 path = QDir(p.value("out")).filePath(stem + "." + format);
             }
             if (doc && p.isSet("clean")) doc = chem::clean2D(*doc);

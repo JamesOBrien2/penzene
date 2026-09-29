@@ -173,6 +173,10 @@ add_test(NAME render COMMAND penzene --render ${CMAKE_SOURCE_DIR}/tests/data/asp
          --out ${CMAKE_BINARY_DIR}/render-test --format png --drawing-style RSC --clean)
 set_tests_properties(render PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
                      PASS_REGULAR_EXPRESSION "aspirin\\.png.*structure\\.png")
+# Records named alike but for case get distinct files, as the disk may not tell them apart (#493).
+add_test(NAME render-name-case COMMAND penzene --render ${CMAKE_SOURCE_DIR}/tests/data/case.smi --out ${CMAKE_BINARY_DIR}/render-case)
+set_tests_properties(render-name-case PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "sample\\.svg.*SAMPLE-2\\.svg")
 # One output file from a multi-record file holds every record, as a grid (#320).
 add_test(NAME render-grid COMMAND penzene --render ${CMAKE_SOURCE_DIR}/tests/data/two.smi ${CMAKE_BINARY_DIR}/two.svg)
 add_test(NAME render-grid-check COMMAND penzene --descriptors ${CMAKE_BINARY_DIR}/two.svg --columns name,formula)
