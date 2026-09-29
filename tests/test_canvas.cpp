@@ -2038,6 +2038,49 @@ TEST_CASE("ChemDraw shortcut parity: y, W, g, ?, Space, Enter, nudging (#157)") 
     CHECK(QLineF(f.doc().atoms[3].pos, chem::fromSmiles("CCO.CC")->atoms[3].pos).length() < 1e-9);  // the other molecule stays
 }
 
+TEST_CASE("keyboard: G picks atoms one by one, > draws a curved arrow, no mouse needed (#541)") {
+    Fixture f;
+    f.canvas.setDocumentSilently(*chem::fromSmiles("CC=O"));
+    f.canvas.setFocus();
+    auto key = [&](int k, Qt::KeyboardModifiers m = {}) { QTest::keyClick(f.canvas.viewport(), Qt::Key(k), m); };
+    auto type = [&](char c) { QTest::keyClick(f.canvas.viewport(), c); };
+    f.canvas.setHotspot(0);
+    type('G');
+    CHECK(f.canvas.selection() == QSet<int>{0});
+    key(Qt::Key_Right, Qt::ShiftModifier);  // the hotspot moves on to the next atom instead of nudging atom 0
+    CHECK(f.canvas.hotspotAtom() == 1);
+    type('G');
+    CHECK(f.canvas.selection() == (QSet<int>{0, 1}));
+    const QPointF before = f.doc().atoms[0].pos;
+    key(Qt::Key_Escape);  // done picking: the selection stays and the arrows nudge it
+    CHECK(f.canvas.selection() == (QSet<int>{0, 1}));
+    key(Qt::Key_Down);
+    CHECK(QLineF(f.doc().atoms[0].pos, before + QPointF(0, 1)).length() < 1e-9);
+
+    // From the C=O bond to the oxygen, as an electron-pushing arrow.
+    key(Qt::Key_Escape);
+    f.canvas.setHotspot(-1, 1);
+    type('>');
+    CHECK(f.canvas.accessibleDescription().contains("curved arrow from"));
+    const QPointF toO = f.doc().atoms[2].pos - f.doc().atoms[1].pos;
+    key(std::abs(toO.x()) > std::abs(toO.y()) ? (toO.x() > 0 ? Qt::Key_Right : Qt::Key_Left) : (toO.y() > 0 ? Qt::Key_Down : Qt::Key_Up));
+    CHECK(f.canvas.hotspotAtom() == 2);
+    type('>');
+    REQUIRE(f.doc().arrows.size() == 1);
+    const Arrow& a = f.doc().arrows[0];
+    CHECK(a.kind == ArrowKind::Reaction);
+    CHECK(a.bend != 0);
+    CHECK(a.fromAt == (std::array<int, 2>{1, 2}));
+    CHECK(a.toAt == (std::array<int, 2>{2, -1}));
+
+    // A hotspot the pointer set, with a selection, still nudges: picking is for the keyboard only.
+    f.canvas.setSelection({0});
+    QTest::mouseMove(f.canvas.viewport(), f.at(f.doc().atoms[2].pos));
+    const QPointF c0 = f.doc().atoms[0].pos;
+    key(Qt::Key_Right);
+    CHECK(QLineF(f.doc().atoms[0].pos, c0 + QPointF(1, 0)).length() < 1e-9);
+}
+
 TEST_CASE("update check: parsing GitHub's answer, comparing versions, off by default (#115)") {
     App app;
     const auto r = online::parseRelease(R"({"tag_name": "v0.9.0", "html_url": "https://github.com/JamesOBrien2/penzene/releases/tag/v0.9.0"})");

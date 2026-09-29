@@ -2461,6 +2461,8 @@ moves off, so you can keep typing.</p>
 <tr><th colspan="2" align="left">Moving the hotspot</th></tr>
 <tr><td><b>←↑→↓</b></td><td>atom → bond → atom; with <b>Shift</b>: atom → atom, bond → bond (with a selection: nudge it, below)</td></tr>
 <tr><td><b>Space</b> / <b>g</b></td><td>select the hotspot's molecule / just its atom or bond</td></tr>
+<tr><td><b>G</b></td><td>add the hotspot's atom or bond to the selection; the arrow keys go on to the next (Esc when done)</td></tr>
+<tr><td><b>&gt;</b> … <b>&gt;</b></td><td>a curved arrow from the first hotspot to the second</td></tr>
 <tr><td><b>Esc</b></td><td>clear hotspot and selection</td></tr>
 <tr><th colspan="2" align="left">Atom: sprout</th></tr>
 <tr><td><b>1</b> / <b>0</b></td><td>single bond, linear / cyclic mode (0 is longer on 2°/3° carbons)</td></tr>
