@@ -86,6 +86,9 @@ struct Peak {
     double mz, intensity;  // intensity: the tallest is 100
 };
 std::vector<Peak> isotopePattern(const Document& doc, Ion ion);  // by m/z; empty if it can't be worked out
+// The ion's calculated mass as a supporting-information line, e.g. "HRMS (ESI) m/z: [M+H]+ calcd
+// for C9H9O4 181.0495"; [M] of a neutral molecule is EI's M+. Empty if it can't be worked out.
+QString hrmsLine(const Document& doc, Ion ion);
 std::string toInchi(const Document& doc);                   // "" if invalid
 // One CSV row per record: identifiers and descriptors (docs/cli.md defines them). A record that
 // isn't valid chemistry keeps its row, with the reason under "error". columns: a subset, in order.
