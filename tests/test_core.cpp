@@ -264,6 +264,9 @@ TEST_CASE("descriptor table: a row per record, invalid ones kept with the reason
     CHECK(lines[3].startsWith("3,\"a, \"\"quoted\"\" name\",c1ccccc1,"));
     // Chosen columns, in the order given.
     CHECK(QString::fromStdString(chem::descriptorsCsv(records, {"name", "tpsa"})).startsWith("name,tpsa\naspirin,63.60\nbroken,\n"));
+    // A reaction is a row that says so, not one molecule's numbers (#501).
+    Document scheme = *chem::fromReactionSmiles("CC(=O)O>>CC(=O)OC");
+    CHECK(QString::fromStdString(chem::descriptorsCsv({{"ester", scheme}}, {"name", "error"})) == "name,error\nester,reaction\n");
     // The molecules of a drawing, each its own row.
     Document two = *chem::fromSmiles("CCO.c1ccccc1");
     CHECK(chem::molecules(two).size() == 2);
@@ -645,6 +648,11 @@ TEST_CASE("multi-record SDF, .smi and .inchi open as a grid; MOL V3000; InChI (#
     }
     CHECK(chem::readRecords(sdf)[0].name == "aspirin");
     CHECK(chem::readRecords(smi)[1].name == "ethanol");
+    // A reaction SMILES line is a scheme, not an unreadable molecule (#501).
+    const auto rxn = chem::readRecords(write("rxn.smi", "CC(=O)O.OC>>CC(=O)OC ester\n"));
+    REQUIRE(rxn.size() == 1);
+    REQUIRE(rxn[0].doc);
+    CHECK(rxn[0].doc->arrows.size() == 1);
 }
 
 TEST_CASE("reactions: reaction SMILES and RXN, both ways (#101)") {
