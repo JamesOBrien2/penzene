@@ -20,6 +20,7 @@ as a grid, as Open does. The paths written are printed one per line.
 | `--format svg\|png\|pdf` | with `--out` (default svg) |
 | `--drawing-style NAME` | `ACS 1996`, `JDP` or `RSC` |
 | `--clean` | lay each structure out afresh |
+| `--peptide` | read inputs that aren't files as peptide sequences: `GFLS` or `Gly-Phe-Leu-Ser` (also for `--descriptors`) |
 | `--version`, `--help` | |
 
 ## Descriptor tables

@@ -1200,6 +1200,16 @@ void MainWindow::importSmiles() {
     else QMessageBox::warning(this, tr("Import SMILES"), tr("Not a valid SMILES string."));
 }
 
+void MainWindow::importSequence() {
+    bool ok = false;
+    const QString s = QInputDialog::getText(this, tr("Import Peptide Sequence"),
+                                            tr("One-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser):"),
+                                            QLineEdit::Normal, {}, &ok);
+    if (!ok || s.trimmed().isEmpty()) return;
+    if (auto doc = chem::fromSequence(s)) canvas_->insert(*doc, tr("Import %1").arg(s.trimmed()));
+    else QMessageBox::warning(this, tr("Import Peptide Sequence"), tr("Not a peptide sequence."));
+}
+
 void MainWindow::importName() {
     bool ok = false;
     const QString name = QInputDialog::getText(this, tr("Import Name"),
@@ -2094,6 +2104,7 @@ void MainWindow::buildMenus() {
     auto* importMenu = file->addMenu(tr("&Import"));
     importMenu->addAction(tr("&SMILES…"), QKeySequence(tr("Ctrl+Shift+I")), this, &MainWindow::importSmiles);
     importMenu->addAction(tr("&Name…"), this, &MainWindow::importName)->setStatusTip(tr("Look a name up on PubChem"));
+    importMenu->addAction(tr("&Peptide Sequence…"), this, &MainWindow::importSequence);
     file->addAction(tr("&Export…"), QKeySequence(tr("Ctrl+E")), this, &MainWindow::exportImage);
     file->addAction(tr("Export &Descriptors…"), this, &MainWindow::exportDescriptors);
     file->addAction(tr("&Print…"), QKeySequence::Print, this, &MainWindow::print);

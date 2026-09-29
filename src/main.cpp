@@ -28,11 +28,11 @@ bool missingFile(const QString& in) {
     return !QFileInfo::exists(in) && file.match(in).hasMatch();
 }
 
-// One input: a SMILES string, a multi-record file (SDF, .smi, .inchi) or any
-// single file Penzene opens.
-std::vector<Record> records(const QString& in) {
+// One input: a SMILES string (a peptide sequence with --peptide), a multi-record file (SDF, .smi,
+// .inchi) or any single file Penzene opens.
+std::vector<Record> records(const QString& in, bool peptide) {
     const QFileInfo info(in);
-    if (!info.exists()) return {{"structure", chem::fromSmiles(in.toStdString())}};
+    if (!info.exists()) return {{"structure", peptide ? chem::fromSequence(in) : chem::fromSmiles(in.toStdString())}};
     const QString ext = info.suffix().toLower();
     if (ext == "smi" || ext == "sdf" || ext == "inchi") return chem::readRecords(in);
     return {{info.completeBaseName(), chem::readFile(in)}};
@@ -47,6 +47,7 @@ int render(const QStringList& args) {
     // Not --style: QApplication claims that for widget styles.
     p.addOption({"drawing-style", "ACS 1996 (default), JDP or RSC.", "name"});
     p.addOption({"clean", "Lay out each structure afresh with RDKit."});
+    p.addOption({"peptide", "Read inputs that aren't files as peptide sequences (GFLS or Gly-Phe-Leu-Ser)."});
     p.addPositionalArgument("inputs", "SMILES, .smi, .sdf, .inchi, .mol, .penz or .cdxml");
     if (!p.parse(args)) {
         std::fprintf(stderr, "penzene: %s\n", qPrintable(p.errorText()));
@@ -57,7 +58,7 @@ int render(const QStringList& args) {
     if (!p.isSet("out") && inputs.size() == 2) single = inputs.takeLast();
     if (inputs.isEmpty() || (!p.isSet("out") && single.isEmpty())) {
         std::fprintf(stderr, "usage: penzene --render IN... (OUT.svg|png|pdf | --out DIR) "
-                             "[--format svg|png|pdf] [--drawing-style NAME] [--clean]\n");
+                             "[--format svg|png|pdf] [--drawing-style NAME] [--clean] [--peptide]\n");
         return 2;
     }
     if (p.isSet("drawing-style")) {
@@ -84,7 +85,7 @@ int render(const QStringList& args) {
             ++failed;
             continue;
         }
-        std::vector<Record> list = records(in);
+        std::vector<Record> list = records(in, p.isSet("peptide"));
         if (!single.isEmpty() && QFileInfo::exists(in)) {  // one output file: every record in a grid, as Open lays it out (#320)
             for (const auto& r : list)
                 if (!r.doc) std::fprintf(stderr, "penzene: could not read %s\n", qPrintable(r.name)), ++failed;  // #363
@@ -121,6 +122,7 @@ int descriptors(const QStringList& args) {
     p.addOption({"descriptors", "Write descriptors as CSV, one row per structure."});
     p.addOption({{"o", "out"}, "CSV file to write (default: standard output).", "file"});
     p.addOption({"columns", "Columns to write, comma-separated, in order (default: all).", "list"});
+    p.addOption({"peptide", "Read inputs that aren't files as peptide sequences (GFLS or Gly-Phe-Leu-Ser)."});
     p.addPositionalArgument("inputs", "SMILES, .smi, .sdf, .inchi, .mol, .penz or .cdxml");
     if (!p.parse(args) || p.positionalArguments().isEmpty()) {
         std::fprintf(stderr, "usage: penzene --descriptors IN... [--columns a,b,...] [--out FILE.csv]\n");
@@ -141,7 +143,7 @@ int descriptors(const QStringList& args) {
             ++missing;
             continue;
         }
-        for (auto& r : records(in)) all.push_back(std::move(r));
+        for (auto& r : records(in, p.isSet("peptide"))) all.push_back(std::move(r));
     }
     const std::string csv = chem::descriptorsCsv(all, columns);
     if (!p.isSet("out")) return std::fwrite(csv.data(), 1, csv.size(), stdout) == csv.size() && !missing ? 0 : 1;
@@ -162,8 +164,8 @@ int main(int argc, char** argv) {
         } else if (!std::strcmp(argv[i], "--help") || !std::strcmp(argv[i], "-h")) {
             std::printf("usage: penzene [FILE]\n"
                         "       penzene --render IN... (OUT.svg|png|pdf | --out DIR) "
-                        "[--format svg|png|pdf] [--drawing-style NAME] [--clean]\n"
-                        "       penzene --descriptors IN... [--columns a,b,...] [--out FILE.csv]\n"
+                        "[--format svg|png|pdf] [--drawing-style NAME] [--clean] [--peptide]\n"
+                        "       penzene --descriptors IN... [--columns a,b,...] [--out FILE.csv] [--peptide]\n"
                         "       penzene --version\n");
             return 0;
         }
