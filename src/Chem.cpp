@@ -2273,9 +2273,11 @@ std::string hoseCode(const RDKit::ROMol& mol, int root, int spheres, const std::
     return code.toStdString();
 }
 
-// Every atom's codes, on a copy without H atoms (explicit or not, the same codes).
-std::vector<std::vector<std::string>> hoseCodesOf(const RWMol& in, int maxSpheres) {
+// Every atom's codes, on a copy without H atoms (explicit or not, the same codes); with `classes`,
+// also each atom's symmetry class (equal for atoms the molecule can't tell apart; -1 for H atoms).
+std::vector<std::vector<std::string>> hoseCodesOf(const RWMol& in, int maxSpheres, std::vector<int>* classes = nullptr) {
     std::vector<std::vector<std::string>> out(in.getNumAtoms());
+    if (classes) classes->assign(in.getNumAtoms(), -1);
     RWMol mol(in);
     for (auto* a : mol.atoms()) a->setProp("penzeneIndex", int(a->getIdx()));
     try {
@@ -2283,7 +2285,10 @@ std::vector<std::vector<std::string>> hoseCodesOf(const RWMol& in, int maxSphere
         mol.updatePropertyCache(false);
         std::vector<unsigned> ranks;
         RDKit::Canon::rankMolAtoms(mol, ranks, true, false, false, false, false, false);
+        std::vector<unsigned> symmetry;  // ties kept: equivalent atoms share a rank
+        if (classes) RDKit::Canon::rankMolAtoms(mol, symmetry, false, false, false, false, false, false);
         for (const auto* a : mol.atoms()) {
+            if (classes) (*classes)[a->getProp<int>("penzeneIndex")] = int(symmetry[a->getIdx()]);
             auto& codes = out[a->getProp<int>("penzeneIndex")];
             for (int s = 1; s <= maxSpheres; ++s) codes.push_back(hoseCode(mol, int(a->getIdx()), s, ranks));
         }
@@ -2331,12 +2336,16 @@ std::vector<std::vector<std::string>> hoseCodes(const std::string& molBlock, int
     }
 }
 
-std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSpheres) {
+static std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSpheres, std::vector<int>* classes) {
     auto mol = toRDKit(doc);
     if (doc.atoms.empty() || !perceive(*mol)) return {};  // half-perceived: codes the table can't match
-    auto codes = hoseCodesOf(*mol, maxSpheres);
+    auto codes = hoseCodesOf(*mol, maxSpheres, classes);
     codes.resize(std::min(codes.size(), doc.atoms.size()));  // not expanded abbreviations' atoms
     return codes;
+}
+
+std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSpheres) {
+    return hoseCodes(doc, maxSpheres, nullptr);
 }
 
 std::vector<Shift> predictShifts(const Document& doc) {
@@ -2353,7 +2362,8 @@ std::vector<Shift> predictShifts(const Document& doc) {
     static thread_local std::vector<Shift> last;
     if (!last.empty() && key == lastKey) return last;
     std::vector<Shift> out;
-    const auto codes = hoseCodes(doc, 4);
+    std::vector<int> classes;
+    const auto codes = hoseCodes(doc, 4, &classes);
     const auto info = atomInfo(doc);
     std::vector<int> hydrogens(codes.size());
     for (size_t i = 0; i < codes.size(); ++i) hydrogens[i] = info[i].hydrogens;
@@ -2362,6 +2372,10 @@ std::vector<Shift> predictShifts(const Document& doc) {
             if (doc.atoms[h].z == 1 && size_t(to) < codes.size()) ++hydrogens[to];
     for (size_t i = 0; i < codes.size(); ++i) {
         Shift s{int(i)};
+        s.hydrogens = hydrogens[i], s.symmetry = classes[i];
+        if (doc.atoms[i].z == 6)  // H on O or N exchange, so split nothing and aren't split
+            for (int nb : doc.neighbors(int(i)))
+                if (doc.atoms[nb].z == 6 && classes[nb] != classes[i]) s.coupled += hydrogens[nb];
         auto look = [&](int column, double& value, int& spheres) {
             for (int n = int(codes[i].size()); n >= 1 && !spheres; --n)
                 if (auto v = table.find(std::to_string(n) + " " + codes[i][n - 1], column)) value = *v, spheres = n;
@@ -2373,6 +2387,31 @@ std::vector<Shift> predictShifts(const Document& doc) {
     }
     lastKey = key, last = out;
     return out;
+}
+
+std::vector<NmrStick> nmrSticks(const Document& doc, bool proton, const std::vector<int>& only) {
+    const std::set<int> wanted(only.begin(), only.end());
+    std::map<int, NmrStick> byClass;  // atoms the molecule can't tell apart make one stick
+    for (const Shift& s : predictShifts(doc)) {
+        if (!(proton ? s.protonSpheres : s.carbonSpheres) || (!wanted.empty() && !wanted.count(s.atom))) continue;
+        NmrStick& k = byClass[s.symmetry];
+        k.ppm = proton ? s.proton : s.carbon;
+        k.count += proton ? s.hydrogens : 1;
+        k.atoms.push_back(s.atom);
+        k.weak = (proton ? s.protonSpheres : s.carbonSpheres) < 3;
+        k.coupled = s.coupled;
+    }
+    std::vector<NmrStick> out;
+    for (auto& [c, k] : byClass) out.push_back(std::move(k));
+    std::sort(out.begin(), out.end(), [](const NmrStick& a, const NmrStick& b) { return a.ppm > b.ppm; });  // as a spectrum reads, left to right
+    return out;
+}
+
+QString nmrLine(const Document& doc, bool proton, const std::vector<int>& only) {
+    QStringList parts;
+    for (const auto& k : nmrSticks(doc, proton, only))
+        parts << (proton ? QString("%1 (%2, %3H)").arg(k.ppm, 0, 'f', 2).arg(k.multiplicity()).arg(k.count) : QString::number(k.ppm, 'f', 1));
+    return parts.isEmpty() ? QString() : (proton ? "1H" : "13C") + QString(" NMR (predicted) δ ") + parts.join(", ") + ".";
 }
 
 }  // namespace chem

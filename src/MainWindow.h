@@ -114,6 +114,7 @@ private:
     void updateInfo();
     void updateProfile();  // the Properties panel, while it's visible
     void updateMassSpec();  // the Mass Spec panel, likewise
+    void updateNmr();       // and the NMR panel
     void applyTheme(const QString& name);
     void remember(const QString& path);  // most recent first, at most 10
 
@@ -159,6 +160,9 @@ private:
     class QComboBox* ion_;
     class SpectrumView* spectrum_;
     class QLabel* eiIons_;  // under [M]: the EI ions worth checking
+    class QDockWidget* nmrDock_;
+    class QComboBox* nucleus_;
+    class NmrView* nmr_;
     std::vector<std::pair<QAction*, std::function<QIcon()>>> icons_;
     std::vector<class QFrame*> flyouts_;  // the tool rail's group flyouts
 };

@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "Canvas.h"
 #include "Chem.h"
+#include "Edit.h"
 #include "Online.h"
 #include "Templates.h"
 #include "WhatsNew.h"
@@ -127,6 +128,146 @@ protected:
             p.drawText(QPointF(x(k.mz) - fm.horizontalAdvance(text) / 2.0, y), text);
         }
         p.drawText(QRectF(plot.left(), plot.bottom() + 4, plot.width(), fm.height() + 4), Qt::AlignRight, "m/z");
+    }
+};
+
+// The NMR panel's predicted spectrum: one stick per set of equivalent atoms, as tall as the atoms (or H)
+// it stands for, ppm falling left to right. The stick under the pointer, or stepped to with Left/Right,
+// is labelled and lights its atoms on the canvas.
+class NmrView : public QWidget {
+public:
+    std::vector<chem::NmrStick> sticks;
+    bool proton = false;
+    Document doc;  // the sticks' own: names their atoms, whatever the canvas holds by now
+    std::vector<int> atoms;  // the molecule they're for
+    Document molecule;       // and it alone, drawn as the legend
+    std::function<void(const std::vector<int>&)> light;
+    int current = -1;
+    NmrView() {
+        setMinimumSize(260, 200);
+        setMouseTracking(true);
+        setFocusPolicy(Qt::StrongFocus);
+    }
+    QString describe(int k) const {
+        const auto& s = sticks[k];
+        QStringList atoms;
+        for (int a : s.atoms) atoms << QString::fromStdString(chem::symbol(doc.atoms[a].z)) + QString::number(a + 1);
+        return QCoreApplication::translate("MainWindow", "δ %1%2, %3 %4: %5")
+            .arg(s.weak ? "~" : "")
+            .arg(s.ppm, 0, 'f', proton ? 2 : 1)
+            .arg(s.count)
+            .arg(proton ? "H, " + s.multiplicity() : "C", atoms.join(", "));
+    }
+    QString reading() const {  // for screen readers: the stick in hand, else all of them
+        QStringList all;
+        for (int k = 0; k < int(sticks.size()); ++k)
+            if (current < 0 || k == current) all << describe(k);
+        return all.join("; ");
+    }
+    void setCurrent(int k) {
+        if (k == current) return;
+        current = k;
+        setAccessibleDescription(reading());
+        light(k >= 0 ? sticks[k].atoms : std::vector<int>{});
+        update();
+    }
+
+protected:
+    QRectF plot() const {
+        const QFontMetrics fm(font());
+        return QRectF(rect()).adjusted(8, fm.height() + 6, -8, -fm.height() - 8);
+    }
+    std::pair<double, double> range() const {  // ppm at the left and right edges
+        double left = proton ? 12 : 220, right = 0;
+        for (const auto& s : sticks) left = std::max(left, s.ppm + 1), right = std::min(right, s.ppm - 1);
+        return {left, right};
+    }
+    double x(double ppm) const {
+        const auto [l, r] = range();
+        return plot().left() + (l - ppm) / (l - r) * plot().width();
+    }
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QColor ink = palette().color(QPalette::WindowText);
+        if (sticks.empty()) {
+            p.setPen(ink);
+            p.drawText(rect(), Qt::AlignCenter | Qt::TextWordWrap,
+                       QCoreApplication::translate("MainWindow", "Draw or select a structure with predicted shifts."));
+            return;
+        }
+        const QFontMetrics fm(font());
+        const QRectF plot = this->plot();
+        const auto [l, r] = range();
+        p.setPen(QPen(ink, 1));
+        p.drawLine(plot.bottomLeft(), plot.bottomRight());
+        const int step = proton ? 1 : 20;
+        for (int v = int(std::floor(l / step)) * step; v >= r; v -= step) {
+            p.drawLine(QPointF(x(v), plot.bottom()), QPointF(x(v), plot.bottom() + 3));
+            const QString t = QString::number(v);
+            if (v % (2 * step) == 0) p.drawText(QPointF(x(v) - fm.horizontalAdvance(t) / 2.0, plot.bottom() + 4 + fm.ascent()), t);
+        }
+        int tallest = 1;
+        for (const auto& s : sticks) tallest = std::max(tallest, s.count);
+        // Each stick's lines as (x, height): 1H multiplets as n + 1 lines, Pascal's triangle tall, drawn wider
+        // than a real J so they can be read.
+        std::vector<std::vector<QPointF>> lines;
+        std::vector<QPointF> all;
+        for (const auto& s : sticks) {
+            const int n = proton ? std::min(s.coupled, 6) : 0;
+            std::vector<double> row{1};
+            for (int k = 0; k < n; ++k) {
+                row.push_back(0);
+                for (int j = k + 1; j > 0; --j) row[j] += row[j - 1];
+            }
+            const double peak = *std::max_element(row.begin(), row.end());
+            lines.emplace_back();
+            for (int j = 0; j <= n; ++j)
+                lines.back().push_back({x(s.ppm) + (j - n / 2.0) * 3, row[j] / peak * s.count / tallest}), all.push_back(lines.back().back());
+        }
+        // The molecule as the legend, as large as fits a corner, the sticks shrunk to keep clear of it and their label.
+        const QRectF bounds = documentBounds(molecule);
+        const double fit = std::min({0.45 * plot.width() / std::max(bounds.width(), 1.0), 0.5 * plot.height() / std::max(bounds.height(), 1.0),
+                                     22 / kBondLength});  // a bond no longer than 22 px
+        const Legend legend = placeLegend(plot, bounds.size() * fit, all, fm.height() + 6);
+        auto top = [&](int k) { return plot.bottom() - double(sticks[k].count) / tallest * legend.scale * plot.height(); };
+        for (size_t k = 0; k < sticks.size(); ++k) {
+            const QColor c = int(k) == current ? ink : palette().color(QPalette::Highlight);
+            p.setPen(QPen(c, int(k) == current ? 3 : 2, Qt::SolidLine, Qt::FlatCap));
+            for (QPointF l : lines[k]) p.drawLine(QPointF(l.x(), plot.bottom()), QPointF(l.x(), plot.bottom() - l.y() * legend.scale * plot.height()));
+        }
+        p.save();
+        p.translate(legend.rect.topLeft());
+        p.scale(fit, fit);
+        p.translate(-bounds.topLeft());
+        paintDocument(p, molecule, {ink});
+        if (current >= 0) {  // the stick in hand's atoms, ringed
+            p.setPen(QPen(palette().color(QPalette::Highlight), 1.5 / fit));
+            p.setBrush(Qt::NoBrush);
+            for (int a : sticks[current].atoms) p.drawEllipse(doc.atoms[a].pos, 7.0, 7.0);
+        }
+        p.restore();
+        p.setPen(ink);
+        if (current >= 0) {
+            const QString t = describe(current).section(':', 0, 0);
+            const double left = std::clamp(x(sticks[current].ppm) - fm.horizontalAdvance(t) / 2.0, 0.0, width() - fm.horizontalAdvance(t) - 0.0);
+            p.drawText(QPointF(left, std::max(top(current) - 4, double(fm.ascent()))), t);
+        }
+        p.drawText(QRectF(plot.left(), 0, plot.width(), fm.height() + 4), Qt::AlignRight, "δ / ppm");
+    }
+    void mouseMoveEvent(QMouseEvent* e) override {
+        int best = -1;
+        double nearest = 6;  // px
+        for (size_t k = 0; k < sticks.size(); ++k)
+            if (double d = std::abs(x(sticks[k].ppm) - e->position().x()); d < nearest) nearest = d, best = int(k);
+        setCurrent(best);
+    }
+    void leaveEvent(QEvent*) override { setCurrent(-1); }
+    void keyPressEvent(QKeyEvent* e) override {
+        const int n = int(sticks.size());
+        if (e->key() == Qt::Key_Right && n) setCurrent(std::min(current + 1, n - 1));
+        else if (e->key() == Qt::Key_Left && n) setCurrent(std::max(current - 1, 0));
+        else QWidget::keyPressEvent(e);
     }
 };
 
@@ -363,6 +504,48 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     connect(ion_, &QComboBox::currentIndexChanged, this, &MainWindow::updateMassSpec);
     connect(canvas_, &Canvas::documentChanged, this, &MainWindow::updateMassSpec);
     connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::updateMassSpec);
+    // NMR panel (#444): the predicted spectrum of the selection or everything.
+    nmrDock_ = new QDockWidget(tr("NMR"), this);
+    nmrDock_->setObjectName("nmr");
+    auto* nmrCard = new QFrame;
+    nmrCard->setObjectName("panelCard");
+    auto* nmrLayout = new QVBoxLayout(nmrCard);
+    nmrLayout->setContentsMargins(12, 12, 12, 12);
+    nucleus_ = new QComboBox;
+    nucleus_->addItems({"¹³C", "¹H"});
+    nucleus_->setAccessibleName(tr("Nucleus"));
+    nmr_ = new NmrView;
+    nmr_->setAccessibleName(tr("Predicted spectrum"));
+    nmr_->setToolTip(tr("Point at a stick, or press Left and Right, to light its atoms"));
+    nmr_->light = [this](const std::vector<int>& atoms) { canvas_->setHighlight(QSet<int>(atoms.begin(), atoms.end())); };
+    auto* notice = new QLabel(tr("Predicted; ~ in a stick's label marks a weaker match.") + " " + nmrshiftdbNotice().join(" "));
+    notice->setWordWrap(true);
+    notice->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    notice->setStyleSheet("font-size: 10px;");
+    nmrLayout->addWidget(nucleus_);
+    nmrLayout->addWidget(nmr_, 1);
+    auto* copyNmr = new QPushButton(tr("Copy SI Line"));
+    copyNmr->setToolTip(tr("The predicted shifts as a supporting-information line, to replace with measured ones"));
+    connect(copyNmr, &QPushButton::clicked, this, [this] {
+        const QString line = chem::nmrLine(nmr_->doc, nmr_->proton, nmr_->atoms);
+        if (line.isEmpty()) return statusBar()->showMessage(tr("No predicted shifts to copy"), 4000);  // the clipboard kept
+        QGuiApplication::clipboard()->setText(line);
+    });
+    nmrLayout->addWidget(copyNmr);
+    nmrLayout->addWidget(notice);
+    nmrCard->setMinimumWidth(300);
+    nmrDock_->setWidget(nmrCard);
+    addDockWidget(Qt::RightDockWidgetArea, nmrDock_);
+    nmrDock_->hide();
+    connect(nmrDock_, &QDockWidget::visibilityChanged, this, &MainWindow::updateNmr);
+    connect(nucleus_, &QComboBox::currentIndexChanged, this, &MainWindow::updateNmr);
+    connect(canvas_, &Canvas::documentChanged, this, &MainWindow::updateNmr);
+    connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::updateNmr);
+    connect(canvas_, &Canvas::hotspotAtomChanged, this, [this](int atom) {  // an atom under the pointer: its stick
+        const auto& s = nmr_->sticks;
+        const auto k = std::find_if(s.begin(), s.end(), [&](const chem::NmrStick& k) { return std::count(k.atoms.begin(), k.atoms.end(), atom); });
+        if (nmrDock_->isVisible()) nmr_->setCurrent(k == s.end() ? -1 : int(k - s.begin()));
+    });
     buildTools();
     buildMenus();
     connect(undoGroup_, &QUndoGroup::cleanChanged, this, &MainWindow::updateTitle);
@@ -550,6 +733,37 @@ void MainWindow::updateMassSpec() {
     eiIons_->setText(tr("<b>EI ions to look for</b> (from the groups drawn; no intensities)") +
                      "<table cellspacing=\"4\">" + rows + "</table>");
     eiIons_->setVisible(!ions.empty());
+}
+
+void MainWindow::updateNmr() {
+    nmr_->current = -1;
+    canvas_->setHighlight({});
+    if (!nmrDock_->isVisible()) return;
+    // One molecule's spectrum: the one holding most of the selection, else the largest.
+    const Document& d = canvas_->document();
+    const QSet<int>& selected = canvas_->selection();
+    std::vector<bool> seen(d.atoms.size());
+    std::pair<int, size_t> best{-1, 0};
+    nmr_->atoms.clear();
+    for (int i = 0; i < int(d.atoms.size()); ++i) {
+        if (seen[i]) continue;
+        auto mol = edit::moleculeOf(d, i);
+        int picked = 0;
+        for (int a : mol) seen[a] = true, picked += selected.contains(a);
+        if (std::pair{picked, mol.size()} > best) best = {picked, mol.size()}, nmr_->atoms = std::move(mol);
+    }
+    std::sort(nmr_->atoms.begin(), nmr_->atoms.end());
+    nmr_->proton = nucleus_->currentIndex() == 1;
+    nmr_->doc = d;
+    nmr_->molecule = d;
+    std::vector<int> others;
+    for (int i = 0; i < int(d.atoms.size()); ++i)
+        if (!std::binary_search(nmr_->atoms.begin(), nmr_->atoms.end(), i)) others.push_back(i);
+    nmr_->molecule.removeAtoms(others);
+    nmr_->molecule.arrows.clear(), nmr_->molecule.texts.clear();
+    nmr_->sticks = nmr_->atoms.empty() ? std::vector<chem::NmrStick>{} : chem::nmrSticks(d, nmr_->proton, nmr_->atoms);
+    nmr_->setAccessibleDescription(nmr_->reading());
+    nmr_->update();
 }
 
 // Formula and masses of the selection, or of everything.
@@ -2468,6 +2682,9 @@ void MainWindow::buildMenus() {
     auto* massToggle = massDock_->toggleViewAction();
     massToggle->setText(tr("&Mass Spec Panel"));
     view->addAction(massToggle);
+    auto* nmrToggle = nmrDock_->toggleViewAction();
+    nmrToggle->setText(tr("&NMR Panel"));
+    view->addAction(nmrToggle);
     view->addSeparator();
     auto* themeMenu = view->addMenu(tr("T&heme"));
     auto* themeGroup = themeGroup_ = new QActionGroup(this);

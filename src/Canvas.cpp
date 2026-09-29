@@ -396,6 +396,11 @@ Document Canvas::selectedSubset() const {
     return out;
 }
 
+void Canvas::setHighlight(QSet<int> atoms) {
+    highlight_ = std::move(atoms);
+    viewport()->update();
+}
+
 void Canvas::deleteSelection() {
     if (selectedAtoms_.isEmpty() && selectedArrows_.isEmpty() && selectedTexts_.isEmpty()) return;
     auto others = [](const QSet<int>& sel, size_t n) { return range(0, int(n)).subtract(sel); };
@@ -521,6 +526,7 @@ void Canvas::setHotspot(int atom, int bond) {
 }
 
 void Canvas::announceHotspot() {
+    if (hoverAtom_ != announcedAtom_) emit hotspotAtomChanged(announcedAtom_ = hoverAtom_);
     QString text;
     if (hoverAtom_ >= 0 && hoverAtom_ < int(doc_.atoms.size()))
         text = tr("Hotspot: %1").arg(describeAtom(doc_, hoverAtom_));
@@ -584,6 +590,11 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
     p->setPen(Qt::NoPen);
     p->setBrush(sel);
     for (int i : selectedAtoms_) p->drawEllipse(doc_.atoms[i].pos, 4, 4);
+    p->setPen(QPen(theme_.hotspot, 1.5));
+    p->setBrush(Qt::NoBrush);
+    for (int i : highlight_) p->drawEllipse(doc_.atoms[i].pos, 7, 7);
+    p->setPen(Qt::NoPen);
+    p->setBrush(sel);
 
     for (int i : selectedArrows_) p->strokePath(arrowPath(doc_.arrows[i]), QPen(sel, 4, Qt::SolidLine, Qt::RoundCap));
     for (int i : selectedTexts_) p->drawRect(textPath(doc_.texts[i], documentStyle(doc_)).boundingRect().adjusted(-1.5, -1.5, 1.5, 1.5));

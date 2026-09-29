@@ -22,6 +22,7 @@ QPointF snapToAnchor(const Document& doc, std::array<int, 2> at, QPointF p, QPoi
 // Arrow ends in `after` follow the atoms they rest on as they moved from `before`; an arrow
 // moved off its atoms takes whatever it now rests on.
 void followAnchors(const Document& before, Document& after);
+std::vector<int> moleculeOf(const Document& doc, int atom);  // the atoms bonded to it, directly or not, itself included
 int atomAtOrNew(Document& doc, QPointF p, int z = 6);
 void link(Document& doc, int a, int b, int order = 1, BondStereo stereo = BondStereo::None);
 std::vector<int> addRing(Document& doc, const std::vector<QPointF>& verts, bool aromatic);
