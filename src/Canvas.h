@@ -146,6 +146,7 @@ private:
     int scaleHandle_ = -1;
     QRectF scaleBox_;
     QPointF pressPos_, curPos_;
+    QPointF pressRaw_;  // where the mouse went down, before an orbital snaps pressPos_ to its atom
     bool shift_ = false;  // held during the drag: free bond angle, or move along one axis
     int pressAtom_ = -1;
     Document beforeDrag_;

@@ -2934,6 +2934,12 @@ TEST_CASE("the Shapes flyout has every orbital in every look; one clicked on an 
     CHECK(p.kind == ArrowKind::POrbital);
     CHECK(p.look == OrbitalLook::Shaded);
     CHECK(QLineF(p.from, QPointF(0, 0)).length() < 0.5);  // centred on the nitrogen
+    // A click a little off the atom's centre is still a click: the same size as one dead centre (#431).
+    const double full = QLineF(p.from, p.to).length();
+    canvas->setDocumentSilently(d);
+    QTest::mouseClick(canvas->viewport(), Qt::LeftButton, {}, canvas->mapFromScene(QPointF(2, 2)));
+    REQUIRE(canvas->document().arrows.size() == 1);
+    CHECK(std::abs(QLineF(canvas->document().arrows[0].from, canvas->document().arrows[0].to).length() - full) < 1e-6);
     if (auto shot = qgetenv("PENZENE_ORBITAL_TOOLS_SHOT"); !shot.isEmpty()) {
         for (auto* b : w.findChildren<QToolButton*>("railButton"))
             if (b->text() == "Shapes") b->click();
