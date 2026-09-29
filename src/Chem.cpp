@@ -1125,6 +1125,13 @@ QByteArray toCdxml(const Document& doc) {
         }
         w.writeEndElement();
     }
+    // ChemDraw draws a style run in its colour only when the run names a font.
+    w.writeStartElement("fonttable");
+    w.writeEmptyElement("font");
+    w.writeAttribute("id", "3");
+    w.writeAttribute("charset", "iso-8859-1");
+    w.writeAttribute("name", "Arial");
+    w.writeEndElement();
     w.writeStartElement("page");
     w.writeAttribute("id", QString::number(id++));
     // Stacking (Z, and document order for readers without it): arrows sent behind the molecule first.
@@ -1296,6 +1303,7 @@ QByteArray toCdxml(const Document& doc) {
             w.writeStartElement("t");
             w.writeAttribute("p", pt(a.pos + QPointF(-3, 4)));
             w.writeStartElement("s");
+            w.writeAttribute("font", "3");
             paint(a.color);
             w.writeCharacters(a.label);
             w.writeEndElement();
@@ -1328,6 +1336,7 @@ QByteArray toCdxml(const Document& doc) {
         // One run per script, as ChemDraw styles them: subscript face 32, superscript 64.
         auto run = [&](Script s, const QString& chars) {
             w.writeStartElement("s");
+            w.writeAttribute("font", "3");
             w.writeAttribute("size", QString::number(10 * t.scale));  // 10 pt: the ACS label size
             paint(t.color);
             if (s != Script::Base) w.writeAttribute("face", s == Script::Sub ? "32" : "64");

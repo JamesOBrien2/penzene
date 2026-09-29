@@ -829,6 +829,9 @@ TEST_CASE("ChemDraw save and reopen keeps custom colours (#426)") {
     }
     // ChemDraw takes the table's first two entries as the page and the ink: white, then black, then the colours used.
     CHECK(chem::toCdxml(d).simplified().replace("> <", "><").contains(R"(<colortable><color r="1.0000" g="1.0000" b="1.0000"/><color r="0.0000" g="0.0000" b="0.0000"/><color r="1.0000" g="0.0000" b="0.0000"/>)"));
+    // and colours a text run only when the run names a font from the font table.
+    CHECK(chem::toCdxml(d).contains(R"(<font id="3")"));
+    CHECK(chem::toCdxml(d).contains(R"(<s font="3")"));
     CHECK(!chem::toCdxml(*chem::fromSmiles("CCO")).contains("colortable"));  // nothing coloured, nothing written
 }
 
