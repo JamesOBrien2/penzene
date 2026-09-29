@@ -1512,3 +1512,17 @@ TEST_CASE("predicted 13C and 1H shifts: benzene, ethanol (#403)") {
     CHECK(ethanol[2].carbonSpheres == 0);  // O: 1H only
     CHECK(ethanol[2].protonSpheres > 0);
 }
+
+TEST_CASE("predicted shifts follow the bonds, not where the atoms are drawn") {
+    auto doc = *chem::fromSmiles("CCO");
+    const auto before = chem::predictShifts(doc);
+    doc.atoms[1].pos += QPointF(30, -12);  // dragged
+    const auto moved = chem::predictShifts(doc);
+    REQUIRE(moved.size() == before.size());
+    for (size_t i = 0; i < moved.size(); ++i) {
+        CHECK(moved[i].carbon == before[i].carbon);
+        CHECK(moved[i].proton == before[i].proton);
+    }
+    doc.atoms[2].z = 7;  // O -> N: a different molecule, a different answer
+    CHECK(chem::predictShifts(doc)[1].carbon != before[1].carbon);
+}
