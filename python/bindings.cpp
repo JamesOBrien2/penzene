@@ -37,7 +37,20 @@ Document fromSmiles(const std::string& smiles) {
     return *doc;
 }
 
+// A missing file is a FileNotFoundError, and still the ValueError it used to raise (the stability policy).
+[[noreturn]] void missingFile(const std::string& path) {
+    static PyObject* type = [] {
+        PyObject* bases = PyTuple_Pack(2, PyExc_FileNotFoundError, PyExc_ValueError);
+        PyObject* t = PyErr_NewException("penzene.MissingFile", bases, nullptr);
+        Py_DECREF(bases);
+        return t;
+    }();
+    PyErr_SetString(type, ("no such file: " + path).c_str());
+    throw nb::python_error();
+}
+
 Document readPath(const std::string& path) {
+    if (!QFileInfo::exists(qs(path))) missingFile(path);
     auto doc = chem::readFile(qs(path));
     if (!doc) throw nb::value_error(("cannot read " + path).c_str());
     return *doc;
@@ -89,7 +102,11 @@ NB_MODULE(_penzene, m) {
             "style", [](const Document& d) { return drawingStyle(d.style).name.toStdString(); },
             [](Document& d, const std::string& name) {
                 const DrawingStyle& s = drawingStyle(qs(name));
-                if (s.name != qs(name)) throw nb::value_error(("unknown drawing style: " + name).c_str());
+                if (s.name != qs(name)) {
+                    QStringList names;
+                    for (const auto& known : drawingStyles()) names << "'" + known.name + "'";
+                    throw nb::value_error(("unknown drawing style: " + name + " (use " + names.join(", ").toStdString() + ")").c_str());
+                }
                 d.style = s.name == drawingStyles()[0].name ? QString() : s.name;
             },
             "Drawing style: 'ACS 1996' (default), 'JDP' or 'RSC' (since 0.4)")

@@ -62,6 +62,18 @@ for bad in (lambda: pz.from_smiles("C1CC"), lambda: m.add_atom("notachem!!"), la
         pass
     else:
         raise AssertionError("expected ValueError")
+try:
+    pz.read(os.path.join(out, "missing.penz"))
+except FileNotFoundError as e:
+    assert isinstance(e, ValueError), "a missing file is still a ValueError"
+else:
+    raise AssertionError("expected FileNotFoundError")
+try:
+    pz.Document().style = "nope"
+except ValueError as e:
+    assert "'RSC'" in str(e), e
+else:
+    raise AssertionError("expected ValueError")
 print("python ok", pz.__version__)
 
 # Type stubs: in a development build, the committed ones match the module (regenerate with
