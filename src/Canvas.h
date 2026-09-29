@@ -17,7 +17,7 @@ class QUndoStack;
 class Canvas : public QGraphicsView {
     Q_OBJECT
 public:
-    enum class Tool { Select, Atom, Bond, Wedge, Hash, Chain, Ring, ChargePlus, ChargeMinus, Erase, Arrow, Text, Fill, Colour };
+    enum class Tool { Select, Rotate3D, Atom, Bond, Wedge, Hash, Chain, Ring, ChargePlus, ChargeMinus, Erase, Arrow, Text, Fill, Colour };
 
     explicit Canvas(QUndoStack* undo, QWidget* parent = nullptr);
 

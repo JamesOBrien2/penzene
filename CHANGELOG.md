@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Rotate in 3D is a tool in the Select flyout: drag a molecule out of the page and it keeps its stereochemistry. The two Turn Over commands are removed (Shift+Alt+drag and the arrow keys still turn it).
 - View → Show Implicit Hydrogens is removed: labels always show their implicit hydrogens (OH, NH₂).
 
 ## 1.5.0 (2026-09-28)

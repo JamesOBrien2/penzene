@@ -1709,6 +1709,32 @@ TEST_CASE("3D rotation from the mouse and keyboard keeps stereo (#173)") {
     }
 }
 
+TEST_CASE("the Select flyout offers 3D rotation without modifier keys") {
+    App app;
+    MainWindow w;
+    w.resize(1000, 700);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    REQUIRE(canvas);
+    QAction* rotate = nullptr;
+    for (auto* action : w.findChildren<QAction*>())
+        if (action->toolTip().startsWith("Rotate in 3D:")) rotate = action;
+    REQUIRE(rotate);
+    rotate->trigger();
+
+    const Document menthol = *chem::fromSmiles("CC(C)[C@@H]1CC[C@@H](C)C[C@H]1O");
+    canvas->setDocumentSilently(menthol);
+    canvas->selectAll();
+    const QPoint on = canvas->mapFromScene(menthol.atoms[3].pos);
+    const QPoint to = on + QPoint(75, 30);
+    QTest::mousePress(canvas->viewport(), Qt::LeftButton, {}, on);
+    QMouseEvent move(QEvent::MouseMove, to, canvas->viewport()->mapToGlobal(to), Qt::NoButton, Qt::LeftButton, {});
+    QApplication::sendEvent(canvas->viewport(), &move);
+    QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, {}, to);
+    CHECK_FALSE(canvas->document() == menthol);
+    CHECK(chem::toSmiles(canvas->document()) == chem::toSmiles(menthol));
+}
+
 TEST_CASE("attachment points, π-ligands, bring to front and atom properties (#60)") {
     Fixture f;
     Document d = *chem::fromSmiles("CC");

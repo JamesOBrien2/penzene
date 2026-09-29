@@ -356,18 +356,20 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
         p->drawLine(doc_.atoms[b.a].pos, doc_.atoms[b.b].pos);
     }
 
-    if (tool_ == Tool::Select && (drag_ == Drag::None || drag_ == Drag::Scale)) {
+    if ((tool_ == Tool::Select || tool_ == Tool::Rotate3D) && (drag_ == Drag::None || drag_ == Drag::Scale)) {
         if (const QRectF box = selectionBox(); !box.isNull()) {
             p->setBrush(Qt::NoBrush);
             p->setPen(QPen(line, 0, Qt::DotLine));
             p->drawRect(box);
-            p->setPen(QPen(line, 0));
-            p->setBrush(theme_.paper);
-            const double s = 2.5 / transform().m11();
-            for (QPointF h : handlePoints(box)) p->drawRect(QRectF(h - QPointF(s, s), h + QPointF(s, s)));
-            const QPointF knob = *rotateHandle();
-            p->drawLine(QPointF(box.center().x(), box.top()), knob + QPointF(0, 1.4 * s));
-            p->drawEllipse(knob, 1.4 * s, 1.4 * s);
+            if (tool_ == Tool::Select) {
+                p->setPen(QPen(line, 0));
+                p->setBrush(theme_.paper);
+                const double s = 2.5 / transform().m11();
+                for (QPointF h : handlePoints(box)) p->drawRect(QRectF(h - QPointF(s, s), h + QPointF(s, s)));
+                const QPointF knob = *rotateHandle();
+                p->drawLine(QPointF(box.center().x(), box.top()), knob + QPointF(0, 1.4 * s));
+                p->drawEllipse(knob, 1.4 * s, 1.4 * s);
+            }
         }
     }
     p->setBrush(Qt::NoBrush);
@@ -494,12 +496,13 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
     beforeDrag_ = doc_;
 
     switch (tool_) {
-    case Tool::Select: {
-        if (const auto knob = rotateHandle(); knob && len(*knob - pressPos_) < 5 / transform().m11()) {
+    case Tool::Select: case Tool::Rotate3D: {
+        const bool threeD = tool_ == Tool::Rotate3D;
+        if (const auto knob = threeD ? std::nullopt : rotateHandle(); knob && len(*knob - pressPos_) < 5 / transform().m11()) {
             drag_ = Drag::Rotate;
             break;
         }
-        if (int h = handleAt(pressPos_); h >= 0) {  // a scale handle wins over what's under it
+        if (int h = threeD ? -1 : handleAt(pressPos_); h >= 0) {  // a scale handle wins over what's under it
             drag_ = Drag::Scale, scaleHandle_ = h, scaleBox_ = selectionBox();
             break;
         }
@@ -512,12 +515,17 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
                                               : QSet<int>{};
             QSet<int> arrows = arrow >= 0 ? QSet<int>{arrow} : QSet<int>{};
             QSet<int> texts = text >= 0 ? QSet<int>{text} : QSet<int>{};
+            if (threeD && atoms.isEmpty()) { drag_ = Drag::None; break; }
             bool already = selectedAtoms_.contains(atoms) && selectedArrows_.contains(arrows) &&
                            selectedTexts_.contains(texts);
             if (shift) selectedAtoms_ |= atoms, selectedArrows_ |= arrows, selectedTexts_ |= texts;
             else if (!already) selectedAtoms_ = atoms, selectedArrows_ = arrows, selectedTexts_ = texts;
-            drag_ = !(e->modifiers() & Qt::AltModifier) ? Drag::Move : shift ? Drag::Rotate3D : Drag::Rotate;
-            if (drag_ == Drag::Rotate3D && !(pose_ = chem::pose3D(doc_, moleculesOfSelection()))) drag_ = Drag::Rotate;
+            drag_ = threeD ? Drag::Rotate3D
+                           : !(e->modifiers() & Qt::AltModifier) ? Drag::Move : shift ? Drag::Rotate3D : Drag::Rotate;
+            if (drag_ == Drag::Rotate3D && !(pose_ = chem::pose3D(doc_, moleculesOfSelection())))
+                drag_ = threeD ? Drag::None : Drag::Rotate;
+        } else if (threeD && !selectedAtoms_.isEmpty() && selectionBox().contains(pressPos_)) {
+            drag_ = (pose_ = chem::pose3D(doc_, moleculesOfSelection())) ? Drag::Rotate3D : Drag::None;
         } else {
             if (!shift) selectedAtoms_.clear(), selectedArrows_.clear(), selectedTexts_.clear();
             drag_ = Drag::Rubber;
@@ -810,7 +818,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
 }
 
 void Canvas::mouseDoubleClickEvent(QMouseEvent* e) {
-    if (tool_ != Tool::Select) return QGraphicsView::mouseDoubleClickEvent(e);
+    if (tool_ != Tool::Select && tool_ != Tool::Rotate3D) return QGraphicsView::mouseDoubleClickEvent(e);
     int start = atomAt(mapToScene(e->pos()));
     if (int t = textAt(mapToScene(e->pos())); start < 0 && t >= 0) return editText(t);
     if (start < 0) return;

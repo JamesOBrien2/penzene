@@ -1580,6 +1580,14 @@ void MainWindow::buildTools() {
     startGroup(tr("Select"), select);
     keys[" "] = add(select, tr("Select (drag to move, Alt+drag to rotate, double-click for fragment) — Space"),
                     tool(T::Select));
+    const IconMaker rotate3D = paintedIcon([](QPainter& p, QColor ink) {
+        p.setPen(QPen(ink, 1.3));
+        p.drawEllipse(QRectF(5, 8, 14, 8));
+        p.drawArc(QRectF(3, 3, 18, 18), 40 * 16, 270 * 16);
+        p.drawLine(QPointF(17, 5), QPointF(21, 6));
+        p.drawLine(QPointF(17, 5), QPointF(19, 9));
+    });
+    add(rotate3D, tr("Rotate in 3D: drag a selected molecule out of the page; keeps stereochemistry"), tool(T::Rotate3D));
     const IconMaker eraser = paintedIcon([](QPainter& p, QColor ink) {
         p.translate(12, 12);
         p.rotate(-40);
@@ -1910,8 +1918,6 @@ void MainWindow::buildMenus() {
     structure->addAction(tr("Flip &Horizontal"), QKeySequence(tr("Ctrl+Shift+H")), this,
                          [this] { canvas_->flipSelection(true); });
     structure->addAction(tr("Arrange &Scheme"), this, [this] { canvas_->arrangeScheme(); });
-    structure->addAction(tr("Turn Over &Left to Right (3D)"), this, [this] { canvas_->rotate3D(0, 180); });
-    structure->addAction(tr("Turn Over &Top to Bottom (3D)"), this, [this] { canvas_->rotate3D(180, 0); });
     auto* brackets = structure->addMenu(tr("&Brackets"));
     for (bool square : {true, false})
         brackets->addAction(square ? tr("&Square Brackets Around Selection…") : tr("&Round Brackets Around Selection…"), this,
@@ -2235,7 +2241,7 @@ moves off, so you can keep typing.</p>
 <tr><td><b>Ctrl+←↑→↓</b></td><td>duplicate across the next arrow that way (or alongside)</td></tr>
 <tr><td><b>Alt+← →</b></td><td>rotate 15° &nbsp;•&nbsp; <b>Alt+drag</b> rotate freely • <b>double-click</b> select fragment, or edit text</td></tr>
 <tr><td><b>Ctrl+0</b></td><td>zoom to the selection (to everything with none)</td></tr>
-<tr><td><b>Shift+Alt+←↑→↓</b></td><td>rotate 15° out of the page (3D), keeping stereo &nbsp;•&nbsp; <b>Shift+Alt+drag</b> freely</td></tr>
+<tr><td><b>Shift+Alt+←↑→↓</b></td><td>rotate 15° out of the page (3D), keeping stereo &nbsp;•&nbsp; choose the Rotate in 3D tool from Select and drag freely</td></tr>
 </table>)"));
         box.exec();
     });
