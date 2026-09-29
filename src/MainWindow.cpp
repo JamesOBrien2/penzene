@@ -54,6 +54,7 @@
 #include <QTranslator>
 #include <QSettings>
 #include <QSignalBlocker>
+#include <QMouseEvent>
 #include <algorithm>
 #include <QStandardPaths>
 #include <QTimer>
@@ -150,8 +151,7 @@ static QString uiStyle(const Theme& t) {
         QFrame#toolFlyout QToolButton:hover, QFrame#toolFlyout QToolButton:checked { background: %7; }
         QFrame#toolFlyout QToolButton:focus { border: 2px solid %6; }
         QFrame#toolFlyout QToolButton::menu-button { background: transparent; border: none; width: 10px; }
-        QFrame#toolFlyout QToolButton#pin { color: %5; font-size: 11px; padding: 2px 8px; border: 1px solid %3; }
-        QFrame#toolFlyout QToolButton#pin:checked { color: %6; background: %7; border-color: %6; }
+        QFrame#toolFlyout QToolButton#close { color: %5; font-size: 11px; padding: 2px 6px; border: none; }
         QLabel#flyoutTitle { color: %5; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
         QDockWidget#properties, QDockWidget#templates { background: %1; color: %4; border: none; }
         QDockWidget::title { background: %2; color: %4; border: 1px solid %3; border-radius: 10px; padding: 8px; }
@@ -421,14 +421,21 @@ void MainWindow::paintExamples() {
         button->setIcon(drawingIcon(doc, kExampleIcon, ink, devicePixelRatioF()));
 }
 
+// A smaller window pulls the open flyouts back inside it, so none is stranded off-screen.
+void MainWindow::resizeEvent(QResizeEvent* e) {
+    QMainWindow::resizeEvent(e);
+    for (auto* f : flyouts_)
+        if (f->isVisible())
+            f->move(std::clamp(f->x(), 0, std::max(0, width() - f->width())),
+                    std::clamp(f->y(), 0, std::max(0, height() - f->height())));
+}
+
 bool MainWindow::eventFilter(QObject* watched, QEvent* e) {
     if (watched == qApp && e->type() == QEvent::FileOpen) {
         if (maybeSave()) openFile(static_cast<QFileOpenEvent*>(e)->file());
         return true;
     }
     if (watched == canvas_->viewport() && e->type() == QEvent::MouseButtonPress) {
-        for (auto* f : flyouts_)  // drawing closes a tool flyout unless it's pinned
-            if (!f->findChild<QToolButton*>("pin")->isChecked()) f->hide();
         if (welcome_->isVisible() && !welcome_->geometry().contains(static_cast<QMouseEvent*>(e)->position().toPoint()))
             welcome_->hide();  // and the click goes on to draw
     }
@@ -1397,6 +1404,132 @@ struct GridArrows : QObject {
         return true;
     }
 };
+
+// A tool flyout: the tools flow into as many columns as fit its width. Drag it by any part that
+// isn't a tool (its title, margins and gaps) to move it off the others (#466), or by a corner
+// to resize it; the tools reflow and the box follows them.
+struct FlyoutFrame : QObject {
+    struct Tool {
+        QWidget* w;
+        int span;
+        bool newRow;
+    };
+    QWidget* fly;
+    QGridLayout* grid;
+    std::vector<Tool> tools;
+    bool nextNewRow = false;
+    static constexpr int kDefaultCols = 4;
+    int cols = kDefaultCols;
+    int corner = 0;  // the corner being dragged: Qt::Edges, or 0 when moving
+    QPoint grab;  // where the drag began, in the window
+    QRect start;  // and the box then
+
+    FlyoutFrame(QWidget* flyout, QGridLayout* g) : QObject(flyout), fly(flyout), grid(g) {
+        flyout->setCursor(Qt::SizeAllCursor);
+        flyout->setMouseTracking(true);
+        flyout->installEventFilter(this);
+    }
+    void newRow() { nextNewRow = true; }  // the next tool starts a row, at the default width (resized, the tools just flow)
+    void add(QWidget* w, int span = 1) {
+        tools.push_back({w, span, std::exchange(nextNewRow, false)});
+        place(cols);
+    }
+    void place(int c) {
+        cols = c;
+        int slot = 0;
+        for (auto& t : tools) {
+            grid->removeWidget(t.w);
+            const int span = std::min(t.span, c);
+            if (t.newRow && c == kDefaultCols) slot = (slot + c - 1) / c * c;
+            if (slot % c + span > c) slot = (slot / c + 1) * c;
+            grid->addWidget(t.w, slot / c, slot % c, 1, span);
+            slot += span;
+        }
+    }
+    QSize sizeFor(int c) {
+        place(c);
+        fly->layout()->invalidate();
+        fly->layout()->activate();
+        return fly->layout()->minimumSize();
+    }
+    // The column count for a box dragged to `want`: as many as fit the width, or, when the drag
+    // was mostly vertical, the fewest that fit the height. Never wider than the window.
+    void fit(QSize want, int maxWidth, bool byHeight) {
+        int most = 0;
+        for (auto& t : tools) most += t.span;
+        int c = 1;
+        if (byHeight) {
+            while (c < most && sizeFor(c).height() > want.height() && sizeFor(c + 1).width() <= maxWidth) ++c;
+        } else {
+            for (int n = 1; n <= most && sizeFor(n).width() <= std::min(want.width(), maxWidth); ++n) c = n;
+        }
+        place(c);
+    }
+    int cornerAt(QPoint p) const {
+        constexpr int zone = 12;
+        int edges = 0;
+        if (p.x() < zone) edges |= Qt::LeftEdge;
+        if (p.x() >= fly->width() - zone) edges |= Qt::RightEdge;
+        if (p.y() < zone) edges |= Qt::TopEdge;
+        if (p.y() >= fly->height() - zone) edges |= Qt::BottomEdge;
+        const bool horizontal = edges & (Qt::LeftEdge | Qt::RightEdge), vertical = edges & (Qt::TopEdge | Qt::BottomEdge);
+        return horizontal && vertical ? edges : 0;
+    }
+    static Qt::CursorShape cursorFor(int edges) {
+        if (!edges) return Qt::SizeAllCursor;
+        const bool topLeftOrBottomRight = bool(edges & Qt::LeftEdge) == bool(edges & Qt::TopEdge);
+        return topLeftOrBottomRight ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor;
+    }
+    void resize(QPoint mouse) {
+        QWidget* window = fly->parentWidget();
+        const QRect old = start;
+        const int left = corner & Qt::LeftEdge ? mouse.x() : old.left(), right = corner & Qt::RightEdge ? mouse.x() : old.right();
+        const int top = corner & Qt::TopEdge ? mouse.y() : old.top(), bottom = corner & Qt::BottomEdge ? mouse.y() : old.bottom();
+        const QPoint moved = mouse - grab;
+        fit({right - left + 1, bottom - top + 1}, window->width(), std::abs(moved.y()) > std::abs(moved.x()));
+        const QSize size = sizeFor(cols);
+        // The corner opposite the one dragged stays put.
+        QPoint at(corner & Qt::LeftEdge ? old.right() + 1 - size.width() : old.left(),
+                  corner & Qt::TopEdge ? old.bottom() + 1 - size.height() : old.top());
+        at.setX(std::clamp(at.x(), 0, std::max(0, window->width() - size.width())));
+        at.setY(std::clamp(at.y(), 0, std::max(0, window->height() - size.height())));
+        fly->setGeometry({at, size});
+    }
+    bool eventFilter(QObject*, QEvent* e) override {
+        if (e->type() == QEvent::Show) {  // the tools keep the ordinary pointer
+            for (auto* b : fly->findChildren<QAbstractButton*>()) b->setCursor(Qt::ArrowCursor);
+            return false;
+        }
+        const auto type = e->type();
+        if (type != QEvent::MouseButtonPress && type != QEvent::MouseMove && type != QEvent::MouseButtonRelease) return false;
+        const auto* me = static_cast<QMouseEvent*>(e);
+        QWidget* window = fly->parentWidget();
+        const QPoint mouse = window->mapFromGlobal(me->globalPosition().toPoint());
+        if (type == QEvent::MouseButtonPress) {
+            corner = cornerAt(me->position().toPoint());
+            grab = corner ? mouse : mouse - fly->pos();
+            start = fly->geometry();
+            fly->raise();  // over another one it overlaps
+            return true;
+        }
+        if (type == QEvent::MouseButtonRelease) {
+            corner = 0;
+            return false;
+        }
+        if (!(me->buttons() & Qt::LeftButton)) {
+            fly->setCursor(cursorFor(cornerAt(me->position().toPoint())));
+            return false;
+        }
+        if (corner) {
+            resize(mouse);
+            return true;
+        }
+        const QPoint to = mouse - grab;
+        fly->move(std::clamp(to.x(), 0, std::max(0, window->width() - fly->width())),
+                  std::clamp(to.y(), 0, std::max(0, window->height() - fly->height())));
+        return true;
+    }
+};
 }  // namespace
 
 static QWidget* periodicTable(const std::function<void(int)>& picked) {
@@ -1464,19 +1597,18 @@ void MainWindow::buildTools() {
     auto groups = std::make_shared<std::vector<Group>>();
     auto showFlyout = [this, groups](int i) {
         const Group& g = (*groups)[i];
-        for (auto* f : flyouts_)
-            if (f != g.flyout) f->hide();
-        g.flyout->adjustSize();
-        QPoint at = g.railButton->mapTo(this, QPoint(g.railButton->width() + 12, 0));
-        at.setY(std::min(at.y(), height() - g.flyout->height() - 8));
-        g.flyout->move(at);
+        if (!g.flyout->isVisible()) {  // an open one stays where it was dragged
+            g.flyout->ensurePolished();  // its stylesheet decides its size: measure it after that, not on the first show
+            g.flyout->adjustSize();
+            QPoint at = g.railButton->mapTo(this, QPoint(g.railButton->width() + 12, 0));
+            at.setY(std::min(at.y(), height() - g.flyout->height() - 8));
+            g.flyout->move(at);
+        }
         g.flyout->raise();
         g.flyout->show();
     };
-    QGridLayout* grid = nullptr;
-    QWidget* palette = nullptr;  // the current group's flyout
-    int slot = 0;  // next free cell in it, left to right, four to a row
-    constexpr int kColumns = 4;
+    FlyoutFrame* frame = nullptr;  // the current group's flyout
+    QWidget* palette = nullptr;
     auto startGroup = [&](const QString& name, const IconMaker& icon) {
         auto* fly = new QFrame(this);
         fly->setObjectName("toolFlyout");
@@ -1487,20 +1619,21 @@ void MainWindow::buildTools() {
         auto* head = new QHBoxLayout;
         auto* title = new QLabel(name.toUpper());
         title->setObjectName("flyoutTitle");
-        auto* pin = new QToolButton;
-        pin->setObjectName("pin");
-        pin->setCheckable(true);
-        pin->setFocusPolicy(Qt::StrongFocus);
-        pin->setText(tr("Pin"));
-        pin->setToolTip(tr("Keep open while drawing"));
-        pin->setAccessibleName(tr("Keep %1 open").arg(name));
+        auto* close = new QToolButton;
+        close->setObjectName("close");
+        close->setFocusPolicy(Qt::StrongFocus);
+        close->setText("✕");
+        close->setToolTip(tr("Close"));
+        close->setAccessibleName(tr("Close %1").arg(name));
+        connect(close, &QToolButton::clicked, fly, &QWidget::hide);
         head->addWidget(title);
         head->addStretch();
-        head->addWidget(pin);
+        head->addWidget(close);
         layout->addLayout(head);
-        grid = new QGridLayout;
+        auto* grid = new QGridLayout;
         grid->setSpacing(2);
         layout->addLayout(grid);
+        frame = new FlyoutFrame(fly, grid);
         auto* escape = new QAction(fly);
         escape->setShortcut(Qt::Key_Escape);
         escape->setShortcutContext(Qt::WidgetWithChildrenShortcut);
@@ -1521,16 +1654,15 @@ void MainWindow::buildTools() {
         b->setAccessibleName(name);
         rail->addWidget(b);
         const int index = int(groups->size());
-        groups->push_back({b, fly, grid});
+        groups->push_back({b, fly, frame->grid});
         connect(railAction, &QAction::triggered, this, [groups, index, showFlyout] {
             (*groups)[index].railButton->defaultAction()->setChecked(true);
             if (auto* last = (*groups)[index].last) last->trigger();
             showFlyout(index);
         });
         palette = fly;
-        slot = 0;
     };
-    auto section = [&] { slot = (slot + kColumns - 1) / kColumns * kColumns; };  // a new row
+    auto section = [&] { frame->newRow(); };
     auto* group = new QActionGroup(this);
     auto button = [&](QAction* a) {
         auto* b = new QToolButton;
@@ -1542,15 +1674,13 @@ void MainWindow::buildTools() {
         static const QRegularExpression end(R"(\s*(:| \(| —).*$)");
         b->setAccessibleName(QString(a->toolTip()).remove(end));
         b->setAccessibleDescription(a->toolTip());
-        grid->addWidget(b, slot / kColumns, slot % kColumns);
-        ++slot;
+        frame->add(b);
         const int index = int(groups->size()) - 1;
         if (!(*groups)[index].last) (*groups)[index].last = a;
         connect(a, &QAction::triggered, this, [groups, index, a] {
             Group& g = (*groups)[index];
             g.last = a;
             g.railButton->defaultAction()->setChecked(true);
-            if (!g.flyout->findChild<QToolButton*>("pin")->isChecked()) g.flyout->hide();
         });
         return b;
     };
@@ -1686,8 +1816,8 @@ void MainWindow::buildTools() {
     });
     connect(atom, &QAction::triggered, this, [this] { canvas_->setTool(T::Atom); });
     auto* atomButton = button(atom);
-    grid->addWidget(atomButton, (slot - 1) / kColumns, 0, 1, 2);  // two cells wide
-    ++slot;
+    frame->tools.back().span = 2;  // two cells wide
+    frame->place(frame->cols);
     atomButton->setPopupMode(QToolButton::MenuButtonPopup);
     atomButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     auto* menu = new QMenu(atomButton);

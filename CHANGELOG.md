@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Tool flyouts stay open until you close them with the ✕, so you can keep several on screen, drag each by any part that isn't a tool, and resize it from a corner, with the tools reflowing to fit. A flyout no longer moves when you click its rail button a second time.
 - Clicking an atom a little off centre with an orbital tool draws a full-size orbital, not a tiny one.
 - A triple bond leaves a gap where a bond in front crosses it, as single and double bonds do.
 - Copy as Reaction SMILES says when a molecule in the reaction is invalid, instead of copying a reaction without it.

@@ -1985,21 +1985,104 @@ TEST_CASE("White and teal theme; tools on a rail whose groups open beside it (#2
     CHECK(rings->isVisible());
     CHECK(rail["Rings"]->isChecked());
     CHECK(rings->findChildren<QToolButton*>().size() >= 8);
-    rail["Arrows"]->click();  // one flyout at a time
-    CHECK_FALSE(rings->isVisible());
-    CHECK(flyout("Arrows")->isVisible());
-    // Picking a tool closes the flyout, unless it's pinned.
+    // Clicking a rail button again leaves its flyout where it opened, whichever group it is.
+    for (const char* g : {"Select", "Bonds", "Rings", "Atoms", "Arrows", "Shapes"}) {
+        rail[g]->click();
+        const QPoint opened = flyout(g)->pos();
+        rail[g]->click();
+        CHECK(flyout(g)->pos() == opened);
+        CHECK(flyout(g)->geometry().bottom() <= w.height());
+    }
+    // Flyouts stay open until closed: picking a tool, opening another group or drawing doesn't hide them.
     auto pick = [](QFrame* f, int i) {
         auto tools = f->findChildren<QToolButton*>();
-        tools.removeIf([](QToolButton* b) { return b->objectName() == "pin"; });
+        tools.removeIf([](QToolButton* b) { return b->objectName() == "close"; });
         tools[i]->click();
     };
-    pick(flyout("Arrows"), 1);
-    CHECK_FALSE(flyout("Arrows")->isVisible());
-    rail["Rings"]->click();
-    rings->findChild<QToolButton*>("pin")->click();
+    rail["Arrows"]->click();
     pick(rings, 2);
+    pick(flyout("Arrows"), 1);
     CHECK(rings->isVisible());
+    CHECK(flyout("Arrows")->isVisible());
+    // The X closes just its own flyout.
+    flyout("Arrows")->findChild<QToolButton*>("close")->click();
+    CHECK_FALSE(flyout("Arrows")->isVisible());
+    CHECK(rings->isVisible());
+    // A flyout can be dragged by its title, and stays there (#466).
+    auto* title = rings->findChild<QLabel*>("flyoutTitle");
+    const QPoint before = rings->pos(), grab = title->rect().center();
+    QTest::mousePress(title, Qt::LeftButton, {}, grab);
+    QTest::mouseMove(title, grab + QPoint(60, 40));
+    QTest::mouseRelease(title, Qt::LeftButton, {}, grab + QPoint(60, 40));
+    CHECK(rings->pos() == before + QPoint(60, 40));
+    rail["Rings"]->click();
+    CHECK(rings->pos() == before + QPoint(60, 40));
+    // ... and by any bare part of it, but not from a tool.
+    const QPoint bare(rings->width() / 2, 2);  // the top margin; the corners resize
+    QTest::mousePress(rings, Qt::LeftButton, {}, bare);
+    QTest::mouseMove(rings, bare + QPoint(-20, 10));
+    QTest::mouseRelease(rings, Qt::LeftButton, {}, bare + QPoint(-20, 10));
+    CHECK(rings->pos() == before + QPoint(40, 50));
+    auto* tool = rings->findChildren<QToolButton*>(Qt::FindDirectChildrenOnly).back();
+    QTest::mousePress(tool, Qt::LeftButton);
+    QTest::mouseMove(tool, tool->rect().center() + QPoint(30, 30));
+    QTest::mouseRelease(tool, Qt::LeftButton, {}, tool->rect().center() + QPoint(500, 500));  // off it: not a click
+    CHECK(rings->pos() == before + QPoint(40, 50));
+    // A corner resizes it: the tools reflow into as many columns as fit, and the box follows them.
+    auto columns = [](QFrame* f) {
+        QSet<int> xs;
+        for (auto* b : f->findChildren<QToolButton*>(Qt::FindDirectChildrenOnly))  // not the menus' swatches
+            if (b->objectName() != "close") xs.insert(b->x());
+        return int(xs.size());
+    };
+    auto holdsTools = [](QFrame* f) {
+        for (auto* b : f->findChildren<QToolButton*>(Qt::FindDirectChildrenOnly))
+            if (!f->rect().contains(b->geometry())) return false;
+        return true;
+    };
+    auto dragCorner = [&](QPoint from, QPoint by, QFrame* f = nullptr) {
+        QFrame* target = f ? f : rings;
+        QTest::mousePress(target, Qt::LeftButton, {}, from);
+        QTest::mouseMove(target, from + by);
+        QTest::mouseRelease(target, Qt::LeftButton, {}, from + by);
+    };
+    const int usual = columns(rings), tall = rings->height();
+    dragCorner({rings->width() - 3, rings->height() - 3}, {200, 0});
+    CHECK(columns(rings) > usual);
+    CHECK(rings->height() < tall);
+    CHECK(holdsTools(rings));
+    const QPoint topLeft = rings->pos();
+    dragCorner({rings->width() - 3, rings->height() - 3}, {40 - rings->width(), 0});
+    CHECK(columns(rings) < usual);
+    CHECK(rings->height() > tall);
+    CHECK(rings->pos() == topLeft);  // the far corner is the one that moves
+    CHECK(holdsTools(rings));
+    const int right = rings->geometry().right();
+    dragCorner({3, 3}, {-60, 0});  // from the top left, the right edge stays
+    CHECK(rings->geometry().right() == right);
+    CHECK(holdsTools(rings));
+    const int fewer = columns(rings);
+    dragCorner({rings->width() - 3, rings->height() - 3}, {0, -rings->height() / 2});  // a shorter box needs more columns
+    CHECK(columns(rings) > fewer);
+    CHECK(holdsTools(rings));
+    // Shapes lays its orbitals in rows at its usual width, but resized it flows like the rest.
+    rail["Shapes"]->click();
+    auto* shapes = flyout("Shapes");
+    dragCorner({shapes->width() - 3, shapes->height() - 3}, {500, 0}, shapes);
+    QSet<int> ys;
+    for (auto* b : shapes->findChildren<QToolButton*>(Qt::FindDirectChildrenOnly))
+        if (b->objectName() != "close") ys.insert(b->y());
+    CHECK(ys.size() <= 2);  // not held to a row for each section
+    CHECK(holdsTools(shapes));
+    // Shrinking the window keeps an open flyout inside it.
+    rail["Select"]->click();
+    auto* select = flyout("Select");
+    select->move(w.width() - select->width() - 10, w.height() - select->height() - 10);
+    w.resize(600, 400);
+    CHECK(w.rect().contains(select->geometry()));
+    w.resize(1000, 700);
+    rings->findChild<QToolButton*>("close")->click();
+    CHECK_FALSE(rings->isVisible());
     // Properties and Templates are in the View menu, not the palette.
     CHECK(w.findChild<QDockWidget*>("properties"));
     CHECK(w.findChild<QDockWidget*>("templates"));
