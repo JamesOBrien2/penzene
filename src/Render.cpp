@@ -257,23 +257,41 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     QPointF e = labeled[b.b] ? pb - d * trim(b.b, -d) : pb;
     if (QPointF::dotProduct(e - a, d) <= 0) return;  // labels so close that the trimmed ends cross (#496)
 
-    // A wedge's wide end at a bare atom meets its other bonds rather than jutting past them: each
-    // side runs to the line of the bond nearest it on that side, if that is close to its own end.
+    // A wedge's wide end at a bare atom lies along the bonds beside it rather than jutting past them.
+    // Each side runs to the drawn line of the bond nearest it on that side (a double bond's nearer
+    // line, so it doesn't overlap it); a side with no bond of its own follows the other side's bond, inward only.
     QPointF corner[2] = {e + n * st.wedgeWidth / 2, e - n * st.wedgeWidth / 2};
-    if ((b.stereo == BondStereo::Wedge || b.stereo == BondStereo::Hash) && !labeled[b.b])
+    if ((b.stereo == BondStereo::Wedge || b.stereo == BondStereo::Hash) && !labeled[b.b]) {
+        std::optional<QPointF> dir[2];  // each side's bond direction,
+        QPointF on[2];                  // and a point on its nearer line
         for (int s : {0, 1}) {
-            const QPointF side = corner[s] - a;
             double back = -2;
-            QPointF u;
-            for (int nb : neighbors(doc, at, b.b)) {
+            for (int k : at[b.b]) {
+                const Bond& o = doc.bonds[k];
+                const int nb = o.a == b.b ? o.b : o.a;
                 const QPointF v = unit(doc.atoms[nb].pos - pb);
-                if (nb != b.a && QPointF::dotProduct(v, n) * (s ? -1 : 1) > 1e-6 && QPointF::dotProduct(v, -d) > back)
-                    back = QPointF::dotProduct(v, -d), u = v;
+                if (nb == b.a || QPointF::dotProduct(v, n) * (s ? -1 : 1) <= 1e-6 || QPointF::dotProduct(v, -d) <= back) continue;
+                back = QPointF::dotProduct(v, -d);
+                QPointF q = perp(v);
+                if (QPointF::dotProduct(q, corner[s] - pb) < 0) q = -q;  // toward this corner
+                double off = o.order == 3 ? gap : 0;
+                if (o.order == 2) {  // centred lines sit gap/2 either side; an offset one, gap to one side
+                    const int side = doubleBondSide(doc, o, at);
+                    const QPointF second = perp(unit(doc.atoms[o.b].pos - doc.atoms[o.a].pos)) * (side >= 0 ? 1 : -1);
+                    off = side == 0 ? gap / 2 : QPointF::dotProduct(second, q) > 0 ? gap : 0;
+                }
+                dir[s] = v, on[s] = pb + q * off;
             }
-            if (back < -1 || std::abs(cross(side, u)) < 1e-9) continue;
-            const double t = cross(pb - a, u) / cross(side, u);
-            if (t > 0.5 && t < kWedgeReach) corner[s] = a + side * t;
         }
+        for (int s : {0, 1}) {
+            const bool own = bool(dir[s]);
+            const std::optional<QPointF> u = own ? dir[s] : dir[1 - s];
+            const QPointF side = corner[s] - a;
+            if (!u || std::abs(cross(side, *u)) < 1e-9) continue;
+            const double t = cross((own ? on[s] : pb) - a, *u) / cross(side, *u);
+            if (t > 0.5 && t < (own ? kWedgeReach : 1)) corner[s] = a + side * t;
+        }
+    }
     if (b.stereo == BondStereo::Wedge) {
         p.setBrush(p.pen().color());
         p.drawPolygon(QPolygonF{a, corner[0], e, corner[1]});
