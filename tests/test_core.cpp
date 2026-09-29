@@ -1851,3 +1851,71 @@ TEST_CASE("predicted shifts follow the bonds, not where the atoms are drawn") {
     doc.atoms[2].z = 7;  // O -> N: a different molecule, a different answer
     CHECK(chem::predictShifts(doc)[1].carbon != before[1].carbon);
 }
+
+TEST_CASE("compound numbers keep scheme order, follow their molecules and keep series (#504)") {
+    const double L = kBondLength;
+    Document d;
+    auto add = [&](const char* smiles, QPointF at) {  // a molecule and its number, anchored to its first atom
+        const int first = int(d.atoms.size());
+        d.append(*chem::fromSmiles(smiles), at);
+        d.texts.push_back({at + QPointF(0, 2 * L), "", 1, {}, true, first});
+    };
+    add("CCO", {20 * L, 0});  // added out of order
+    add("c1ccccc1", {0, 0});
+    add("CC", {10 * L, 0});
+    add("CN", {0, 10 * L});  // the next row
+    auto numbers = [&] {
+        QStringList out;
+        for (const Text& t : d.texts) out << t.text;
+        return out;
+    };
+    edit::renumberCompounds(d);
+    CHECK(numbers() == QStringList{"3", "1", "2", "4"});
+    Document again = d;
+    edit::renumberCompounds(again);
+    CHECK(again == d);  // no change, so no phantom undo step
+    add("C", {5 * L, 0});  // a step inserted: the later numbers move up
+    edit::renumberCompounds(d);
+    CHECK(numbers() == QStringList{"4", "1", "3", "5", "2"});
+
+    SECTION("a tall molecule's number sits lower but is in its row") {
+        const int first = int(d.atoms.size());
+        d.append(*chem::fromSmiles("CCCCCCC"), {-10 * L, 0});
+        for (int i = first; i < int(d.atoms.size()); ++i) d.atoms[i].pos = {-10 * L, (i - first - 3) * L};  // upright, centred on the row
+        d.texts.push_back({{-10 * L, 5 * L}, "", 1, {}, true, first});
+        edit::renumberCompounds(d);
+        CHECK(numbers() == QStringList{"5", "2", "4", "6", "3", "1"});
+    }
+    SECTION("2a and 2b keep one number between them") {
+        d.texts[1].text = "7a", d.texts[4].text = "7b";
+        edit::renumberCompounds(d);
+        CHECK(numbers() == QStringList{"3", "1a", "2", "4", "1b"});
+    }
+    SECTION("a number follows its molecule, unless it was moved itself") {
+        Document moved = d;
+        for (int i : edit::moleculeOf(d, d.texts[0].anchor)) moved.atoms[i].pos += QPointF(-30 * L, L);
+        for (int i : edit::moleculeOf(d, d.texts[2].anchor)) moved.atoms[i].pos += QPointF(0, L);  // dragged with its number
+        moved.texts[2].pos += QPointF(0, L);
+        Document after = moved;
+        edit::followNumbers(d, after);
+        CHECK(after.texts[0].pos == d.texts[0].pos + QPointF(-30 * L, L));
+        CHECK(after.texts[2].pos == moved.texts[2].pos);
+        CHECK(after.texts[1].pos == d.texts[1].pos);
+        edit::renumberCompounds(after);
+        CHECK(after.texts[0].text == "1");  // now first in the scheme
+    }
+    SECTION("anchors are renumbered with the atoms, and saved") {
+        const int benzene = d.texts[1].anchor;
+        d.removeAtoms({0, 1, 2});  // ethanol: its number stays, free
+        CHECK(d.texts[0].anchor == -1);
+        CHECK(d.texts[1].anchor == benzene - 3);
+        Document two;
+        two.append(d, {});
+        two.append(d, {});
+        CHECK(two.texts[6].anchor == d.texts[1].anchor + int(d.atoms.size()));
+        const auto back = Document::fromJson(d.toJson());
+        REQUIRE(back);
+        CHECK(back->texts == d.texts);
+        CHECK(chem::toCdxml(d).contains(R"(face="1")"));  // bold in ChemDraw too
+    }
+}

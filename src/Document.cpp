@@ -78,6 +78,8 @@ QByteArray Document::toJson() const {
         QJsonObject o{{"x", t.pos.x()}, {"y", t.pos.y()}, {"text", t.text}};
         if (t.scale != 1) o["scale"] = t.scale;
         if (t.color.isValid()) o["color"] = t.color.name();
+        if (t.compound) o["compound"] = true;
+        if (t.anchor >= 0) o["anchor"] = t.anchor;
         ts.append(o);
     }
     if (!ar.isEmpty()) root["arrows"] = ar;
@@ -231,6 +233,8 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         Text t{{o["x"].toDouble(), o["y"].toDouble()}, o["text"].toString(), o["scale"].toDouble(1),
                QColor(o["color"].toString())};
         if (!(t.scale > 0)) t.scale = 1;  // files saved before #316 could hold 0
+        t.compound = o["compound"].toBool();
+        if (const int a = o["anchor"].toInt(-1); a >= 0 && a < int(doc.atoms.size())) t.anchor = a;
         if (!finite({t.pos.x(), t.pos.y(), t.scale})) return std::nullopt;
         doc.texts.push_back(t);
     }
@@ -272,7 +276,11 @@ void Document::append(const Document& o, QPointF shift) {
             if (*i >= 0) *i += base;
         arrows.push_back(a);
     }
-    for (auto t : o.texts) t.pos += shift, texts.push_back(t);
+    for (auto t : o.texts) {
+        t.pos += shift;
+        if (t.anchor >= 0) t.anchor += base;
+        texts.push_back(t);
+    }
     for (auto f : o.fills) {
         for (int& i : f.atoms) i += base;
         fills.push_back(f);
@@ -361,6 +369,8 @@ void Document::removeAtoms(const std::vector<int>& drop) {
             const bool gone = remap[(*at)[0]] < 0 || ((*at)[1] >= 0 && remap[(*at)[1]] < 0);  // its atom, or its bond
             *at = gone ? std::array{-1, -1} : std::array{remap[(*at)[0]], (*at)[1] < 0 ? -1 : remap[(*at)[1]]};
         }
+    for (auto& t : texts)
+        if (t.anchor >= 0) t.anchor = remap[t.anchor];  // -1 if gone: the number stays, free
 }
 
 // Direction pointing away from all of the atom's bonds: the bisector of the

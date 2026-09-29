@@ -4,8 +4,10 @@
 
 #include <QHash>
 #include <QLineF>
+#include <QRectF>
 #include <QRegularExpression>
 #include <algorithm>
+#include <map>
 #include <tuple>
 
 namespace edit {
@@ -109,6 +111,70 @@ void followAnchors(const Document& before, Document& after) {
             }  // else turned, flipped or scaled with its atoms: already in place
         }
         if (followed && chord > 1e-9) a.bend *= len(a.to - a.from) / chord;  // the curve keeps its shape
+    }
+}
+
+std::vector<int> moleculeOf(const Document& doc, int atom) {
+    const auto bondsAt = doc.bondsAt();
+    std::vector<bool> seen(doc.atoms.size());
+    std::vector<int> out{atom};
+    seen[atom] = true;
+    for (size_t k = 0; k < out.size(); ++k)
+        for (int b : bondsAt[out[k]])
+            for (int nb : {doc.bonds[b].a, doc.bonds[b].b})
+                if (!seen[nb]) seen[nb] = true, out.push_back(nb);
+    return out;
+}
+
+static QRectF atomBox(const Document& doc, const std::vector<int>& atoms) {
+    QPointF lo = doc.atoms[atoms[0]].pos, hi = lo;
+    for (int a : atoms) {
+        const QPointF p = doc.atoms[a].pos;
+        lo = {std::min(lo.x(), p.x()), std::min(lo.y(), p.y())}, hi = {std::max(hi.x(), p.x()), std::max(hi.y(), p.y())};
+    }
+    return QRectF(lo, hi);
+}
+
+void renumberCompounds(Document& doc) {
+    struct Item {
+        int text;
+        double x, y;
+    };
+    std::vector<Item> items;
+    for (int i = 0; i < int(doc.texts.size()); ++i)
+        if (const Text& t = doc.texts[i]; t.compound)  // a row is where the molecules sit, whatever their height
+            items.push_back({i, t.pos.x(), t.anchor >= 0 ? atomBox(doc, moleculeOf(doc, t.anchor)).center().y() : t.pos.y()});
+    std::stable_sort(items.begin(), items.end(), [](const Item& a, const Item& b) { return a.y < b.y; });
+    for (size_t row = 0; row < items.size();) {  // from its highest item to two bond lengths below it
+        size_t end = row;
+        while (end < items.size() && items[end].y - items[row].y < 2 * kBondLength) ++end;
+        std::stable_sort(items.begin() + row, items.begin() + end, [](const Item& a, const Item& b) { return a.x < b.x; });
+        row = end;
+    }
+    int next = 0;
+    std::map<QString, int> series;  // a suffixed number's old number: its new one
+    for (const Item& item : items) {
+        QString& text = doc.texts[item.text].text;
+        int digits = 0;
+        while (digits < text.size() && text[digits].isDigit()) ++digits;
+        const QString old = text.left(digits), suffix = text.mid(digits);
+        const int n = suffix.isEmpty() ? ++next : series.count(old) ? series[old] : (series[old] = ++next);
+        text = QString::number(n) + suffix;
+    }
+}
+
+void followNumbers(const Document& before, Document& after) {
+    if (before.atoms.size() != after.atoms.size() || before.texts.size() != after.texts.size()) return;
+    for (size_t k = 0; k < after.texts.size(); ++k) {
+        Text& t = after.texts[k];
+        const Text& was = before.texts[k];
+        if (t.anchor < 0 || t.anchor != was.anchor || t.pos != was.pos) continue;  // free, re-anchored or moved itself
+        const auto mol = moleculeOf(after, t.anchor);
+        auto foot = [&](const Document& d) {
+            const QRectF box = atomBox(d, mol);
+            return QPointF(box.center().x(), box.bottom());
+        };
+        t.pos += foot(after) - foot(before);
     }
 }
 
@@ -269,6 +335,8 @@ void mergeAtoms(Document& doc, const std::vector<std::pair<int, int>>& keepDrop)
     for (auto& a : doc.arrows)  // a curved arrow on the dropped atom rests on the kept one
         for (int* i : {&a.fromAt[0], &a.fromAt[1], &a.toAt[0], &a.toAt[1]})
             if (*i >= 0) *i = target[*i];
+    for (auto& t : doc.texts)
+        if (t.anchor >= 0) t.anchor = target[t.anchor];
     auto moveOnto = [&](std::vector<int>& ids) {  // the kept atom takes the dropped one's place
         for (int& i : ids) i = target[i];
         std::sort(ids.begin(), ids.end());

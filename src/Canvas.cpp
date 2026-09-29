@@ -299,6 +299,8 @@ Canvas::Canvas(QUndoStack* undo, QWidget* parent) : QGraphicsView(parent), undo_
 void Canvas::commit(const Document& next, const QString& text) {
     Document after = next;
     followAnchors(doc_, after);  // whatever moved the atoms, curved arrows on them come along (#498)
+    followNumbers(doc_, after);  // and compound numbers, which stay in scheme order (#504)
+    renumberCompounds(after);
     if (after == doc_) return;  // nothing changed: no undo step, and the file stays clean
     undo_->push(new Snapshot(this, doc_, after, text));
 }
@@ -381,11 +383,12 @@ static Document keepOnly(const Document& doc, const QSet<int>& atoms, const QSet
         if (!atoms.contains(i)) drop.push_back(i);
     out.removeAtoms(drop);  // arrows' atoms renumbered to match
     std::vector<Arrow> all = std::move(out.arrows);
-    out.arrows.clear(), out.texts.clear();
+    out.arrows.clear();
     for (int i = 0; i < int(all.size()); ++i)
         if (arrows.contains(i)) out.arrows.push_back(all[i]);
-    for (int i = 0; i < int(doc.texts.size()); ++i)
-        if (texts.contains(i)) out.texts.push_back(doc.texts[i]);
+    std::vector<Text> allTexts = std::move(out.texts);  // anchors renumbered too
+    for (int i = 0; i < int(allTexts.size()); ++i)
+        if (texts.contains(i)) out.texts.push_back(allTexts[i]);
     return out;
 }
 
@@ -882,6 +885,7 @@ void Canvas::mouseMoveEvent(QMouseEvent* e) {
             }
         }
         followAnchors(beforeDrag_, next);
+        followNumbers(beforeDrag_, next);
         doc_ = next;
         refresh();
         return;
@@ -910,6 +914,7 @@ void Canvas::mouseMoveEvent(QMouseEvent* e) {
                        QTransform::fromTranslate(-anchor.x(), -anchor.y()) * QTransform::fromScale(sx, sy) *
                            QTransform::fromTranslate(anchor.x(), anchor.y()));
         followAnchors(beforeDrag_, next);
+        followNumbers(beforeDrag_, next);
         doc_ = next;
         refresh();
         return;
@@ -1657,6 +1662,27 @@ void Canvas::addArrowAfter() {
 
 void Canvas::addTextAfter() {
     if (const auto p = nextPlace()) editText(-1, *p);
+}
+
+void Canvas::numberCompounds() {
+    Document next = doc_;
+    std::vector<bool> numbered(doc_.atoms.size());
+    for (const Text& t : doc_.texts)
+        if (t.compound && t.anchor >= 0)
+            for (int a : moleculeOf(doc_, t.anchor)) numbered[a] = true;
+    for (int i = 0; i < int(doc_.atoms.size()); ++i) {
+        if (numbered[i] || (!selectedAtoms_.isEmpty() && !selectedAtoms_.contains(i))) continue;
+        QRectF box(doc_.atoms[i].pos, QSizeF());
+        for (int a : moleculeOf(doc_, i)) numbered[a] = true, box |= QRectF(doc_.atoms[a].pos, QSizeF(1e-9, 1e-9));
+        next.texts.push_back({{box.center().x(), box.bottom() + 1.3 * kBondLength}, "", 1, {}, true, i});
+    }
+    if (next.texts.size() == doc_.texts.size()) return;
+    renumberCompounds(next);
+    for (size_t k = doc_.texts.size(); k < next.texts.size(); ++k) {  // centred under the molecule
+        Text& t = next.texts[k];
+        t.pos.rx() -= textPath(t, documentStyle(next)).boundingRect().center().x() - t.pos.x();
+    }
+    commit(next, tr("Number Compounds"));
 }
 
 void Canvas::setArrowHead(double size) {

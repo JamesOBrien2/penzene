@@ -648,6 +648,7 @@ std::vector<Script> scripts(const QString& s) {
 // in runs (not per letter) so kerning and spaces match ordinary text.
 QPainterPath textPath(const Text& t, const DrawingStyle& st) {
     QFont f = labelFont(st, t.scale), small = labelFont(st, 0.7 * t.scale);
+    f.setBold(t.compound), small.setBold(t.compound);
     QFontMetricsF fm(f), sm(small);
     const double tab = kTabSpaces * fm.horizontalAdvance(' ');
     QPainterPath path;

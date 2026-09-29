@@ -2303,6 +2303,8 @@ void MainWindow::buildMenus() {
         ->setStatusTip(tr("Move the selection, or the whole drawing, to the middle of the page"));
     arrangeMenu->addSeparator();
     arrangeMenu->addAction(tr("Arrange &Scheme"), this, [this] { canvas_->arrangeScheme(); });
+    arrangeMenu->addAction(tr("&Number Compounds"), canvas_, &Canvas::numberCompounds)
+        ->setStatusTip(tr("A bold number under each selected molecule, or every one; they renumber in scheme order as you edit"));
     arrangeMenu->addSeparator();
     auto* addArrow = arrangeMenu->addAction(tr("Add A&rrow After Selection"), canvas_, &Canvas::addArrowAfter);
     auto* addText = arrangeMenu->addAction(tr("Add Te&xt After Selection…"), canvas_, &Canvas::addTextAfter);

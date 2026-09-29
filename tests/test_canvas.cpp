@@ -1511,6 +1511,38 @@ TEST_CASE("mass spec panel shows the isotope pattern of the selection (#397)") {
     QSettings().remove("theme");
 }
 
+TEST_CASE("Arrange → Number Compounds numbers each molecule once, in scheme order as they move (#504)") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("CCO.c1ccccc1"));
+    QAction* number = nullptr;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "&Number Compounds") number = a;
+    REQUIRE(number);
+    number->trigger();
+    const auto& d = canvas->document();
+    REQUIRE(d.texts.size() == 2);
+    CHECK(d.texts[0].text == "1");
+    CHECK(d.texts[1].text == "2");
+    CHECK(d.texts[0].compound);
+    CHECK(d.atoms[d.texts[1].anchor].z == 6);
+    double lo = 1e9, hi = -1e9;
+    for (int i = 3; i < 9; ++i) lo = std::min(lo, d.atoms[i].pos.x()), hi = std::max(hi, d.atoms[i].pos.x());
+    CHECK(std::abs(textPath(d.texts[1], documentStyle(d)).boundingRect().center().x() - (lo + hi) / 2) < 0.1 * kBondLength);  // centred under it
+    number->trigger();
+    CHECK(d.texts.size() == 2);  // numbered already
+    canvas->setSelection({3, 4, 5, 6, 7, 8});
+    canvas->transformSelection(QTransform::fromTranslate(-30 * kBondLength, 0), "Move");  // benzene first now
+    CHECK(d.texts[1].text == "1");
+    CHECK(d.texts[0].text == "2");
+    CHECK(textPath(d.texts[1], documentStyle(d)).boundingRect().center().x() < d.atoms[0].pos.x());  // it came along
+    if (auto out = qEnvironmentVariable("PENZENE_NUMBERS_SHOT"); !out.isEmpty()) {
+        w.resize(1000, 600), w.show(), canvas->setSelection({}), canvas->fitToDocument();
+        w.grab().save(out);
+    }
+}
+
 TEST_CASE("PubChem name lookup: URL and response parsing (#28)") {
     CHECK(pubchem::nameToSmilesUrl(" acetylsalicylic acid ").toString(QUrl::FullyEncoded) ==
           "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/acetylsalicylic%20acid/property/SMILES/JSON");

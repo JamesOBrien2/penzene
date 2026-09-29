@@ -1406,7 +1406,7 @@ QByteArray toCdxml(const Document& doc) {
             w.writeAttribute("font", "3");
             w.writeAttribute("size", QString::number(10 * t.scale));  // 10 pt: the ACS label size
             paint(t.color);
-            if (s != Script::Base) w.writeAttribute("face", s == Script::Sub ? "32" : "64");
+            if (s != Script::Base || t.compound) w.writeAttribute("face", QString::number((t.compound ? 1 : 0) | (s == Script::Sub ? 32 : s == Script::Super ? 64 : 0)));
             w.writeCharacters(chars);
             w.writeEndElement();
         };
