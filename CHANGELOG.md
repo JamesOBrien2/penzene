@@ -15,6 +15,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Reaction SMILES lines in a `.smi` batch file render as schemes, and `--descriptors` marks them `reaction` (#501).
 - Structure → Look Up on PubChem opens the selection's PubChem page in the browser, by InChIKey (#500).
 - Custom colours on atoms, bonds, text and arrows survive saving to ChemDraw files and reopening (#426).
+- Tool buttons work with screen readers and other accessibility tools: pressing one picks its tool and opens its group (#535).
 
 ## 1.6.0 (2026-09-29)
 

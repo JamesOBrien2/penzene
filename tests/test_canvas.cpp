@@ -2392,6 +2392,50 @@ static double contrast(QColor a, QColor b) {  // WCAG 2 contrast ratio
     return (std::max(x, y) + 0.05) / (std::min(x, y) + 0.05);
 }
 
+TEST_CASE("every tool button does its job pressed through accessibility, as screen readers press it (#535)") {
+    App app;
+    MainWindow w;
+    w.resize(1100, 750);
+    w.show();
+    auto press = [](QToolButton* b) {  // the button's own action, as VoiceOver offers it
+        QAccessibleActionInterface* act = QAccessible::queryAccessibleInterface(b)->actionInterface();
+        REQUIRE(act);
+        const QStringList names = act->actionNames();
+        REQUIRE((names.contains(QAccessibleActionInterface::toggleAction()) || names.contains(QAccessibleActionInterface::pressAction())));
+        act->doAction(names.contains(QAccessibleActionInterface::toggleAction()) ? QAccessibleActionInterface::toggleAction()
+                                                                                 : QAccessibleActionInterface::pressAction());
+        QCoreApplication::processEvents();
+    };
+    for (auto* rail : w.findChildren<QToolButton*>("railButton")) {
+        INFO(rail->text().toStdString());
+        QFrame* fly = nullptr;
+        for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
+            if (f->findChild<QLabel*>("flyoutTitle")->text() == rail->text().toUpper()) fly = f;
+        REQUIRE(fly);
+        fly->hide();
+        press(rail);
+        CHECK(fly->isVisible());  // its tools open
+        for (auto* b : fly->findChildren<QToolButton*>()) {
+            if (!b->defaultAction() || !b->defaultAction()->isCheckable()) continue;  // the close button
+            if (b->popupMode() == QToolButton::InstantPopup) continue;  // a press opens its menu: the swatches, below
+            INFO(b->toolTip().toStdString());
+            const bool current = b->defaultAction()->isChecked();  // its group's tool, picked by the rail
+            w.statusBar()->clearMessage();
+            press(b);
+            CHECK(b->defaultAction()->isChecked());
+            if (!current) CHECK(w.statusBar()->currentMessage() == b->toolTip());  // the tool was picked, not just the button lit
+        }
+    }
+    // A colour swatch picks its colour.
+    QToolButton* oxygen = nullptr;
+    for (auto* wa : w.findChildren<QWidgetAction*>())
+        for (auto* b : wa->defaultWidget()->findChildren<QToolButton*>())
+            if (b->isCheckable() && b->accessibleName() == "Oxygen") oxygen = b;
+    REQUIRE(oxygen);
+    press(oxygen);
+    CHECK(w.findChild<Canvas*>()->colour() == QColor(0xFF, 0x0D, 0x0D));
+}
+
 TEST_CASE("accessibility: named, focusable tools; arrow keys in the periodic table; contrast (#112)") {
     // Every theme: text 4.5:1 or better, marks drawn on the page (hotspot, selection, errors) 3:1.
     for (const auto& t : themes()) {

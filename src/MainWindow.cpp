@@ -8,6 +8,7 @@
 #include "OleServer.h"
 #endif
 
+#include <QAccessibleWidget>
 #include <QActionGroup>
 #include <QButtonGroup>
 #include <QTextBrowser>
@@ -1373,6 +1374,49 @@ static Document textDoc(const QString& s) {
     return d;
 }
 
+// Screen readers, and tools driving the accessibility API, toggle a checkable button where a user
+// clicks it, and Qt's toggle only flips the check: the tool was never picked (#535). A pressable
+// button answers both press and toggle with a real click.
+class PressableButton : public QAccessibleWidget {
+public:
+    explicit PressableButton(QAbstractButton* b) : QAccessibleWidget(b, QAccessible::CheckBox) {}
+    QAccessible::State state() const override {
+        QAccessible::State s = QAccessibleWidget::state();
+        s.checkable = button()->isCheckable();
+        s.checked = button()->isChecked();
+        return s;
+    }
+    QString text(QAccessible::Text t) const override {
+        const QString s = QAccessibleWidget::text(t);
+        return t == QAccessible::Name && s.isEmpty() ? button()->text() : s;
+    }
+    QStringList actionNames() const override {
+        QStringList names{pressAction(), toggleAction()};
+        if (auto* t = qobject_cast<QToolButton*>(button()); t && t->menu()) names << showMenuAction();
+        return names + QAccessibleWidget::actionNames();
+    }
+    void doAction(const QString& name) override {
+        if (name == pressAction() || name == toggleAction()) button()->click();
+        else if (name == showMenuAction()) static_cast<QToolButton*>(button())->showMenu();
+        else QAccessibleWidget::doAction(name);
+    }
+
+private:
+    QAbstractButton* button() const { return static_cast<QAbstractButton*>(widget()); }
+};
+
+static void pressable(QAbstractButton* b) {
+    static const bool installed = [] {
+        QAccessible::installFactory([](const QString&, QObject* o) -> QAccessibleInterface* {
+            auto* b = qobject_cast<QAbstractButton*>(o);
+            return b && b->property("pressable").toBool() ? new PressableButton(b) : nullptr;
+        });
+        return true;
+    }();
+    Q_UNUSED(installed);
+    b->setProperty("pressable", true);
+}
+
 // Periodic table: main block by group and period, lanthanides and actinides
 // underneath. Organic elements are bold, since they're the ones drawn most.
 // A drop-down of colour swatches plus "Custom…", for the colour and ring fill tools.
@@ -1386,6 +1430,7 @@ static QMenu* colourMenu(QWidget* parent, const QList<QColor>& presets, std::fun
     grid->setContentsMargins(6, 6, 6, 6);
     for (int i = 0; i < presets.size(); ++i) {
         auto* b = new QToolButton;
+        pressable(b);
         b->setFixedSize(24, 24);
         b->setAutoRaise(true);
         b->setToolTip(names.value(i, presets[i].name()));
@@ -1679,6 +1724,7 @@ void MainWindow::buildTools() {
         railGroup->addAction(railAction);
         icons_.push_back({railAction, icon});
         auto* b = new QToolButton;
+        pressable(b);
         b->setObjectName("railButton");
         b->setDefaultAction(railAction);
         b->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
@@ -1699,6 +1745,7 @@ void MainWindow::buildTools() {
     auto* group = new QActionGroup(this);
     auto button = [&](QAction* a) {
         auto* b = new QToolButton;
+        pressable(b);
         b->setDefaultAction(a);
         b->setIconSize({26, 26});
         b->setAutoRaise(true);
