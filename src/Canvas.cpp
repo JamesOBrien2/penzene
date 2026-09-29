@@ -1212,7 +1212,13 @@ std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows
         if (home) home->arrows.insert(a);
         else out.push_back({{}, {a}, {}});
     }
-    for (int t : texts) out.push_back({{}, {}, {t}});
+    for (int t : texts) {
+        Piece* home = nullptr;  // a compound number goes with its molecule (#504)
+        for (Piece& p : out)
+            if (p.atoms.contains(doc.texts[t].anchor)) home = &p;
+        if (home) home->texts.insert(t);
+        else out.push_back({{}, {}, {t}});
+    }
     return out;
 }
 

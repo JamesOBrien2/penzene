@@ -1537,6 +1537,17 @@ TEST_CASE("Arrange → Number Compounds numbers each molecule once, in scheme or
     CHECK(d.texts[1].text == "1");
     CHECK(d.texts[0].text == "2");
     CHECK(textPath(d.texts[1], documentStyle(d)).boundingRect().center().x() < d.atoms[0].pos.x());  // it came along
+    canvas->setSelection({});
+    canvas->arrangeScheme();  // numbers stay under their molecules, not lined up between them
+    for (const Text& t : d.texts) {
+        const auto mol = edit::moleculeOf(d, t.anchor);
+        double lo = 1e9, hi = -1e9, bottom = -1e9;
+        for (int i : mol) lo = std::min(lo, d.atoms[i].pos.x()), hi = std::max(hi, d.atoms[i].pos.x()), bottom = std::max(bottom, d.atoms[i].pos.y());
+        const QRectF box = textPath(t, documentStyle(d)).boundingRect();
+        CHECK(box.center().x() > lo - 0.1 * kBondLength);
+        CHECK(box.center().x() < hi + 0.1 * kBondLength);
+        CHECK(box.top() > bottom);
+    }
     if (auto out = qEnvironmentVariable("PENZENE_NUMBERS_SHOT"); !out.isEmpty()) {
         w.resize(1000, 600), w.show(), canvas->setSelection({}), canvas->fitToDocument();
         w.grab().save(out);
