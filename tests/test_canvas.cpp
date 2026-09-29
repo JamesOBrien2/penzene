@@ -1213,7 +1213,7 @@ TEST_CASE("selected aromatic rings can use circles independently (#98)") {
     QAction* oneRing = nullptr;
     QAction* allRings = nullptr;
     for (auto* action : w.findChildren<QAction*>()) {
-        if (action->text() == "Circles for Selected &Rings") oneRing = action;
+        if (action->text() == "Circles in Selected &Rings") oneRing = action;
         if (action->text() == "&Aromatic Circles") allRings = action;
     }
     REQUIRE(oneRing);
@@ -2807,7 +2807,7 @@ TEST_CASE("pages: tabs along the bottom, each with its own drawing and undo hist
     canvas->selectAll();
     QMenu* moveTo = nullptr;
     for (auto* m : w.findChildren<QMenu*>())
-        if (m->title() == "Mo&ve to Page") moveTo = m;
+        if (m->title() == "Mo&ve Selection To") moveTo = m;
     REQUIRE(moveTo);
     emit moveTo->aboutToShow();
     REQUIRE(moveTo->actions().size() == 1);

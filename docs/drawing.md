@@ -81,9 +81,9 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
   or Alt+←/→ in 15° steps. **Out of the page:** choose **Rotate in 3D** from the Select tool's
   flyout and drag a molecule, or use Shift+Alt+drag or Shift+Alt+arrows. Stereo is preserved.
 - **Stretch and squash:** drag the handles around a selection (corners scale, edges stretch), or use
-  **Structure → Transform** for exact values.
-- **Structure → Align and Distribute** (which also has **Center on Page**, for the selection or the
-  whole drawing), **Flip**, and **Arrange Scheme** (lines up a reaction scheme,
+  **Arrange → Transform** for exact values.
+- **Arrange → Align and Distribute**, **Center on Page** (for the selection or the whole
+  drawing), **Flip**, and **Arrange Scheme** (lines up a reaction scheme,
   with agents centred over their arrows).
 - **Structure → Brackets** puts square or round brackets, with a subscript such as *n*, around the
   selected atoms.
@@ -107,9 +107,9 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
 ## Pages, grid and rulers
 
 - A drawing can have several pages, as tabs along the bottom of the window. **+** adds one; drag
-  a tab to reorder it, double-click to rename it, and right-click to rename or delete it.
+  a tab to reorder it, double-click to rename it, and right-click (or the **Page** menu) to rename or delete it.
   Ctrl+PgDown and Ctrl+PgUp step through them. Each page has its own undo history.
-- **Edit → Move to Page** moves the selection to another page. Copy and paste work between pages
+- **Page → Move Selection To** moves the selection to another page. Copy and paste work between pages
   too.
 - Pages are saved together in a `.penz` file. Other formats (MOL, ChemDraw) hold one page, so save
   as `.penz`, or export the page you want.
