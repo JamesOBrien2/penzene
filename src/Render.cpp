@@ -259,9 +259,9 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     if (b.order == 1) {
         line(a, e, true);
     } else if (b.order == 3) {
-        p.drawLine(a, e);
-        p.drawLine(a + n * gap, e + n * gap);
-        p.drawLine(a - n * gap, e - n * gap);
+        line(a, e, true);
+        line(a + n * gap, e + n * gap, true);
+        line(a - n * gap, e - n * gap, true);
     } else {
         // Offset the second line toward the side where the neighbours are
         // (inside the ring); centre it for terminal bonds like C=O.

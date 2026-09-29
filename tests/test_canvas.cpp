@@ -1736,6 +1736,20 @@ TEST_CASE("the Select flyout offers 3D rotation without modifier keys") {
     CHECK(chem::toSmiles(canvas->document()) == chem::toSmiles(menthol));
 }
 
+TEST_CASE("a triple bond is gapped where a bond in front crosses it (#429)") {
+    Document cross;
+    cross.atoms = {{{-20, 0}}, {{20, 0}}, {{0, -20}}, {{0, 20}}};
+    cross.bonds = {{0, 1}, {2, 3}};
+    cross.bonds[0].order = 3;
+    auto inked = [&](QPointF at) {
+        const QImage img = renderImage(cross, {300, Qt::white});
+        const QPoint px = ((at - documentBounds(cross).topLeft()) * exportScale(cross) * 300 / 72).toPoint();
+        return img.pixelColor(px).lightness() < 160;
+    };
+    CHECK_FALSE(inked({1.6, 0}));  // beside the crossing, on the middle line
+    CHECK(inked({12, 0}));         // but drawn away from it
+}
+
 TEST_CASE("attachment points, π-ligands, bring to front and atom properties (#60)") {
     Fixture f;
     Document d = *chem::fromSmiles("CC");
