@@ -337,7 +337,9 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     auto* copyHrms = new QPushButton(tr("Copy HRMS Line"));
     copyHrms->setToolTip(tr("The ion's calculated mass, for the supporting information"));
     connect(copyHrms, &QPushButton::clicked, this, [this] {
-        QGuiApplication::clipboard()->setText(chem::hrmsLine(canvas_->selectedSubset(), chem::Ion(ion_->currentIndex())));
+        const QString line = chem::hrmsLine(canvas_->selectedSubset(), chem::Ion(ion_->currentIndex()));
+        if (line.isEmpty()) return statusBar()->showMessage(tr("No valid structure for an HRMS line"), 4000);  // the clipboard kept
+        QGuiApplication::clipboard()->setText(line);
     });
     auto* exportPattern = new QPushButton(tr("Export CSV…"));
     exportPattern->setToolTip(tr("The isotope pattern as m/z and intensity"));

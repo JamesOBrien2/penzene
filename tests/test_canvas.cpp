@@ -1500,6 +1500,11 @@ TEST_CASE("mass spec panel shows the isotope pattern of the selection (#397)") {
         for (auto* b : dock->findChildren<QPushButton*>())
             if (b->text() == "Copy HRMS Line") b->click();
         CHECK(QGuiApplication::clipboard()->text() == "HRMS (ESI) m/z: [M+H]+ calcd for C9H9O4 181.0495");
+        canvas->setDocumentSilently(*chem::fromSmiles("*CC"));  // an R group has no mass: the clipboard keeps what it had
+        for (auto* b : dock->findChildren<QPushButton*>())
+            if (b->text() == "Copy HRMS Line") b->click();
+        CHECK(QGuiApplication::clipboard()->text() == "HRMS (ESI) m/z: [M+H]+ calcd for C9H9O4 181.0495");
+        canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));
         if (auto out = qEnvironmentVariable("PENZENE_MASS_SHOT"); !out.isEmpty())
             w.grab().save(QString(out).replace(".png", "-" + t.toLower() + ".png"));
     }
