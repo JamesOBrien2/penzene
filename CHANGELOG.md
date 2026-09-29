@@ -4,20 +4,17 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
-## Unreleased
+## 1.8.0 (2026-09-29)
 
-- Peptide side chains keep clear of the backbone's N–H labels (#559).
-- File → Import → Peptide Sequence… (and `--peptide` on the command line) draws a peptide from `GFLS` or `Gly-Phe-Leu-Ser` (#503).
-- Alt+↑/↓ bends the selected curved arrow and Arrange → Flip Curved Arrow turns it over; Arrange → Add Arrow / Add Text After Selection place them without the mouse (#549).
-- With [M] chosen, the Mass Spec panel lists the EI ions to look for, from the groups drawn: M − 15 for a methyl, m/z 91 for a benzyl, McLafferty and more (#554).
-- The Mass Spec panel's [M] is now M⁺• for a neutral molecule, one electron lighter, as the spectrometer sees it (#556).
-- The Mass Spec panel copies an HRMS line for the supporting information ("[M+H]+ calcd for C9H9O4 181.0495") and exports the isotope pattern as CSV (#398).
-- The keyboard can pick atoms and bonds one by one (`G`) and draw a curved arrow between two of them (`>` … `>`) (#541).
+- **Mass spec for the SI**: copy an HRMS line ("[M+H]+ calcd for C9H9O4 181.0495"), export the isotope pattern as CSV, and list the EI ions to look for (#398, #554). <!-- icon: chart-bar -->
+- **Peptides**: File → Import → Peptide Sequence… (and `--peptide`) draws `GFLS` or `Gly-Phe-Leu-Ser` with a straight backbone and side chains clear of each N–H (#503, #502, #559). <!-- icon: hexagons -->
+- **Screen readers and the keyboard**: every atom, bond, arrow and text can be read and pressed; `G` picks atoms one by one, `>` … `>` draws a curved arrow and Alt+↑/↓ bends it (#536, #541, #549). <!-- icon: sparkles -->
+- Arrange → Add Arrow / Add Text After Selection place them without the mouse; Arrange → Flip Curved Arrow turns one over (#549).
+- Macrocycles are laid out more cleanly: cyclophane bridges stand clear of their rings (#502).
+- The Mass Spec panel's [M] is M⁺• for a neutral molecule, one electron lighter, as the spectrometer sees it (#556).
 - An aldehyde's C=O and a chain-end C=C sit toward their neighbour, so the single bond meets the double bond cleanly (#542).
-- Screen readers and automation tools can read the drawing: each atom, bond, arrow and text is named ("atom O3, 1 bond"), and pressing one selects it (#536).
 - A drawing opened at launch fills the window instead of opening tiny (#545).
 - Arrowhead sizes go out to ChemDraw files and come back, at the size ChemDraw draws them (#538).
-- Macrocycles and peptides are laid out more cleanly: cyclophane bridges stand clear of their rings and a peptide backbone runs straight (#502).
 
 ## 1.7.0 (2026-09-29)
 
