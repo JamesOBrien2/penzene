@@ -818,8 +818,10 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
             if (threeD && atoms.isEmpty()) { drag_ = Drag::None; break; }
             bool already = selectedAtoms_.contains(atoms) && selectedArrows_.contains(arrows) &&
                            selectedTexts_.contains(texts);
+            const bool one = e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier);  // into a group: just this (#410)
             if (shift) selectedAtoms_ |= atoms, selectedArrows_ |= arrows, selectedTexts_ |= texts;
-            else if (!already) selectedAtoms_ = atoms, selectedArrows_ = arrows, selectedTexts_ = texts;
+            else if (!already || one) selectedAtoms_ = atoms, selectedArrows_ = arrows, selectedTexts_ = texts;
+            if (!one) selectGroups();
             drag_ = threeD ? Drag::Rotate3D
                            : !(e->modifiers() & Qt::AltModifier) ? Drag::Move : shift ? Drag::Rotate3D : Drag::Rotate;
             if (drag_ == Drag::Rotate3D && !(pose_ = chem::pose3D(doc_, moleculesOfSelection())))
@@ -1039,6 +1041,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
             if (r.contains(doc_.arrows[i].from) && r.contains(doc_.arrows[i].to)) selectedArrows_.insert(i);
         for (int i = 0; i < int(doc_.texts.size()); ++i)
             if (r.intersects(textPath(doc_.texts[i], documentStyle(doc_)).boundingRect())) selectedTexts_.insert(i);
+        selectGroups();
     } else if (drag == Drag::Arrow) {
         const int hit = arrowAt(pressPos_);
         if (click && hit >= 0 && isOrbital(next.arrows[hit].kind) == isOrbital(arrowKind_)) {
@@ -1176,6 +1179,7 @@ void Canvas::mouseDoubleClickEvent(QMouseEvent* e) {
             if (!seen.contains(nb)) seen.insert(nb), stack.push_back(nb);
     }
     setSelection(seen);
+    selectGroups();
 }
 
 namespace {
@@ -1230,6 +1234,22 @@ std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows
         if (home) home->texts.insert(t);
         else out.push_back({{}, {}, {t}});
     }
+    auto groups = [&](const Piece& p) {  // grouped objects are one piece, whatever joins them (#410)
+        QSet<int> g;
+        for (int i : p.atoms) g.insert(doc.atoms[i].group);
+        for (int i : p.arrows) g.insert(doc.arrows[i].group);
+        for (int i : p.texts) g.insert(doc.texts[i].group);
+        g.remove(-1);
+        return g;
+    };
+    for (size_t i = 0; i < out.size(); ++i)  // ponytail: quadratic in pieces; fine for a page's worth
+        for (size_t j = i + 1; j < out.size();)
+            if (groups(out[i]).intersects(groups(out[j]))) {
+                out[i].atoms |= out[j].atoms, out[i].arrows |= out[j].arrows, out[i].texts |= out[j].texts;
+                out.erase(out.begin() + j), j = i + 1;
+            } else {
+                ++j;
+            }
     return out;
 }
 
@@ -1700,6 +1720,48 @@ void Canvas::numberCompounds() {
         t.pos.rx() -= textPath(t, documentStyle(next)).boundingRect().center().x() - t.pos.x();
     }
     commit(next, tr("Number Compounds"));
+}
+
+void Canvas::selectGroups() {
+    QSet<int> groups;
+    for (int i : selectedAtoms_) groups.insert(doc_.atoms[i].group);
+    for (int i : selectedArrows_) groups.insert(doc_.arrows[i].group);
+    for (int i : selectedTexts_) groups.insert(doc_.texts[i].group);
+    groups.remove(-1);
+    if (groups.isEmpty()) return;
+    for (int i = 0; i < int(doc_.atoms.size()); ++i)
+        if (groups.contains(doc_.atoms[i].group)) selectedAtoms_.insert(i);
+    for (int i = 0; i < int(doc_.arrows.size()); ++i)
+        if (groups.contains(doc_.arrows[i].group)) selectedArrows_.insert(i);
+    for (int i = 0; i < int(doc_.texts.size()); ++i)
+        if (groups.contains(doc_.texts[i].group)) selectedTexts_.insert(i);
+    viewport()->update();
+    emit selectionChanged();
+}
+
+void Canvas::groupSelection() {
+    const auto ps = pieces(doc_, selectedAtoms_, selectedArrows_, selectedTexts_);
+    if (ps.size() < 2 || (selectedAtoms_.isEmpty() && selectedArrows_.isEmpty() && selectedTexts_.isEmpty())) return;
+    Document next = doc_;
+    int id = 0;
+    for (const auto& a : doc_.atoms) id = std::max(id, a.group + 1);
+    for (const auto& a : doc_.arrows) id = std::max(id, a.group + 1);
+    for (const auto& t : doc_.texts) id = std::max(id, t.group + 1);
+    for (int i : selectedAtoms_)
+        for (int a : moleculeOf(doc_, i)) next.atoms[a].group = id;  // whole molecules, so none is torn apart
+    for (int i : selectedArrows_) next.arrows[i].group = id;
+    for (int i : selectedTexts_) next.texts[i].group = id;
+    commit(next, tr("Group"));
+    selectGroups();
+}
+
+void Canvas::ungroupSelection() {
+    selectGroups();
+    Document next = doc_;
+    for (int i : selectedAtoms_) next.atoms[i].group = -1;
+    for (int i : selectedArrows_) next.arrows[i].group = -1;
+    for (int i : selectedTexts_) next.texts[i].group = -1;
+    commit(next, tr("Ungroup"));
 }
 
 void Canvas::setArrowHead(double size) {

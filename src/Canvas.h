@@ -98,7 +98,9 @@ public:
     std::optional<QPointF> nextPlace() const;
     void addArrowAfter();
     void addTextAfter();
-    void numberCompounds();  // a bold number under each selected molecule (or every one) that has none (#504)
+    void numberCompounds();
+    void groupSelection();    // the selected objects, whole molecules, act as one from now on (#410)
+    void ungroupSelection();  // the groups the selection touches split up  // a bold number under each selected molecule (or every one) that has none (#504)
 
 signals:
     void documentChanged();
@@ -141,6 +143,7 @@ private:
     bool grid_ = false, rulers_ = false;
     std::vector<QPointF> preview_;
     QUndoStack* undo_;
+    void selectGroups();  // a click or marquee on one member takes its whole group
     Tool tool_ = Tool::Bond;
     int element_ = 6, bondOrder_ = 1, ringSize_ = 6;
     BondStereo bondStyle_ = BondStereo::None;

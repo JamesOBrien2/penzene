@@ -49,6 +49,7 @@ QByteArray Document::toJson() const {
         if (a.partial) o["partial"] = a.partial;
         if (a.isotope) o["isotope"] = a.isotope;
         if (a.stereoGroup != StereoGroup::None) o["stereoGroup"] = stereoGroupTag(a);
+        if (a.group >= 0) o["group"] = a.group;
         as.append(o);
     }
     for (const auto& b : bonds) {
@@ -70,6 +71,7 @@ QByteArray Document::toJson() const {
         if (a.behind) o["behind"] = true;
         if (a.crossed) o["crossed"] = true;
         if (a.head != 1) o["head"] = a.head;
+        if (a.group >= 0) o["group"] = a.group;
         for (auto [key, at] : {std::pair{"fromAt", a.fromAt}, std::pair{"toAt", a.toAt}})
             if (at[0] >= 0) o[key] = at[1] >= 0 ? QJsonArray{at[0], at[1]} : QJsonArray{at[0]};
         ar.append(o);
@@ -80,6 +82,7 @@ QByteArray Document::toJson() const {
         if (t.color.isValid()) o["color"] = t.color.name();
         if (t.compound) o["compound"] = true;
         if (t.anchor >= 0) o["anchor"] = t.anchor;
+        if (t.group >= 0) o["group"] = t.group;
         ts.append(o);
     }
     if (!ar.isEmpty()) root["arrows"] = ar;
@@ -184,6 +187,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         if (a.z < 0 || a.z > 118 || !std::isfinite(a.pos.x()) || !std::isfinite(a.pos.y())) return std::nullopt;
         if (a.isotope < a.z) a.isotope = 0;  // lighter than its protons: no such isotope, as a typed label (#368)
         setStereoGroupTag(a, o["stereoGroup"].toString());
+        a.group = std::max(-1, o["group"].toInt(-1));
     }
     const int n = int(doc.atoms.size());
     for (const auto& v : root["bonds"].toArray()) {
@@ -220,6 +224,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         a.behind = o["behind"].toBool();
         a.crossed = o["crossed"].toBool();
         if (const double head = o["head"].toDouble(1); std::isfinite(head)) a.head = std::clamp(head, 0.25, 4.0);
+        a.group = std::max(-1, o["group"].toInt(-1));
         for (auto [key, at] : {std::pair{"fromAt", &a.fromAt}, std::pair{"toAt", &a.toAt}}) {
             const QJsonArray v = o[key].toArray();
             for (int k = 0; k < std::min<int>(2, v.size()); ++k) (*at)[k] = v[k].toInt(-1);
@@ -234,6 +239,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
                QColor(o["color"].toString())};
         if (!(t.scale > 0)) t.scale = 1;  // files saved before #316 could hold 0
         t.compound = o["compound"].toBool();
+        t.group = std::max(-1, o["group"].toInt(-1));
         if (const int a = o["anchor"].toInt(-1); a >= 0 && a < int(doc.atoms.size())) t.anchor = a;
         if (!finite({t.pos.x(), t.pos.y(), t.scale})) return std::nullopt;
         doc.texts.push_back(t);
@@ -268,17 +274,24 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
 
 void Document::append(const Document& o, QPointF shift) {
     const int base = int(atoms.size());
-    for (auto a : o.atoms) a.pos += shift, atoms.push_back(a);
+    int groupBase = 0;  // pasted groups stay apart from ours, and from each other on a second paste
+    for (const auto& a : atoms) groupBase = std::max(groupBase, a.group + 1);
+    for (const auto& a : arrows) groupBase = std::max(groupBase, a.group + 1);
+    for (const auto& t : texts) groupBase = std::max(groupBase, t.group + 1);
+    auto regroup = [&](int& g) { if (g >= 0) g += groupBase; };
+    for (auto a : o.atoms) a.pos += shift, regroup(a.group), atoms.push_back(a);
     for (auto b : o.bonds) b.a += base, b.b += base, bonds.push_back(b);
     for (auto a : o.arrows) {
         a.from += shift, a.to += shift;
         for (int* i : {&a.fromAt[0], &a.fromAt[1], &a.toAt[0], &a.toAt[1]})
             if (*i >= 0) *i += base;
+        regroup(a.group);
         arrows.push_back(a);
     }
     for (auto t : o.texts) {
         t.pos += shift;
         if (t.anchor >= 0) t.anchor += base;
+        regroup(t.group);
         texts.push_back(t);
     }
     for (auto f : o.fills) {

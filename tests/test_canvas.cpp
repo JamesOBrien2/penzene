@@ -3853,3 +3853,65 @@ TEST_CASE("Open says when a file is missing, not that it isn't a structure (#484
     CHECK(w.recentFiles() == QStringList{unmounted});
     QSettings().remove("recentFiles");
 }
+
+TEST_CASE("Arrange → Group: grouped objects select, arrange and save as one (#410)") {
+    App app;
+    MainWindow w;
+    w.resize(900, 600);
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setTool(Canvas::Tool::Select);
+    Document d = *chem::fromSmiles("CCO");  // ethanol, a benzene well to its right, and a note under ethanol
+    d.append(*chem::fromSmiles("c1ccccc1"), {10 * kBondLength, 0});
+    d.texts.push_back({{0, 3 * kBondLength}, "crude"});
+    canvas->setDocumentSilently(d);
+    QAction *group = nullptr, *ungroup = nullptr;
+    for (auto* a : w.findChildren<QAction*>()) {
+        if (a->text() == "&Group") group = a;
+        if (a->text() == "&Ungroup") ungroup = a;
+    }
+    REQUIRE(group);
+    REQUIRE(ungroup);
+    CHECK(group->shortcut() == QKeySequence(Qt::CTRL | Qt::Key_G));
+    canvas->setSelection({0}, {}, {0});
+    group->trigger();
+    const Document& doc = canvas->document();
+    const int id = doc.texts[0].group;
+    CHECK(id >= 0);
+    for (int i : {0, 1, 2}) CHECK(doc.atoms[i].group == id);  // the whole molecule, not just the picked atom
+    CHECK(doc.atoms[3].group == -1);
+
+    auto click = [&](QPointF scene, Qt::KeyboardModifiers keys = {}) {
+        QTest::mouseClick(canvas->viewport(), Qt::LeftButton, keys, canvas->mapFromScene(scene));
+    };
+    canvas->centerOn(doc.atoms[1].pos);
+    canvas->setSelection({});
+    click(doc.atoms[1].pos);
+    CHECK(canvas->selection() == QSet<int>{0, 1, 2});
+    CHECK(canvas->selectedTexts() == QSet<int>{0});  // one member takes the group
+    click(doc.atoms[1].pos, Qt::ControlModifier);
+    CHECK(canvas->selection() == QSet<int>{1});  // Ctrl/Cmd: into the group, just the one
+
+    canvas->setSelection({});
+    const QPointF offset = doc.texts[0].pos - doc.atoms[0].pos;
+    canvas->arrangeScheme();
+    CHECK(len(doc.texts[0].pos - doc.atoms[0].pos - offset) < 1e-6);  // one piece: the note kept its place
+
+    const auto saved = Document::fromJson(doc.toJson());
+    REQUIRE(saved);
+    CHECK(saved->texts[0].group == id);
+    CHECK(saved->atoms[0].group == id);
+    Document twice = *saved;
+    twice.append(*saved);
+    CHECK(twice.atoms[twice.atoms.size() - 9].group != id);  // a second copy is a group of its own
+
+    canvas->setSelection({0});
+    ungroup->trigger();
+    CHECK(doc.texts[0].group == -1);
+    for (const Atom& a : doc.atoms) CHECK(a.group == -1);
+    canvas->arrangeScheme();
+    CHECK(len(doc.texts[0].pos - doc.atoms[0].pos - offset) > 1);  // apart again
+    canvas->setSelection({0, 3});  // two molecules alone, no text to carry the change
+    group->trigger();
+    CHECK(doc.atoms[3].group >= 0);
+    CHECK(doc.atoms[0].group == doc.atoms[3].group);
+}
