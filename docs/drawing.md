@@ -81,7 +81,8 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
   flyout and drag a molecule, or use Shift+Alt+drag or Shift+Alt+arrows. Stereo is preserved.
 - **Stretch and squash:** drag the handles around a selection (corners scale, edges stretch), or use
   **Structure → Transform** for exact values.
-- **Structure → Align and Distribute**, **Flip**, and **Arrange Scheme** (lines up a reaction scheme,
+- **Structure → Align and Distribute** (which also has **Center on Page**, for the selection or the
+  whole drawing), **Flip**, and **Arrange Scheme** (lines up a reaction scheme,
   with agents centred over their arrows).
 - **Structure → Brackets** puts square or round brackets, with a subscript such as *n*, around the
   selected atoms.

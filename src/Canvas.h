@@ -53,6 +53,7 @@ public:
     enum class Align { Left, HCentre, Right, Top, VCentre, Bottom };
     void alignSelection(Align edge);
     void distributeSelection(bool horizontal);
+    void centerOnPage();  // the selection (or everything) moved to the middle of the page, spacing kept
     // The right-click menu for whatever is at `scenePos` (public so tests can inspect it).
     QMenu* contextMenuAt(QPointF scenePos);
     void moveHotspot(QPointF dir, bool jump);

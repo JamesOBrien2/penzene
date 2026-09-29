@@ -2609,6 +2609,26 @@ TEST_CASE("A trackpad pinch zooms the canvas: spread in, pinch out (#452)") {
     CHECK(f.canvas.transform().m11() < before * 1.2);
 }
 
+TEST_CASE("Center on Page moves the whole drawing, or just the selection, keeping spacing (#454)") {
+    Fixture f;
+    Document doc = *chem::fromSmiles("CC.O");
+    doc.page = "ACS single column";
+    f.canvas.setDocumentSilently(doc);
+    const QPointF middle = pageRect(doc).center();
+    const auto gap = [&] { return f.canvas.document().atoms[0].pos - f.canvas.document().atoms[2].pos; };
+    const QPointF spacing = gap();
+    f.canvas.centerOnPage();
+    CHECK(QLineF(documentBounds(f.canvas.document()).center(), middle).length() < 1e-6);
+    CHECK(gap() == spacing);
+    f.undo.undo();
+    CHECK(f.canvas.document() == doc);
+
+    f.canvas.setSelection({2}, {}, {});  // the lone oxygen
+    f.canvas.centerOnPage();
+    CHECK(QLineF(f.canvas.document().atoms[2].pos, middle).length() < 1e-6);
+    CHECK(f.canvas.document().atoms[0].pos == doc.atoms[0].pos);
+}
+
 TEST_CASE("View shows a light grid and rulers, measured at the final size (#219)") {
     Fixture f;
     f.canvas.setTheme(theme("Light"));
