@@ -172,6 +172,9 @@ struct NmrStick {
     QString multiplicity() const { return coupled < 4 ? QString("sdtq"[coupled]) : "m"; }
 };
 std::vector<NmrStick> nmrSticks(const Document& doc, bool proton, const std::vector<int>& only = {});
+// The sticks as a supporting-information line to fill in, e.g. "1H NMR (predicted) δ 3.69 (q, 2H), 1.22 (t, 3H)."
+// Empty without a prediction.
+QString nmrLine(const Document& doc, bool proton, const std::vector<int>& only = {});
 
 std::string symbol(int z);
 std::string elementName(int z);  // "Carbon"

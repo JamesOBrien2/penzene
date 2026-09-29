@@ -2401,4 +2401,11 @@ std::vector<NmrStick> nmrSticks(const Document& doc, bool proton, const std::vec
     return out;
 }
 
+QString nmrLine(const Document& doc, bool proton, const std::vector<int>& only) {
+    QStringList parts;
+    for (const auto& k : nmrSticks(doc, proton, only))
+        parts << (proton ? QString("%1 (%2, %3H)").arg(k.ppm, 0, 'f', 2).arg(k.multiplicity()).arg(k.count) : QString::number(k.ppm, 'f', 1));
+    return parts.isEmpty() ? QString() : (proton ? "1H" : "13C") + QString(" NMR (predicted) δ ") + parts.join(", ") + ".";
+}
+
 }  // namespace chem

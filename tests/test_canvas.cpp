@@ -1541,6 +1541,9 @@ TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the 
     CHECK(canvas->highlight().size() == 2);
     QTest::keyClick(view, Qt::Key_Left);
     CHECK(canvas->highlight() == QSet<int>{4});
+    dock->findChild<QPushButton*>()->click();
+    CHECK(QGuiApplication::clipboard()->text().startsWith("13C NMR (predicted) δ 13"));  // toluene's, not ethanol's
+    CHECK(QGuiApplication::clipboard()->text().count(", ") == 4);
     dock->findChild<QComboBox*>()->setCurrentIndex(1);  // 1H
     CHECK(canvas->highlight().isEmpty());
     CHECK(view->accessibleDescription().split("; ").last().contains("3 H, s: C4"));  // the methyl, furthest upfield
@@ -1553,6 +1556,9 @@ TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the 
     QTest::keyClick(view, Qt::Key_Right);
     REQUIRE_FALSE(canvas->highlight().isEmpty());
     for (int i : canvas->highlight()) CHECK(i < 3);
+    canvas->commit(*chem::fromSmiles("[Na+].[Cl-]"), "Replace");
+    dock->findChild<QPushButton*>()->click();  // nothing predicted: the clipboard keeps what it had
+    CHECK(QGuiApplication::clipboard()->text().startsWith("13C NMR"));
     dock->hide();
     CHECK(canvas->highlight().isEmpty());
 }
