@@ -873,6 +873,22 @@ TEST_CASE("terminal bond deletion drops the end atom through each UI path") {
     }
 }
 
+TEST_CASE("no two items in a menu share an access key") {
+    App app;
+    MainWindow w;
+    for (auto* menu : w.findChildren<QMenu*>()) {
+        QMap<QChar, QString> taken;
+        for (auto* a : menu->actions()) {
+            const QString t = a->text();
+            const int i = t.indexOf('&');
+            if (i < 0 || i + 1 >= t.size() || t[i + 1] == '&') continue;
+            INFO(menu->title().toStdString() << ": " << t.toStdString());
+            CHECK_FALSE(taken.contains(t[i + 1].toLower()));
+            taken[t[i + 1].toLower()] = t;
+        }
+    }
+}
+
 TEST_CASE("right-click menus for atoms, bonds, selection and canvas (#89)") {
     Fixture f;
     Document d;
