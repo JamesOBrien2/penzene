@@ -864,20 +864,27 @@ std::optional<Reaction> reactionOf(const Document& doc) {
 
 std::string toReactionSmiles(const std::vector<Reaction>& steps) {
     std::string out;
-    for (const auto& r : steps) out += (out.empty() ? "" : "\n") + toReactionSmiles(r);
+    for (const auto& r : steps) {
+        const std::string line = toReactionSmiles(r);
+        if (line.empty()) return "";
+        out += (out.empty() ? "" : "\n") + line;
+    }
     return out;
 }
 
 std::string toReactionSmiles(const Reaction& r) {
-    auto side = [](const std::vector<Document>& ms) {
+    bool valid = true;
+    auto side = [&valid](const std::vector<Document>& ms) {
         std::string s;
         for (const auto& m : ms) {
             const std::string smiles = toSmiles(m);
+            if (smiles.empty()) valid = false;
             s += (s.empty() ? "" : ".") + smiles.substr(0, smiles.find(' '));  // no CXSMILES extension mid-reaction
         }
         return s;
     };
-    return side(r.reactants) + ">" + side(r.agents) + ">" + side(r.products);
+    const std::string line = side(r.reactants) + ">" + side(r.agents) + ">" + side(r.products);
+    return valid ? line : "";  // as toSmiles: an invalid molecule gives nothing, not a reaction without it
 }
 
 std::string toRxn(const Reaction& r) {

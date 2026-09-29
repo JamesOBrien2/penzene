@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Copy as Reaction SMILES says when a molecule in the reaction is invalid, instead of copying a reaction without it.
 - Structure → Align and Distribute → Center on Page moves the selection, or the whole drawing, to the middle of the page, keeping its spacing (Undo puts it back).
 - Pinch two fingers on a trackpad to zoom the drawing (right-click the canvas for Zoom In and Out), and the grid and rulers are on by default (View turns either off, and Penzene remembers).
 - Rotate in 3D is a tool in the Select flyout: drag a molecule out of the page and it keeps its stereochemistry. The two Turn Over commands are removed (Shift+Alt+drag and the arrow keys still turn it).

@@ -1901,9 +1901,13 @@ void MainWindow::buildMenus() {
         QApplication::clipboard()->setText(QString::fromStdString(chem::toInchiKey(canvas_->selectedSubset())));
     });
     edit->addAction(tr("Copy as &Reaction SMILES"), this, [this] {
-        if (const auto steps = chem::reactionsOf(canvas_->selectedSubset()); !steps.empty())
-            QApplication::clipboard()->setText(QString::fromStdString(chem::toReactionSmiles(steps)));  // a line a step
-        else
+        if (const auto steps = chem::reactionsOf(canvas_->selectedSubset()); !steps.empty()) {
+            const std::string smiles = chem::toReactionSmiles(steps);  // a line a step
+            if (smiles.empty())
+                statusBar()->showMessage(tr("A structure in the reaction is invalid, so nothing was copied"), 6000);
+            else
+                QApplication::clipboard()->setText(QString::fromStdString(smiles));
+        } else
             statusBar()->showMessage(tr("No reaction arrow in the drawing"), 4000);
     });
     edit->addAction(tr("&Paste"), QKeySequence::Paste, this, &MainWindow::paste);

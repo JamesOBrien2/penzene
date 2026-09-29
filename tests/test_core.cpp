@@ -1289,6 +1289,20 @@ TEST_CASE("SMILES keeps stereo groups as CXSMILES, and only when there are some 
     CHECK(chem::toReactionSmiles(r).find('|') == std::string::npos);  // no extension mid-reaction
 }
 
+TEST_CASE("a reaction with an invalid molecule gives no reaction SMILES (#427)") {
+    Document pentavalent;  // a carbon with five single bonds
+    const int c = pentavalent.addAtom({0, 0});
+    for (int i = 0; i < 5; ++i) edit::link(pentavalent, c, pentavalent.addAtom({kBondLength * (i + 1), 0}));
+    chem::Reaction r;
+    r.reactants.push_back(pentavalent);
+    r.reactants.push_back(*chem::fromSmiles("C"));
+    r.products.push_back(*chem::fromSmiles("O"));
+    CHECK(chem::toReactionSmiles(r).empty());  // not "C>>O"
+    CHECK(chem::toReactionSmiles(std::vector{r}).empty());
+    r.reactants.erase(r.reactants.begin());
+    CHECK(chem::toReactionSmiles(r) == "C>>O");
+}
+
 TEST_CASE("a typed charged label sets the element and charge (#324)") {
     for (auto [label, z, charge] : {std::tuple{"NH3+", 7, 1}, {"O-", 8, -1}, {"Na+", 11, 1}, {"Fe3+", 26, 3},
                                     {"O2-", 8, -2}, {"NH4+", 7, 1}, {"O−", 8, -1}, {"S+2", 16, 2}, {"15NH4+", 7, 1}}) {  // the last with an isotope too
