@@ -1687,6 +1687,22 @@ TEST_CASE("Arrange Scheme lines a reaction up (#109)") {
     CHECK(std::abs(centre("CC(=O)Oc1ccccc1C(=O)O").y() - arrow.from.y()) < 1);           // product on the baseline
 }
 
+TEST_CASE("Arrange Scheme moves an orbital with the atom it is drawn on (#409)") {
+    Fixture f;
+    Document d = *chem::fromSmiles("CO");
+    Arrow orbital{d.atoms[1].pos, d.atoms[1].pos + QPointF(0, -kBondLength)};
+    orbital.kind = ArrowKind::POrbital;
+    d.arrows.push_back(orbital);
+    d.arrows.push_back({{60, 0}, {100, 0}});
+    d.append(*chem::fromSmiles("CC"), {150, 30});
+    f.canvas.setDocumentSilently(d);
+    f.canvas.arrangeScheme();
+    const Document& out = f.doc();
+    REQUIRE(out.arrows.size() == 2);
+    CHECK(QLineF(out.arrows[0].from, out.atoms[1].pos).length() < 1e-6);  // still on the oxygen
+    CHECK(QLineF(out.arrows[0].to - out.arrows[0].from, QPointF(0, -kBondLength)).length() < 1e-6);
+}
+
 TEST_CASE("3D rotation from the mouse and keyboard keeps stereo (#173)") {
     Fixture f;
     const Document menthol = *chem::fromSmiles("CC(C)[C@@H]1CC[C@@H](C)C[C@H]1O");

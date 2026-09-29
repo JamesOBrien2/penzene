@@ -873,7 +873,16 @@ std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows
         }
         out.push_back(p);
     }
-    for (int a : arrows) out.push_back({{}, {a}, {}});
+    for (int a : arrows) {
+        // An orbital drawn on an atom belongs to that atom's piece, and moves with it.
+        Piece* home = nullptr;
+        if (isOrbital(doc.arrows[a].kind))
+            for (Piece& p : out)
+                for (int i : p.atoms)
+                    if (len(doc.atoms[i].pos - doc.arrows[a].from) < kMergeRadius) home = &p;
+        if (home) home->arrows.insert(a);
+        else out.push_back({{}, {a}, {}});
+    }
     for (int t : texts) out.push_back({{}, {}, {t}});
     return out;
 }
