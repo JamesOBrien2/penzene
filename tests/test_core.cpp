@@ -1110,27 +1110,44 @@ TEST_CASE("a bond between two labels closer than their clearances isn't drawn ov
     CHECK(render(d) == alone);
 }
 
-TEST_CASE("a wedge's wide end meets the bond beside it instead of jutting past it (#509)") {
-    // A cyclopropane-like corner: the wedge ends at b, whose other bond turns back 60° from it.
-    Document d;
-    const QPointF b(14.4, 0), u(-0.5, std::sqrt(3.0) / 2);
-    d.atoms = {{QPointF(0, 0)}, {b}, {b + u * 14.4}};
-    d.bonds = {{0, 1, 1, BondStereo::Wedge}, {1, 2}};
+TEST_CASE("a wedge's wide end lies along the bonds beside it, not past them or into a double bond (#509)") {
+    const QPointF b(14.4, 0);
     const double k = 20;
-    QImage img(800, 800, QImage::Format_ARGB32);
-    img.fill(Qt::white);
-    QPainter p(&img);
-    p.translate(400, 400);
-    p.scale(k, k);
-    p.translate(-b);
-    paintDocument(p, d, {Qt::black, Qt::black, 0.6});
-    p.end();
-    const QPointF out(u.y(), -u.x());  // across the b–c bond, away from the wedge's narrow end
-    REQUIRE(QPointF::dotProduct(out, QPointF(0, 0) - b) < 0);
+    auto render = [&](const Document& d) {
+        QImage img(800, 800, QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter p(&img);
+        p.translate(400, 400);
+        p.scale(k, k);
+        p.translate(-b);
+        paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+        return img;
+    };
+    auto inked = [&](const QImage& img, QPointF at) { return qGray(img.pixel(((at - b) * k + QPointF(400, 400)).toPoint())) < 128; };
+    // The wedge ends at b, whose one other bond turns back 60° (a cyclopropane) or 120° (a chain or
+    // six-membered ring): no ink across that bond's line, either way along it, on both of the wedge's sides.
+    for (double turn : {60.0, 120.0}) {
+        INFO(turn);
+        const QPointF u(-std::cos(qDegreesToRadians(turn)), std::sin(qDegreesToRadians(turn)));
+        Document d;
+        d.atoms = {{QPointF(0, 0)}, {b}, {b + u * 14.4}};
+        d.bonds = {{0, 1, 1, BondStereo::Wedge}, {1, 2}};
+        const QImage img = render(d);
+        const QPointF out(u.y(), -u.x());  // across the b–c bond, away from the wedge's narrow end
+        REQUIRE(QPointF::dotProduct(out, QPointF(0, 0) - b) < 0);
+        int ink = 0;
+        for (double t = -4; t < 4; t += 0.1)
+            for (double s = 0.5; s < 1.5; s += 0.1) ink += inked(img, b + u * t + out * s);
+        CHECK(ink == 0);
+    }
+    // A carboxyl: the wedge meets the C=O's nearer line, and the space between its two lines stays clear.
+    const QPointF u(0.5, std::sqrt(3.0) / 2);
+    Document d;
+    d.atoms = {{QPointF(0, 0)}, {b}, {b + u * 14.4, 8}, {b + QPointF(u.x(), -u.y()) * 14.4, 8}};
+    d.bonds = {{0, 1, 1, BondStereo::Wedge}, {1, 2, 2}, {1, 3}};
+    const QImage img = render(d);
     int ink = 0;
-    for (double t = 0; t < 4; t += 0.1)
-        for (double s = 0.5; s < 1.5; s += 0.1)
-            ink += qGray(img.pixel(((u * t + out * s) * k + QPointF(400, 400)).toPoint())) < 128;
+    for (double t = 1; t < 4; t += 0.1) ink += inked(img, b + u * t);
     CHECK(ink == 0);
 }
 
