@@ -942,8 +942,8 @@ void Canvas::mouseMoveEvent(QMouseEvent* e) {
     if (drag_ == Drag::None) {
         // The hotspot sticks until the cursor reaches another atom or bond, so
         // hotkeys and arrow keys keep working after the mouse drifts off.
-        if (int a = atomAt(curPos_); a >= 0) hoverAtom_ = a, hoverBond_ = -1;
-        else if (int b = bondAt(curPos_); b >= 0) hoverBond_ = b, hoverAtom_ = -1;
+        if (int a = atomAt(curPos_); a >= 0) hoverAtom_ = a, hoverBond_ = -1, keyHotspot_ = false;  // the pointer has it now
+        else if (int b = bondAt(curPos_); b >= 0) hoverBond_ = b, hoverAtom_ = -1, keyHotspot_ = false;
     }
     viewport()->update();
 }
@@ -1626,6 +1626,37 @@ void Canvas::colourSelection() {
     if (!(next == doc_)) commit(next, tr("Colour"));
 }
 
+void Canvas::bendArrow(double factor) {
+    const int i = reshapedArrow();
+    if (i < 0 || !doc_.arrows[i].bend) return;
+    Document next = doc_;
+    double& bend = next.arrows[i].bend;
+    bend = std::copysign(std::max(std::abs(bend * factor), 0.2 * kBondLength), bend * factor);  // never straight
+    commit(next, factor < 0 ? tr("Flip arrow") : tr("Bend arrow"));
+}
+
+std::optional<QPointF> Canvas::nextPlace() const {
+    if (const QRectF box = selectionBox(); !box.isNull()) return QPointF(box.right() + kBondLength, box.center().y());
+    if (hoverAtom_ >= 0) return doc_.atoms[hoverAtom_].pos;
+    if (hoverBond_ >= 0) return (doc_.atoms[doc_.bonds[hoverBond_].a].pos + doc_.atoms[doc_.bonds[hoverBond_].b].pos) / 2;
+    return std::nullopt;
+}
+
+void Canvas::addArrowAfter() {
+    const auto p = nextPlace();
+    if (!p) return;
+    Document next = doc_;
+    Arrow a{*p, *p + QPointF(3 * kBondLength, 0), !arrowCurved_ && !isShape(arrowKind_) ? arrowKind_ : ArrowKind::Reaction};
+    next.arrows.push_back(a);
+    commit(next, tr("Arrow"));
+    emit toolKey(" ");
+    setSelection({}, {int(doc_.arrows.size()) - 1});
+}
+
+void Canvas::addTextAfter() {
+    if (const auto p = nextPlace()) editText(-1, *p);
+}
+
 void Canvas::setArrowHead(double size) {
     Document next = doc_;
     for (int i : selectedArrows_) next.arrows[i].head = size;
@@ -1662,7 +1693,8 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
     const bool arrow = key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down;
     const bool plainArrow = arrow && !(e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier | Qt::AltModifier));
     const bool modifier = key == Qt::Key_Shift || key == Qt::Key_Control || key == Qt::Key_Meta || key == Qt::Key_Alt;
-    if (!plainArrow && !modifier && e->text() != "G" && e->text() != ">" && key != Qt::Key_Escape)
+    const bool pickingKey = (arrow && !(e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier))) || e->text() == "G" || e->text() == ">";
+    if (!pickingKey && !modifier && key != Qt::Key_Escape)
         keyHotspot_ = false, arrowMark_ = {};
     // Picking by key (G, >): the arrows go on moving the hotspot rather than nudging what's picked.
     if (plainArrow && keyHotspot_ && (hoverAtom_ >= 0 || hoverBond_ >= 0))
@@ -1674,6 +1706,7 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
     }
     if (arrow && (e->modifiers() & Qt::AltModifier)) {
         if (key == Qt::Key_Left || key == Qt::Key_Right) rotateSelection(key == Qt::Key_Left ? -15 : 15);
+        else bendArrow(key == Qt::Key_Up ? 1.25 : 0.8);
         return;
     }
     const bool selection = !selectedAtoms_.isEmpty() || !selectedArrows_.isEmpty() || !selectedTexts_.isEmpty();
@@ -1752,7 +1785,11 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
             return h.atom >= 0 ? doc_.atoms[h.atom].pos : (doc_.atoms[doc_.bonds[h.bond].a].pos + doc_.atoms[doc_.bonds[h.bond].b].pos) / 2;
         };
         next.arrows.push_back(curvedArrow(at(arrowMark_), at(here), arrowCurved_ && !isShape(arrowKind_) ? arrowKind_ : ArrowKind::Reaction));
-        return commit(next, tr("Arrow"));
+        commit(next, tr("Arrow"));
+        emit toolKey(" ");  // selected, so Alt+Up/Down can bend it
+        setSelection({}, {int(doc_.arrows.size()) - 1});
+        keyHotspot_ = true;  // the commit ended the picking; the arrows go on moving the hotspot for the next one
+        return;
     }
     if (t == "g" && (hoverAtom_ >= 0 || hoverBond_ >= 0)) {  // grab: the hotspot's atom or bond, selected
         const QSet<int> atoms = hoverAtom_ >= 0 ? QSet<int>{hoverAtom_} : QSet<int>{doc_.bonds[hoverBond_].a, doc_.bonds[hoverBond_].b};

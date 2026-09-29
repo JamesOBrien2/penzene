@@ -2290,6 +2290,18 @@ void MainWindow::buildMenus() {
         ->setStatusTip(tr("Move the selection, or the whole drawing, to the middle of the page"));
     arrangeMenu->addSeparator();
     arrangeMenu->addAction(tr("Arrange &Scheme"), this, [this] { canvas_->arrangeScheme(); });
+    arrangeMenu->addSeparator();
+    auto* addArrow = arrangeMenu->addAction(tr("Add A&rrow After Selection"), canvas_, &Canvas::addArrowAfter);
+    auto* addText = arrangeMenu->addAction(tr("Add Te&xt After Selection…"), canvas_, &Canvas::addTextAfter);
+    for (auto* a : {addArrow, addText}) a->setStatusTip(tr("Just right of the selection, or at the hotspot"));
+    auto* flipArrow = arrangeMenu->addAction(tr("&Flip Curved Arrow"), this, [this] { canvas_->bendArrow(-1); });
+    flipArrow->setStatusTip(tr("Bow the selected curved arrow the other way; Alt+Up and Alt+Down bend it more or less"));
+    connect(arrangeMenu, &QMenu::aboutToShow, this, [=, this] {
+        addArrow->setEnabled(bool(canvas_->nextPlace()));
+        addText->setEnabled(bool(canvas_->nextPlace()));
+        const auto& arrows = canvas_->selectedArrows();
+        flipArrow->setEnabled(arrows.size() == 1 && canvas_->document().arrows[*arrows.begin()].bend);
+    });
 
     auto* format = menuBar()->addMenu(tr("F&ormat"));
     // Drawing style presets, like ChemDraw's document settings; stored in the .penz.
@@ -2473,7 +2485,8 @@ moves off, so you can keep typing.</p>
 <tr><td><b>←↑→↓</b></td><td>atom → bond → atom; with <b>Shift</b>: atom → atom, bond → bond (with a selection: nudge it, below)</td></tr>
 <tr><td><b>Space</b> / <b>g</b></td><td>select the hotspot's molecule / just its atom or bond</td></tr>
 <tr><td><b>G</b></td><td>add the hotspot's atom or bond to the selection; the arrow keys go on to the next (Esc when done)</td></tr>
-<tr><td><b>&gt;</b> … <b>&gt;</b></td><td>a curved arrow from the first hotspot to the second</td></tr>
+<tr><td><b>&gt;</b> … <b>&gt;</b></td><td>a curved arrow from the first hotspot to the second, selected</td></tr>
+<tr><td><b>Alt+↑</b> / <b>Alt+↓</b></td><td>bend the selected curved arrow more / less (Arrange → Flip Curved Arrow turns it over)</td></tr>
 <tr><td><b>Esc</b></td><td>clear hotspot and selection</td></tr>
 <tr><th colspan="2" align="left">Atom: sprout</th></tr>
 <tr><td><b>1</b> / <b>0</b></td><td>single bond, linear / cyclic mode (0 is longer on 2°/3° carbons)</td></tr>
