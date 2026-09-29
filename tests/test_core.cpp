@@ -1855,6 +1855,7 @@ TEST_CASE("predicted spectra: one stick per set of equivalent atoms, for the cho
     for (size_t k = 1; k < carbon.size(); ++k) CHECK(carbon[k - 1].ppm >= carbon[k].ppm);
     for (const auto& k : carbon)
         for (int a : k.atoms) CHECK(a >= 3);  // the drawing's own indices, so a stick can light its atoms
+    CHECK(chem::nmrSticks(d, false).size() == carbon.size() + 2);  // the whole page: no stick shared across molecules
     const auto proton = chem::nmrSticks(d, true, toluene);
     int hydrogens = 0;
     for (const auto& k : proton) hydrogens += k.count;
@@ -1979,4 +1980,18 @@ TEST_CASE("a spectrum's legend takes the emptier top corner and the sticks keep 
     CHECK(l.rect.right() == 400);
     CHECK(l.scale == Catch::Approx((200 - 80 - 10) / (0.8 * 200)));
     clear(l, both);
+}
+
+TEST_CASE("a molecule's predicted shifts don't depend on the others on the page (#575)") {
+    const Document ethanol = *chem::fromSmiles("CCO");
+    Document d;
+    const int c = d.addAtom({100, 0});  // first, a five-bonded carbon: no valid molecule
+    for (int k = 0; k < 5; ++k) d.bonds.push_back({c, d.addAtom({100.0 + k, 10})});
+    d.append(ethanol);  // atoms 6-8
+    const auto alone = chem::nmrSticks(ethanol, false);
+    const auto sticks = chem::nmrSticks(d, false, {6, 7, 8});
+    REQUIRE(sticks.size() == 2);
+    REQUIRE(sticks.size() == alone.size());
+    for (size_t k = 0; k < sticks.size(); ++k) CHECK(sticks[k].ppm == alone[k].ppm);
+    CHECK(chem::predictShifts(d).size() == chem::predictShifts(ethanol).size());  // the canvas's shift labels too
 }
