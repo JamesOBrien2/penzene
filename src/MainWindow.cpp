@@ -2067,7 +2067,7 @@ void MainWindow::buildMenus() {
     edit->addSeparator();
     edit->addAction(tr("Select &All"), QKeySequence::SelectAll, canvas_, &Canvas::selectAll);
     edit->addSeparator();
-    auto* prefs = edit->addAction(tr("&Preferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
+    auto* prefs = edit->addAction(tr("Pr&eferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
     prefs->setMenuRole(QAction::PreferencesRole);  // the app menu on macOS
 
     auto* page = menuBar()->addMenu(tr("&Page"));
@@ -2342,7 +2342,7 @@ void MainWindow::buildMenus() {
     massToggle->setText(tr("&Mass Spec Panel"));
     view->addAction(massToggle);
     view->addSeparator();
-    auto* themeMenu = view->addMenu(tr("&Theme"));
+    auto* themeMenu = view->addMenu(tr("T&heme"));
     auto* themeGroup = themeGroup_ = new QActionGroup(this);
     const QString current = QSettings().value("theme", "System").toString();
     for (const auto& t : themes()) {
