@@ -52,8 +52,8 @@ struct Reaction {
 };
 std::vector<Reaction> reactionsOf(const Document& doc);    // one per reaction arrow, in reading order
 std::optional<Reaction> reactionOf(const Document& doc);  // the first; nullopt without a reaction arrow
-std::string toReactionSmiles(const Reaction& r);           // reactants>agents>products
-std::string toReactionSmiles(const std::vector<Reaction>& steps);  // one line per step
+std::string toReactionSmiles(const Reaction& r);           // reactants>agents>products; empty if any molecule is invalid
+std::string toReactionSmiles(const std::vector<Reaction>& steps);  // one line per step; empty if any molecule is invalid
 std::string toRxn(const Reaction& r);                      // MDL Rxnfile (V2000)
 std::string toRdf(const std::vector<Reaction>& steps);     // MDL RD file: one Rxnfile per step
 Document layoutReaction(const std::vector<Reaction>& steps);  // the steps left to right, as one scheme
