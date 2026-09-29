@@ -3,8 +3,12 @@
 #include "Geometry.h"
 
 #include <QHash>
+#include <QLineF>
+#include <QRectF>
 #include <QRegularExpression>
 #include <algorithm>
+#include <map>
+#include <tuple>
 
 namespace edit {
 
@@ -49,6 +53,129 @@ int atomNear(const Document& doc, QPointF p, double r, int skip) {
         if (int(i) != skip && d < r) r = d, best = int(i);
     }
     return best;
+}
+
+// In bond lengths: an arrow end rests on an atom within reach of it (an end drawn beside a label
+// counts), and settles this far from a labelled one.
+constexpr double kReach = 0.75, kLabelGap = 0.55;
+
+// Whichever is nearer, an atom or a bond's middle: a lone pair sits beside its atom, and an
+// arrow from a π bond starts along it.
+std::array<int, 2> anchorAt(const Document& doc, QPointF p) {
+    std::array<int, 2> best{-1, -1};
+    double r = kReach * kBondLength;
+    if (int i = atomNear(doc, p, r); i >= 0) best = {i, -1}, r = len(doc.atoms[i].pos - p);
+    for (const Bond& b : doc.bonds) {
+        const QPointF a = doc.atoms[b.a].pos, ab = doc.atoms[b.b].pos - a;
+        const double t = std::clamp(QPointF::dotProduct(p - a, ab) / std::max(1e-9, QPointF::dotProduct(ab, ab)), 0.0, 1.0);
+        if (const double mid = len(a + ab / 2 - p); len(a + ab * t - p) < kBondLength / 3 && mid < r) best = {b.a, b.b}, r = mid;
+    }
+    return best;
+}
+
+// The atom, or the middle of the bond.
+static QPointF anchorPos(const Document& doc, std::array<int, 2> at) {
+    return at[1] < 0 ? doc.atoms[at[0]].pos : (doc.atoms[at[0]].pos + doc.atoms[at[1]].pos) / 2;
+}
+
+
+QPointF snapToAnchor(const Document& doc, std::array<int, 2> at, QPointF p, QPointF other) {
+    if (at[0] < 0) return p;
+    const QPointF c = anchorPos(doc, at);
+    if (at[1] >= 0) return c;
+    const QPointF d = len(p - c) > 0.15 * kBondLength ? p - c : other - c;
+    const Atom& atom = doc.atoms[at[0]];
+    const double gap = (atom.z != 6 || !atom.label.isEmpty() ? kLabelGap : 0.35) * kBondLength;  // clear of a label
+    return len(d) < 1e-6 ? c : c + unit(d) * gap;
+}
+
+// ponytail: an end that follows is shifted, not turned, with its atoms: an electron pair drawn
+// beside an atom stays on the same side of it when only the structure is rotated.
+void followAnchors(const Document& before, Document& after) {
+    if (before.atoms.size() != after.atoms.size() || before.arrows.size() != after.arrows.size()) return;
+    for (size_t k = 0; k < after.arrows.size(); ++k) {
+        Arrow& a = after.arrows[k];
+        const Arrow& was = before.arrows[k];
+        if (a.fromAt != was.fromAt || a.toAt != was.toAt) continue;  // not the same arrow (restacked), or just anchored
+        const double chord = len(a.to - a.from);
+        const bool slid = len((a.from - was.from) - (a.to - was.to)) < 1e-6 && a.bend == was.bend;  // moved, not turned or flipped
+        bool followed = false;
+        for (auto [end, from, at] : {std::tuple{&a.from, was.from, &a.fromAt}, std::tuple{&a.to, was.to, &a.toAt}}) {
+            if ((*at)[0] < 0) continue;
+            const QPointF moved = anchorPos(after, *at) - anchorPos(before, *at);
+            if (len(moved) < 1e-6) {
+                if (len(*end - from) > 1e-6 && len(*end - anchorPos(after, *at)) > kReach * kBondLength)
+                    *at = anchorAt(after, *end);  // the arrow moved off: onto what's there now
+            } else if (slid) {
+                *end = from + moved, followed = true;  // the structure moved under it (Arrange: each its own way)
+            }  // else turned, flipped or scaled with its atoms: already in place
+        }
+        if (followed && chord > 1e-9) a.bend *= len(a.to - a.from) / chord;  // the curve keeps its shape
+    }
+}
+
+std::vector<int> moleculeOf(const Document& doc, int atom) {
+    const auto bondsAt = doc.bondsAt();
+    std::vector<bool> seen(doc.atoms.size());
+    std::vector<int> out{atom};
+    seen[atom] = true;
+    for (size_t k = 0; k < out.size(); ++k)
+        for (int b : bondsAt[out[k]])
+            for (int nb : {doc.bonds[b].a, doc.bonds[b].b})
+                if (!seen[nb]) seen[nb] = true, out.push_back(nb);
+    return out;
+}
+
+static QRectF atomBox(const Document& doc, const std::vector<int>& atoms) {
+    QPointF lo = doc.atoms[atoms[0]].pos, hi = lo;
+    for (int a : atoms) {
+        const QPointF p = doc.atoms[a].pos;
+        lo = {std::min(lo.x(), p.x()), std::min(lo.y(), p.y())}, hi = {std::max(hi.x(), p.x()), std::max(hi.y(), p.y())};
+    }
+    return QRectF(lo, hi);
+}
+
+void renumberCompounds(Document& doc) {
+    struct Item {
+        int text;
+        double x, y;
+    };
+    std::vector<Item> items;
+    for (int i = 0; i < int(doc.texts.size()); ++i)
+        if (const Text& t = doc.texts[i]; t.compound)  // a row is where the molecules sit, whatever their height
+            items.push_back({i, t.pos.x(), t.anchor >= 0 ? atomBox(doc, moleculeOf(doc, t.anchor)).center().y() : t.pos.y()});
+    std::stable_sort(items.begin(), items.end(), [](const Item& a, const Item& b) { return a.y < b.y; });
+    for (size_t row = 0; row < items.size();) {  // from its highest item to two bond lengths below it
+        size_t end = row;
+        while (end < items.size() && items[end].y - items[row].y < 2 * kBondLength) ++end;
+        std::stable_sort(items.begin() + row, items.begin() + end, [](const Item& a, const Item& b) { return a.x < b.x; });
+        row = end;
+    }
+    int next = 0;
+    std::map<QString, int> series;  // a suffixed number's old number: its new one
+    for (const Item& item : items) {
+        QString& text = doc.texts[item.text].text;
+        int digits = 0;
+        while (digits < text.size() && text[digits].isDigit()) ++digits;
+        const QString old = text.left(digits), suffix = text.mid(digits);
+        const int n = suffix.isEmpty() ? ++next : series.count(old) ? series[old] : (series[old] = ++next);
+        text = QString::number(n) + suffix;
+    }
+}
+
+void followNumbers(const Document& before, Document& after) {
+    if (before.atoms.size() != after.atoms.size() || before.texts.size() != after.texts.size()) return;
+    for (size_t k = 0; k < after.texts.size(); ++k) {
+        Text& t = after.texts[k];
+        const Text& was = before.texts[k];
+        if (t.anchor < 0 || t.anchor != was.anchor || t.pos != was.pos) continue;  // free, re-anchored or moved itself
+        const auto mol = moleculeOf(after, t.anchor);
+        auto foot = [&](const Document& d) {
+            const QRectF box = atomBox(d, mol);
+            return QPointF(box.center().x(), box.bottom());
+        };
+        t.pos += foot(after) - foot(before);
+    }
 }
 
 // Returns the atom at `p`, creating one if nothing is close enough.
@@ -122,35 +249,53 @@ void ringOnBond(Document& doc, int bond, int n, bool aromatic) {
     addRing(doc, verts, aromatic);
 }
 
-// Chair cyclohexane fused onto the bond, built on template edge `edge` (0 or 1,
-// the ChemDraw 9 / 0 keys), mirrored to the side away from the other neighbours.
+// Chair cyclohexane fused onto the bond, on the side away from the other neighbours. The bond is
+// one end of the chair, whose other atoms all lie on one side of it: a long edge has atoms on both
+// sides, so they reached back over a ring already there (#417). `edge` (0 or 1, the ChemDraw 9 / 0
+// keys) picks the mirror image: the chair's pointed end at one atom of the bond or the other.
 void chairOnBond(Document& doc, int bond, int edge) {
-    // Opposite edges parallel; roughly unit bonds.
+    // Opposite edges parallel; roughly unit bonds. The other atoms are all left of 2 -> 3.
     static const QPointF chair[6] = {{0, 0}, {0.95, 0.35}, {1.95, 0.05}, {2.55, 0.75}, {1.6, 0.4}, {0.6, 0.7}};
     const Bond& b = doc.bonds[bond];
-    QPointF pa = doc.atoms[b.a].pos, pb = doc.atoms[b.b].pos, d = pb - pa;
+    QPointF pa = doc.atoms[b.a].pos, pb = doc.atoms[b.b].pos;
     double side = 0;
     for (int end : {b.a, b.b})
         for (int nb : doc.neighbors(end))
-            if (nb != b.a && nb != b.b) side += cross(d, doc.atoms[nb].pos - pa);
-    QPointF t0 = chair[edge], t1 = chair[edge + 1], td = t1 - t0;
-    const double scale = len(d) / len(td);
-    std::vector<QPointF> best;
-    for (int mirror : {1, -1}) {
+            if (nb != b.a && nb != b.b) side += cross(pb - pa, doc.atoms[nb].pos - pa);
+    if (side > 0) std::swap(pa, pb);  // the neighbours on the right, the chair on the left
+    const int step = edge == 0 ? 1 : -1, first = edge == 0 ? 2 : 3;  // 0: mirrored, 3 -> 2
+    auto t = [&](int k) {
+        QPointF p = chair[(first + step * k + 6) % 6];
+        return QPointF(p.x(), p.y() * step);
+    };
+    auto build = [&](QPointF from, QPointF to) {
+        const QPointF d = to - from, td = t(1) - t(0);
+        const double turn = qRadiansToDegrees(std::atan2(d.y(), d.x()) - std::atan2(td.y(), td.x()));
         std::vector<QPointF> verts;
-        for (int k = 0; k < 6; ++k) {
-            QPointF r = chair[(edge + k) % 6] - t0;
-            r.setY(r.y() * mirror);
-            QPointF td2(td.x(), td.y() * mirror);
-            double rr = std::atan2(d.y(), d.x()) - std::atan2(td2.y(), td2.x());
-            verts.push_back(pa + QPointF(r.x() * std::cos(rr) - r.y() * std::sin(rr),
-                                         r.x() * std::sin(rr) + r.y() * std::cos(rr)) * scale);
+        for (int k = 0; k < 6; ++k) verts.push_back(from + rotated(t(k) - t(0), turn) * (len(d) / len(td)));
+        return verts;
+    };
+    // The far side of the bond too, for when the neighbours don't say which side is free (a bond of
+    // a chair has atoms on both): keep the first that crosses or crowds nothing already drawn (#449).
+    auto clashes = [&](const std::vector<QPointF>& verts) {
+        auto same = [](QPointF x, QPointF y) { return len(x - y) < 1e-6; };
+        int n = 0;
+        for (int k = 2; k < 6; ++k)  // 0 and 1 are the bond's own atoms
+            for (const Atom& a : doc.atoms)
+                n += len(a.pos - verts[k]) < 0.45 * kBondLength;
+        for (int k = 1; k < 6; ++k) {  // the edges after the bond
+            const QPointF u = verts[k], v = verts[(k + 1) % 6];
+            for (const Bond& o : doc.bonds) {
+                const QPointF x = doc.atoms[o.a].pos, y = doc.atoms[o.b].pos;
+                n += !same(x, u) && !same(x, v) && !same(y, u) && !same(y, v) &&
+                     QLineF(u, v).intersects(QLineF(x, y), nullptr) == QLineF::BoundedIntersection;
+            }
         }
-        QPointF c;
-        for (QPointF v : verts) c += v / 6;
-        if (best.empty() || (cross(d, c - pa) > 0) != (side > 0)) best = verts;
-    }
-    addRing(doc, best, false);
+        return n;
+    };
+    auto verts = build(pa, pb), other = build(pb, pa);
+    if (clashes(other) < clashes(verts)) verts = other;
+    addRing(doc, verts, false);
 }
 
 // After a bond order change: if an end became an sp centre with two neighbours,
@@ -187,6 +332,11 @@ void mergeAtoms(Document& doc, const std::vector<std::pair<int, int>>& keepDrop)
     doc.bonds = std::move(bonds);
     for (auto& f : doc.fills)
         for (int& i : f.atoms) i = target[i];
+    for (auto& a : doc.arrows)  // a curved arrow on the dropped atom rests on the kept one
+        for (int* i : {&a.fromAt[0], &a.fromAt[1], &a.toAt[0], &a.toAt[1]})
+            if (*i >= 0) *i = target[*i];
+    for (auto& t : doc.texts)
+        if (t.anchor >= 0) t.anchor = target[t.anchor];
     auto moveOnto = [&](std::vector<int>& ids) {  // the kept atom takes the dropped one's place
         for (int& i : ids) i = target[i];
         std::sort(ids.begin(), ids.end());

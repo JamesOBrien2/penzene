@@ -7,6 +7,7 @@
 #include <QFont>
 #include <QImage>
 #include <QPainterPath>
+#include <QStringList>
 #include <vector>
 
 class QPainter;
@@ -77,10 +78,23 @@ bool exportDocument(const Document& doc, const QString& path, const ExportOption
 // Replaces the file at `path` only once all of `data` is written.
 bool writeWhole(const QString& path, const QByteArray& data);
 QImage renderImage(const Document& doc, const ExportOptions& options = {});
+QStringList nmrshiftdbNotice();
+// A spectrum's legend (the molecule) in a top corner of `plot`, and how far to shrink every stick so that
+// none, nor `clear` above it, reaches the legend. Sticks are (x, height as a fraction of the plot's).
+struct Legend {
+    QRectF rect;
+    double scale = 1;
+};
+Legend placeLegend(const QRectF& plot, QSizeF size, const std::vector<QPointF>& sticks, double clear);  // the lines nmrshiftdb2's licence asks for wherever predicted shifts are shown
+QByteArray renderPng(const Document& doc, const ExportOptions& options = {});  // drawing in a text chunk
 QByteArray renderSvg(const Document& doc, const ExportOptions& options = {});
 QByteArray renderPdf(const Document& doc, const ExportOptions& options = {});  // vector, drawing attached
+#ifdef Q_OS_WIN
+QByteArray renderEmf(const Document& doc, const ExportOptions& options = {});  // Enhanced Metafile, for Office
+#endif
 QPainterPath arrowPath(const Arrow& a);
 QFont labelFont(const DrawingStyle& s, double scale = 1);
+constexpr double kHeadLength = 6;  // an arrowhead of size 1, in drawing units
 constexpr int kTabSpaces = 8;  // text tab stops, in spaces: the canvas and the text dialog agree
 QPainterPath textPath(const Text& t, const DrawingStyle& s = drawingStyles()[0]);
 // How one line of text is set, character by character: formula counts subscripted, charges

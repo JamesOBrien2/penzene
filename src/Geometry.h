@@ -37,12 +37,15 @@ inline bool isSp(const Document& doc, int atom) { return isSp(doc, atom, doc.bon
 
 // Where a double bond's second line goes: +1 on perp(a->b), -1 opposite, 0 centred.
 // Automatic unless the bond says otherwise: toward the neighbours (inside a
-// ring), centred at a terminal atom or an sp centre (so C=C=C lines meet).
+// ring), centred at an sp centre (so C=C=C lines meet) and at a terminal atom whose
+// partner has no other bond or two (a ketone's C=O meets both). An aldehyde's C=O or a
+// chain-end =CH2 goes toward its one neighbour, so the single bond meets the main line (#542).
 inline int doubleBondSide(const Document& doc, const Bond& b, const BondsAt& at) {
     if (b.position == BondPosition::Centre) return 0;
     if (b.position != BondPosition::Auto) return b.position == BondPosition::Right ? 1 : -1;
     const auto na = neighbors(doc, at, b.a), nb = neighbors(doc, at, b.b);
-    if (na.size() == 1 || nb.size() == 1 || isSp(doc, b.a, at) || isSp(doc, b.b, at)) return 0;
+    if (isSp(doc, b.a, at) || isSp(doc, b.b, at)) return 0;
+    if ((na.size() == 1 || nb.size() == 1) && (na.size() == 1 ? nb : na).size() != 2) return 0;
     const QPointF pa = doc.atoms[b.a].pos, d = unit(doc.atoms[b.b].pos - pa);
     double side = 0;
     for (const auto* list : {&na, &nb})

@@ -219,6 +219,8 @@ std::vector<std::pair<QString, Document>> exampleDocuments() {
         m.append(nuc, nu - nuc.atoms[0].pos);
         m.arrows.push_back({nu + QPointF(4, -9), c + QPointF(-5, -2), ArrowKind::Reaction, 12});
         m.arrows.push_back({(c + top) / 2 + QPointF(4, 5), top + QPointF(10, -5), ArrowKind::Reaction, -7});
+        m.arrows[0].fromAt = {4, -1}, m.arrows[0].toAt = {1, -1};  // they move with the atoms and bond they're drawn on
+        m.arrows[1].fromAt = {1, 3}, m.arrows[1].toAt = {3, -1};
         out.push_back({QObject::tr("Mechanism"), m});
     }
     return out;

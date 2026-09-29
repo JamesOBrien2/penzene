@@ -1,10 +1,15 @@
 #include "MainWindow.h"
 #include "Canvas.h"
 #include "Chem.h"
+#include "Edit.h"
 #include "Online.h"
 #include "Templates.h"
 #include "WhatsNew.h"
+#ifdef Q_OS_WIN
+#include "OleServer.h"
+#endif
 
+#include <QAccessibleWidget>
 #include <QActionGroup>
 #include <QButtonGroup>
 #include <QTextBrowser>
@@ -37,7 +42,7 @@
 #include <QDialogButtonBox>
 #include <QDialog>
 #include <QDoubleSpinBox>
-#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QPushButton>
 #include <QDockWidget>
 #include <QFileInfo>
@@ -54,9 +59,11 @@
 #include <QTranslator>
 #include <QSettings>
 #include <QSignalBlocker>
+#include <QMouseEvent>
 #include <algorithm>
 #include <QStandardPaths>
 #include <QTimer>
+#include <QProxyStyle>
 #include <QStyle>
 #include <QStyleHints>
 #include <QtMath>
@@ -75,8 +82,194 @@
 
 static const char* kMolMime = "chemical/x-mdl-molfile";
 static const char* kPenzMime = "application/x-penzene";  // full fidelity: arrows and text too
+static const char* kWinPngMime = "application/x-qt-windows-mime;value=\"PNG\"";  // the clipboard format Office reads
+#ifdef Q_OS_WIN
+static const char* kEmfMime = "image/x-emf";  // offered to Office as CF_ENHMETAFILE by EmfClipboard
+#endif
 static const char* kDocsUrl = "https://penzene.readthedocs.io/";
 static const QSize kExampleIcon(168, 84);
+
+// The Mass Spec panel's stick spectrum: m/z along the bottom, the main peaks labelled.
+class SpectrumView : public QWidget {
+public:
+    std::vector<chem::Peak> peaks;
+    SpectrumView() { setMinimumSize(260, 200); }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QColor ink = palette().color(QPalette::WindowText);
+        if (peaks.empty()) {
+            p.setPen(ink);
+            p.drawText(rect(), Qt::AlignCenter | Qt::TextWordWrap,
+                       QCoreApplication::translate("MainWindow", "Draw or select a valid structure."));
+            return;
+        }
+        const QFontMetrics fm(font());
+        const QRectF plot = QRectF(rect()).adjusted(8, fm.height() + 6, -8, -fm.height() - 8);
+        const double lo = peaks.front().mz - 1, hi = peaks.back().mz + 1;
+        auto x = [&](double mz) { return plot.left() + (mz - lo) / (hi - lo) * plot.width(); };
+        p.setPen(QPen(ink, 1));
+        p.drawLine(plot.bottomLeft(), plot.bottomRight());
+        for (int m = int(std::ceil(lo)); m <= hi; ++m) p.drawLine(QPointF(x(m), plot.bottom()), QPointF(x(m), plot.bottom() + 3));
+        p.setPen(QPen(palette().color(QPalette::Highlight), 2, Qt::SolidLine, Qt::FlatCap));
+        for (const auto& k : peaks)
+            p.drawLine(QPointF(x(k.mz), plot.bottom()), QPointF(x(k.mz), plot.bottom() - k.intensity / 100 * plot.height()));
+        // Labels on the tallest stick of each nominal mass, if it's 5% or more.
+        p.setPen(ink);
+        for (const auto& k : peaks) {
+            const bool main = k.intensity >= 5 && std::none_of(peaks.begin(), peaks.end(), [&](const chem::Peak& o) {
+                                  return std::abs(o.mz - k.mz) < 0.5 && o.intensity > k.intensity;
+                              });
+            if (!main) continue;
+            const QString text = QString::number(k.mz, 'f', 4);
+            const double y = plot.bottom() - k.intensity / 100 * plot.height() - 4;
+            p.drawText(QPointF(x(k.mz) - fm.horizontalAdvance(text) / 2.0, y), text);
+        }
+        p.drawText(QRectF(plot.left(), plot.bottom() + 4, plot.width(), fm.height() + 4), Qt::AlignRight, "m/z");
+    }
+};
+
+// The NMR panel's predicted spectrum: one stick per set of equivalent atoms, as tall as the atoms (or H)
+// it stands for, ppm falling left to right. The stick under the pointer, or stepped to with Left/Right,
+// is labelled and lights its atoms on the canvas.
+class NmrView : public QWidget {
+public:
+    std::vector<chem::NmrStick> sticks;
+    bool proton = false;
+    Document doc;  // the sticks' own: names their atoms, whatever the canvas holds by now
+    std::vector<int> atoms;  // the molecule they're for
+    Document molecule;       // and it alone, drawn as the legend
+    std::function<void(const std::vector<int>&)> light;
+    int current = -1;
+    NmrView() {
+        setMinimumSize(260, 200);
+        setMouseTracking(true);
+        setFocusPolicy(Qt::StrongFocus);
+    }
+    QString describe(int k) const {
+        const auto& s = sticks[k];
+        QStringList atoms;
+        for (int a : s.atoms) atoms << QString::fromStdString(chem::symbol(doc.atoms[a].z)) + QString::number(a + 1);
+        return QCoreApplication::translate("MainWindow", "δ %1%2, %3 %4: %5")
+            .arg(s.weak ? "~" : "")
+            .arg(s.ppm, 0, 'f', proton ? 2 : 1)
+            .arg(s.count)
+            .arg(proton ? "H, " + s.multiplicity() : "C", atoms.join(", "));
+    }
+    QString reading() const {  // for screen readers: the stick in hand, else all of them
+        QStringList all;
+        for (int k = 0; k < int(sticks.size()); ++k)
+            if (current < 0 || k == current) all << describe(k);
+        return all.join("; ");
+    }
+    void setCurrent(int k) {
+        if (k == current) return;
+        current = k;
+        setAccessibleDescription(reading());
+        light(k >= 0 ? sticks[k].atoms : std::vector<int>{});
+        update();
+    }
+
+protected:
+    QRectF plot() const {
+        const QFontMetrics fm(font());
+        return QRectF(rect()).adjusted(8, fm.height() + 6, -8, -fm.height() - 8);
+    }
+    std::pair<double, double> range() const {  // ppm at the left and right edges
+        double left = proton ? 12 : 220, right = 0;
+        for (const auto& s : sticks) left = std::max(left, s.ppm + 1), right = std::min(right, s.ppm - 1);
+        return {left, right};
+    }
+    double x(double ppm) const {
+        const auto [l, r] = range();
+        return plot().left() + (l - ppm) / (l - r) * plot().width();
+    }
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        const QColor ink = palette().color(QPalette::WindowText);
+        if (sticks.empty()) {
+            p.setPen(ink);
+            p.drawText(rect(), Qt::AlignCenter | Qt::TextWordWrap,
+                       QCoreApplication::translate("MainWindow", "Draw or select a structure with predicted shifts."));
+            return;
+        }
+        const QFontMetrics fm(font());
+        const QRectF plot = this->plot();
+        const auto [l, r] = range();
+        p.setPen(QPen(ink, 1));
+        p.drawLine(plot.bottomLeft(), plot.bottomRight());
+        const int step = proton ? 1 : 20;
+        for (int v = int(std::floor(l / step)) * step; v >= r; v -= step) {
+            p.drawLine(QPointF(x(v), plot.bottom()), QPointF(x(v), plot.bottom() + 3));
+            const QString t = QString::number(v);
+            if (v % (2 * step) == 0) p.drawText(QPointF(x(v) - fm.horizontalAdvance(t) / 2.0, plot.bottom() + 4 + fm.ascent()), t);
+        }
+        int tallest = 1;
+        for (const auto& s : sticks) tallest = std::max(tallest, s.count);
+        // Each stick's lines as (x, height): 1H multiplets as n + 1 lines, Pascal's triangle tall, drawn wider
+        // than a real J so they can be read.
+        std::vector<std::vector<QPointF>> lines;
+        std::vector<QPointF> all;
+        for (const auto& s : sticks) {
+            const int n = proton ? std::min(s.coupled, 6) : 0;
+            std::vector<double> row{1};
+            for (int k = 0; k < n; ++k) {
+                row.push_back(0);
+                for (int j = k + 1; j > 0; --j) row[j] += row[j - 1];
+            }
+            const double peak = *std::max_element(row.begin(), row.end());
+            lines.emplace_back();
+            for (int j = 0; j <= n; ++j)
+                lines.back().push_back({x(s.ppm) + (j - n / 2.0) * 3, row[j] / peak * s.count / tallest}), all.push_back(lines.back().back());
+        }
+        // The molecule as the legend, as large as fits a corner, the sticks shrunk to keep clear of it and their label.
+        const QRectF bounds = documentBounds(molecule);
+        const double fit = std::min({0.45 * plot.width() / std::max(bounds.width(), 1.0), 0.5 * plot.height() / std::max(bounds.height(), 1.0),
+                                     22 / kBondLength});  // a bond no longer than 22 px
+        const Legend legend = placeLegend(plot, bounds.size() * fit, all, fm.height() + 6);
+        auto top = [&](int k) { return plot.bottom() - double(sticks[k].count) / tallest * legend.scale * plot.height(); };
+        for (size_t k = 0; k < sticks.size(); ++k) {
+            const QColor c = int(k) == current ? ink : palette().color(QPalette::Highlight);
+            p.setPen(QPen(c, int(k) == current ? 3 : 2, Qt::SolidLine, Qt::FlatCap));
+            for (QPointF l : lines[k]) p.drawLine(QPointF(l.x(), plot.bottom()), QPointF(l.x(), plot.bottom() - l.y() * legend.scale * plot.height()));
+        }
+        p.save();
+        p.translate(legend.rect.topLeft());
+        p.scale(fit, fit);
+        p.translate(-bounds.topLeft());
+        paintDocument(p, molecule, {ink});
+        if (current >= 0) {  // the stick in hand's atoms, ringed
+            p.setPen(QPen(palette().color(QPalette::Highlight), 1.5 / fit));
+            p.setBrush(Qt::NoBrush);
+            for (int a : sticks[current].atoms) p.drawEllipse(doc.atoms[a].pos, 7.0, 7.0);
+        }
+        p.restore();
+        p.setPen(ink);
+        if (current >= 0) {
+            const QString t = describe(current).section(':', 0, 0);
+            const double left = std::clamp(x(sticks[current].ppm) - fm.horizontalAdvance(t) / 2.0, 0.0, width() - fm.horizontalAdvance(t) - 0.0);
+            p.drawText(QPointF(left, std::max(top(current) - 4, double(fm.ascent()))), t);
+        }
+        p.drawText(QRectF(plot.left(), 0, plot.width(), fm.height() + 4), Qt::AlignRight, "δ / ppm");
+    }
+    void mouseMoveEvent(QMouseEvent* e) override {
+        int best = -1;
+        double nearest = 6;  // px
+        for (size_t k = 0; k < sticks.size(); ++k)
+            if (double d = std::abs(x(sticks[k].ppm) - e->position().x()); d < nearest) nearest = d, best = int(k);
+        setCurrent(best);
+    }
+    void leaveEvent(QEvent*) override { setCurrent(-1); }
+    void keyPressEvent(QKeyEvent* e) override {
+        const int n = int(sticks.size());
+        if (e->key() == Qt::Key_Right && n) setCurrent(std::min(current + 1, n - 1));
+        else if (e->key() == Qt::Key_Left && n) setCurrent(std::max(current - 1, 0));
+        else QWidget::keyPressEvent(e);
+    }
+};
 
 static QString uiStyle(const Theme& t) {
     const Chrome c = chrome(t);
@@ -103,8 +296,7 @@ static QString uiStyle(const Theme& t) {
         QFrame#toolFlyout QToolButton:hover, QFrame#toolFlyout QToolButton:checked { background: %7; }
         QFrame#toolFlyout QToolButton:focus { border: 2px solid %6; }
         QFrame#toolFlyout QToolButton::menu-button { background: transparent; border: none; width: 10px; }
-        QFrame#toolFlyout QToolButton#pin { color: %5; font-size: 11px; padding: 2px 8px; border: 1px solid %3; }
-        QFrame#toolFlyout QToolButton#pin:checked { color: %6; background: %7; border-color: %6; }
+        QFrame#toolFlyout QToolButton#close { color: %5; font-size: 11px; padding: 2px 6px; border: none; }
         QLabel#flyoutTitle { color: %5; font-size: 11px; font-weight: 700; letter-spacing: 1px; }
         QDockWidget#properties, QDockWidget#templates { background: %1; color: %4; border: none; }
         QDockWidget::title { background: %2; color: %4; border: 1px solid %3; border-radius: 10px; padding: 8px; }
@@ -140,7 +332,16 @@ static QString uiStyle(const Theme& t) {
 
 MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_, this)) {
 #ifdef Q_OS_MACOS
-    static ChemDrawPasteboard chemDraw;  // registers itself with Qt, once
+    // Registers itself with Qt, once. Qt deletes its converters when QApplication goes, so this
+    // one must be on the heap: a static was freed there, aborting on quit.
+    static auto* chemDraw = new ChemDrawPasteboard;
+    Q_UNUSED(chemDraw);
+#endif
+#ifdef Q_OS_WIN
+    // Registers itself with Qt's Windows plugin (only there: it asserts on any other), once. Never
+    // deleted: its destructor would look for the plugin after QApplication has gone.
+    static const bool emf = QGuiApplication::platformName() == "windows" && (new EmfClipboard) && (new EmbedClipboard);
+    Q_UNUSED(emf);
 #endif
     undoGroup_ = new QUndoGroup(this);
     undoGroup_->addStack(undo_);
@@ -206,6 +407,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     templateDock_->setObjectName("templates");
     templates_ = new QTreeWidget;
     templates_->setHeaderHidden(true);
+    templates_->setAccessibleName(tr("Templates"));
     templates_->setIconSize({56, 40});
     templates_->setContextMenuPolicy(Qt::CustomContextMenu);
     auto* templateCard = new QFrame;
@@ -253,6 +455,97 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     connect(profileDock_, &QDockWidget::visibilityChanged, this, &MainWindow::updateProfile);
     connect(canvas_, &Canvas::documentChanged, this, &MainWindow::updateProfile);
     connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::updateProfile);
+    // Mass Spec panel, beside Properties: the isotope pattern of the selection or everything.
+    massDock_ = new QDockWidget(tr("Mass Spec"), this);
+    massDock_->setObjectName("massSpec");
+    auto* massCard = new QFrame;
+    massCard->setObjectName("panelCard");
+    auto* massLayout = new QVBoxLayout(massCard);
+    massLayout->setContentsMargins(12, 12, 12, 12);
+    ion_ = new QComboBox;
+    ion_->addItems({"[M]⁺•", "[M+H]⁺", "[M+Na]⁺", "[M−H]⁻"});
+    ion_->setCurrentIndex(1);
+    ion_->setAccessibleName(tr("Ion"));  // macOS reads the current item; Windows needs a name
+    spectrum_ = new SpectrumView;
+    spectrum_->setAccessibleName(tr("Isotope pattern"));
+    massLayout->addWidget(ion_);
+    massLayout->addWidget(spectrum_, 1);
+    eiIons_ = new QLabel;
+    eiIons_->setWordWrap(true);
+    eiIons_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    massLayout->addWidget(eiIons_);
+    auto* massButtons = new QHBoxLayout;
+    auto* copyHrms = new QPushButton(tr("Copy HRMS Line"));
+    copyHrms->setToolTip(tr("The ion's calculated mass, for the supporting information"));
+    connect(copyHrms, &QPushButton::clicked, this, [this] {
+        const QString line = chem::hrmsLine(canvas_->selectedSubset(), chem::Ion(ion_->currentIndex()));
+        if (line.isEmpty()) return statusBar()->showMessage(tr("No valid structure for an HRMS line"), 4000);  // the clipboard kept
+        QGuiApplication::clipboard()->setText(line);
+    });
+    auto* exportPattern = new QPushButton(tr("Export CSV…"));
+    exportPattern->setToolTip(tr("The isotope pattern as m/z and intensity"));
+    connect(exportPattern, &QPushButton::clicked, this, [this] {
+        if (spectrum_->peaks.empty()) return;
+        const QString path = QFileDialog::getSaveFileName(this, tr("Export Isotope Pattern"), "isotope-pattern.csv", tr("CSV (*.csv)"));
+        QFile f(path);
+        if (path.isEmpty() || !f.open(QIODevice::WriteOnly | QIODevice::Text)) return;
+        QTextStream out(&f);
+        out << "mz,intensity\n";
+        for (const auto& k : spectrum_->peaks) out << QString::number(k.mz, 'f', 4) << ',' << QString::number(k.intensity, 'f', 2) << '\n';
+    });
+    massButtons->addWidget(copyHrms);
+    massButtons->addWidget(exportPattern);
+    massLayout->addLayout(massButtons);
+    massCard->setMinimumWidth(300);
+    massDock_->setWidget(massCard);
+    addDockWidget(Qt::RightDockWidgetArea, massDock_);
+    massDock_->hide();
+    connect(massDock_, &QDockWidget::visibilityChanged, this, &MainWindow::updateMassSpec);
+    connect(ion_, &QComboBox::currentIndexChanged, this, &MainWindow::updateMassSpec);
+    connect(canvas_, &Canvas::documentChanged, this, &MainWindow::updateMassSpec);
+    connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::updateMassSpec);
+    // NMR panel (#444): the predicted spectrum of the selection or everything.
+    nmrDock_ = new QDockWidget(tr("NMR"), this);
+    nmrDock_->setObjectName("nmr");
+    auto* nmrCard = new QFrame;
+    nmrCard->setObjectName("panelCard");
+    auto* nmrLayout = new QVBoxLayout(nmrCard);
+    nmrLayout->setContentsMargins(12, 12, 12, 12);
+    nucleus_ = new QComboBox;
+    nucleus_->addItems({"¹³C", "¹H"});
+    nucleus_->setAccessibleName(tr("Nucleus"));
+    nmr_ = new NmrView;
+    nmr_->setAccessibleName(tr("Predicted spectrum"));
+    nmr_->setToolTip(tr("Point at a stick, or press Left and Right, to light its atoms"));
+    nmr_->light = [this](const std::vector<int>& atoms) { canvas_->setHighlight(QSet<int>(atoms.begin(), atoms.end())); };
+    auto* notice = new QLabel(tr("Predicted; ~ in a stick's label marks a weaker match.") + " " + nmrshiftdbNotice().join(" "));
+    notice->setWordWrap(true);
+    notice->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    notice->setStyleSheet("font-size: 10px;");
+    nmrLayout->addWidget(nucleus_);
+    nmrLayout->addWidget(nmr_, 1);
+    auto* copyNmr = new QPushButton(tr("Copy SI Line"));
+    copyNmr->setToolTip(tr("The predicted shifts as a supporting-information line, to replace with measured ones"));
+    connect(copyNmr, &QPushButton::clicked, this, [this] {
+        const QString line = chem::nmrLine(nmr_->doc, nmr_->proton, nmr_->atoms);
+        if (line.isEmpty()) return statusBar()->showMessage(tr("No predicted shifts to copy"), 4000);  // the clipboard kept
+        QGuiApplication::clipboard()->setText(line);
+    });
+    nmrLayout->addWidget(copyNmr);
+    nmrLayout->addWidget(notice);
+    nmrCard->setMinimumWidth(300);
+    nmrDock_->setWidget(nmrCard);
+    addDockWidget(Qt::RightDockWidgetArea, nmrDock_);
+    nmrDock_->hide();
+    connect(nmrDock_, &QDockWidget::visibilityChanged, this, &MainWindow::updateNmr);
+    connect(nucleus_, &QComboBox::currentIndexChanged, this, &MainWindow::updateNmr);
+    connect(canvas_, &Canvas::documentChanged, this, &MainWindow::updateNmr);
+    connect(canvas_, &Canvas::selectionChanged, this, &MainWindow::updateNmr);
+    connect(canvas_, &Canvas::hotspotAtomChanged, this, [this](int atom) {  // an atom under the pointer: its stick
+        const auto& s = nmr_->sticks;
+        const auto k = std::find_if(s.begin(), s.end(), [&](const chem::NmrStick& k) { return std::count(k.atoms.begin(), k.atoms.end(), atom); });
+        if (nmrDock_->isVisible()) nmr_->setCurrent(k == s.end() ? -1 : int(k - s.begin()));
+    });
     buildTools();
     buildMenus();
     connect(undoGroup_, &QUndoGroup::cleanChanged, this, &MainWindow::updateTitle);
@@ -346,14 +639,21 @@ void MainWindow::paintExamples() {
         button->setIcon(drawingIcon(doc, kExampleIcon, ink, devicePixelRatioF()));
 }
 
+// A smaller window pulls the open flyouts back inside it, so none is stranded off-screen.
+void MainWindow::resizeEvent(QResizeEvent* e) {
+    QMainWindow::resizeEvent(e);
+    for (auto* f : flyouts_)
+        if (f->isVisible())
+            f->move(std::clamp(f->x(), 0, std::max(0, width() - f->width())),
+                    std::clamp(f->y(), 0, std::max(0, height() - f->height())));
+}
+
 bool MainWindow::eventFilter(QObject* watched, QEvent* e) {
     if (watched == qApp && e->type() == QEvent::FileOpen) {
         if (maybeSave()) openFile(static_cast<QFileOpenEvent*>(e)->file());
         return true;
     }
     if (watched == canvas_->viewport() && e->type() == QEvent::MouseButtonPress) {
-        for (auto* f : flyouts_)  // drawing closes a tool flyout unless it's pinned
-            if (!f->findChild<QToolButton*>("pin")->isChecked()) f->hide();
         if (welcome_->isVisible() && !welcome_->geometry().contains(static_cast<QMouseEvent*>(e)->position().toPoint()))
             welcome_->hide();  // and the click goes on to draw
     }
@@ -418,6 +718,54 @@ void MainWindow::updateProfile() {
     profileText_ = plain.join("\n");
 }
 
+void MainWindow::updateMassSpec() {
+    if (!massDock_->isVisible()) return;
+    spectrum_->peaks = chem::isotopePattern(canvas_->selectedSubset(), chem::Ion(ion_->currentIndex()));
+    QStringList sticks;  // for screen readers
+    for (const auto& k : spectrum_->peaks)
+        sticks << QString("%1 (%2%)").arg(k.mz, 0, 'f', 4).arg(k.intensity, 0, 'f', 1);
+    spectrum_->setAccessibleDescription(sticks.join(", "));
+    spectrum_->update();
+    const auto ions = ion_->currentIndex() == int(chem::Ion::M) ? chem::eiIons(canvas_->selectedSubset()) : std::vector<chem::EiIon>{};
+    QString rows;
+    for (const auto& i : ions)
+        rows += QString("<tr><td>%1</td><td>%2</td><td>%3</td></tr>").arg(i.mz, 0, 'f', 4).arg(i.formula, i.from.toHtmlEscaped());
+    eiIons_->setText(tr("<b>EI ions to look for</b> (from the groups drawn; no intensities)") +
+                     "<table cellspacing=\"4\">" + rows + "</table>");
+    eiIons_->setVisible(!ions.empty());
+}
+
+void MainWindow::updateNmr() {
+    nmr_->current = -1;
+    canvas_->setHighlight({});
+    if (!nmrDock_->isVisible()) return;
+    // One molecule's spectrum: the one holding most of the selection, else the largest.
+    const Document& d = canvas_->document();
+    const QSet<int>& selected = canvas_->selection();
+    std::vector<bool> seen(d.atoms.size());
+    std::pair<int, size_t> best{-1, 0};
+    nmr_->atoms.clear();
+    for (int i = 0; i < int(d.atoms.size()); ++i) {
+        if (seen[i]) continue;
+        auto mol = edit::moleculeOf(d, i);
+        int picked = 0;
+        for (int a : mol) seen[a] = true, picked += selected.contains(a);
+        if (std::pair{picked, mol.size()} > best) best = {picked, mol.size()}, nmr_->atoms = std::move(mol);
+    }
+    std::sort(nmr_->atoms.begin(), nmr_->atoms.end());
+    nmr_->proton = nucleus_->currentIndex() == 1;
+    nmr_->doc = d;
+    nmr_->molecule = d;
+    std::vector<int> others;
+    for (int i = 0; i < int(d.atoms.size()); ++i)
+        if (!std::binary_search(nmr_->atoms.begin(), nmr_->atoms.end(), i)) others.push_back(i);
+    nmr_->molecule.removeAtoms(others);
+    nmr_->molecule.arrows.clear(), nmr_->molecule.texts.clear();
+    nmr_->sticks = nmr_->atoms.empty() ? std::vector<chem::NmrStick>{} : chem::nmrSticks(d, nmr_->proton, nmr_->atoms);
+    nmr_->setAccessibleDescription(nmr_->reading());
+    nmr_->update();
+}
+
 // Formula and masses of the selection, or of everything.
 void MainWindow::updateInfo() {
     auto p = chem::properties(canvas_->selectedSubset());
@@ -438,6 +786,9 @@ MainWindow::~MainWindow() {
 
 void MainWindow::updateTitle() {
     QString name = path_.isEmpty() ? tr("Untitled") : QFileInfo(path_).fileName();
+#ifdef Q_OS_WIN
+    if (embeddedSave_) name = embeddedIn_.isEmpty() ? tr("Embedded drawing") : tr("Drawing in %1").arg(embeddedIn_);
+#endif
     setWindowTitle(name + "[*] — Penzene " PENZENE_BUILD);
     setWindowModified(!isClean());
 }
@@ -570,7 +921,16 @@ bool MainWindow::openFile(const QString& path) {
         sheets = {{tr("Page 1"), *doc}};
     }
     if (sheets.empty()) {
-        QMessageBox::warning(this, tr("Open"), tr("%1 is not a structure file I can read.").arg(path));
+        const QFileInfo info(path);
+        if (!info.exists() && info.dir().exists()) {  // gone from its folder, not on a drive that isn't mounted (#488)
+            QStringList files = recentFiles();
+            files.removeAll(info.absoluteFilePath());
+            QSettings().setValue("recentFiles", files);
+        }
+        QMessageBox::warning(this, tr("Open"),
+                             !info.exists()       ? tr("%1 doesn't exist. It may have been moved or deleted.").arg(path)
+                             : !info.isReadable() ? tr("%1 can't be opened for reading.").arg(path)
+                                                  : tr("%1 is not a structure file I can read.").arg(path));
         return false;
     }
     setPages(sheets);
@@ -634,6 +994,7 @@ void MainWindow::offerRecovery() {
         setPages(sheets);
         canvas_->commit(first, tr("Recover"));  // unsaved, so Save asks where to put it
         pagesEdited_ = sheets.size() > 1;
+        path_.clear();  // not the file opened at launch, which Save would overwrite (#491)
         updateTitle();
         return;
     }
@@ -704,13 +1065,22 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
 }
 
 bool MainWindow::save() {
+#ifdef Q_OS_WIN
+    if (embeddedSave_) {  // back into the Word or PowerPoint document (#229)
+        if (!embeddedSave_()) return false;
+        for (auto& p : pages_) p.undo->setClean();
+        pagesEdited_ = false;
+        updateTitle();
+        return true;
+    }
+#endif
     // MOL can't hold everything .penz will (text, arrows), so only .penz saves silently.
     return path_.endsWith(".penz", Qt::CaseInsensitive) ? saveTo(path_) : saveAs();
 }
 
 bool MainWindow::saveAs() {
     const QString v3000 = tr("MDL Molfile V3000 (*.mol)");
-    const QString penz1 = tr("Penzene 1 (single page) (*.penz)");  // what Penzene 1.4 and earlier open (#404)
+    const QString penz1 = tr("Penzene 1 (single page) (*.penz)");  // what Penzene 1.x opens (#404)
     QString filter;
     QString path = QFileDialog::getSaveFileName(this, tr("Save As"), path_,
                                                 tr("Penzene document (*.penz);;") + penz1 + tr(";;MDL Molfile (*.mol);;") + v3000 +
@@ -1061,6 +1431,16 @@ void MainWindow::importSmiles() {
     else QMessageBox::warning(this, tr("Import SMILES"), tr("Not a valid SMILES string."));
 }
 
+void MainWindow::importSequence() {
+    bool ok = false;
+    const QString s = QInputDialog::getText(this, tr("Import Peptide Sequence"),
+                                            tr("One-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser, H-Gly-D-Phe-OH):"),
+                                            QLineEdit::Normal, {}, &ok);
+    if (!ok || s.trimmed().isEmpty()) return;
+    if (auto doc = chem::fromSequence(s)) canvas_->insert(*doc, tr("Import %1").arg(s.trimmed()));
+    else QMessageBox::warning(this, tr("Import Peptide Sequence"), tr("Not a peptide sequence."));
+}
+
 void MainWindow::importName() {
     bool ok = false;
     const QString name = QInputDialog::getText(this, tr("Import Name"),
@@ -1077,23 +1457,38 @@ void MainWindow::importName() {
         QMessageBox::warning(this, tr("Import Name"), tr("Could not look up “%1”: %2").arg(name.trimmed(), error));
 }
 
-void MainWindow::copy() {
+bool MainWindow::copy() {
     Document doc = canvas_->selectedSubset();
-    if (doc.empty() || !confirmStructure(doc, tr("Copy"), tr("Copy Anyway"))) return;
+    if (doc.empty() || !confirmStructure(doc, tr("Copy"), tr("Copy Anyway"))) return false;
     auto* mime = new QMimeData;
-    mime->setImageData(renderImage(doc, exportOptions()));
+    const QByteArray penz = doc.toJson();
+#ifdef Q_OS_WIN
+    // First, so Ctrl+V in Word and PowerPoint can embed an object that opens here (#229): EmbedClipboard
+    // offers the drawing as "Embed Source" once the installer has registered Penzene.
+    mime->setData(kPenzMime, penz);
+    mime->setData(kEmfMime, renderEmf(doc, exportOptions()));  // vector for Word and PowerPoint, ahead of the bitmap
+#endif
+    // The PNG as exported, so the drawing in its text chunk survives: Qt re-encodes an image
+    // it converts itself and drops it. The image stays for apps that only read a bitmap.
+    const QByteArray png = renderPng(doc, exportOptions());
+    mime->setData("image/png", png);
+#ifdef Q_OS_WIN
+    mime->setData(kWinPngMime, png);  // Qt offers no "PNG" for an image; elsewhere image/png is enough
+#endif
+    mime->setImageData(QImage::fromData(png, "PNG"));
     mime->setData("image/svg+xml", renderSvg(doc, exportOptions()));
     mime->setData("application/pdf", renderPdf(doc, exportOptions()));  // vector, for Office and Keynote
-    mime->setData(kPenzMime, doc.toJson());
+    mime->setData(kPenzMime, penz);  // already first on Windows, where this keeps its place
     // For pasting into ChemDraw (macOS maps this to its pasteboard type through ChemDrawPasteboard).
     if (const QByteArray cdx = doc.atoms.empty() ? QByteArray() : chem::toCdx(doc); !cdx.isEmpty())
         mime->setData("chemical/x-cdx", cdx);
     if (!doc.atoms.empty()) {
-        std::string mol = chem::toMolBlock(doc), smi = chem::toSmiles(doc);
+        // No plain text: Office's ⌘V/Ctrl+V takes text over a picture (Copy as SMILES gives it).
+        const std::string mol = chem::toMolBlock(doc);
         mime->setData(kMolMime, QByteArray::fromStdString(mol));
-        mime->setText(QString::fromStdString(smi.empty() ? mol : smi));
     }
     QApplication::clipboard()->setMimeData(mime);
+    return true;
 }
 
 #ifdef Q_OS_MACOS
@@ -1102,10 +1497,12 @@ void MainWindow::copy() {
 ChemDrawPasteboard::ChemDrawPasteboard() = default;
 QString ChemDrawPasteboard::mimeForUti(const QString& uti) const {
     if (uti == "com.adobe.pdf") return "application/pdf";
+    if (uti == "public.png") return "image/png";
     return uti == "com.perkinelmer.chemdraw.cdx-clipboard" ? "chemical/x-cdx" : QString();
 }
 QString ChemDrawPasteboard::utiForMime(const QString& mime) const {
     if (mime == "application/pdf") return "com.adobe.pdf";
+    if (mime == "image/png") return "public.png";
     return mime == "chemical/x-cdx" ? "com.perkinelmer.chemdraw.cdx-clipboard" : QString();
 }
 QVariant ChemDrawPasteboard::convertToMime(const QString&, const QList<QByteArray>& data, const QString&) const {
@@ -1118,16 +1515,17 @@ QList<QByteArray> ChemDrawPasteboard::convertFromMime(const QString&, const QVar
 
 void MainWindow::paste() {
     const QMimeData* mime = QApplication::clipboard()->mimeData();
+    // Our own first: Penzene's copy also offers CDX, which drops brackets and fills.
+    if (auto doc = Document::fromJson(mime->data(kPenzMime)); doc && !doc->empty())
+        return canvas_->insert(*doc, tr("Paste"));
     // ChemDraw: CDX as chemical/x-cdx (macOS, via ChemDrawPasteboard) or its
     // Windows clipboard format; CDXML where an app offers that.
     for (const QString& type : mime->formats())
         if (type == "chemical/x-cdx" || type == "chemical/x-cdxml" || type.contains("ChemDraw Interchange Format"))
             if (auto doc = chem::fromChemDraw(mime->data(type)); doc && !doc->empty())
                 return canvas_->insert(*doc, tr("Paste"));
-    if (auto doc = Document::fromJson(mime->data(kPenzMime)); doc && !doc->empty())
-        return canvas_->insert(*doc, tr("Paste"));
     // A figure Penzene exported, copied from another app or as a file: the drawing inside it.
-    for (const char* type : {"image/svg+xml", "application/pdf", "image/png"})
+    for (const char* type : {"image/svg+xml", "application/pdf", "image/png", kWinPngMime})
         if (auto doc = Document::fromEmbedded(mime->data(type)); doc && !doc->empty())
             return canvas_->insert(*doc, tr("Paste"));
     for (const QUrl& url : mime->urls())
@@ -1157,6 +1555,32 @@ static IconMaker paintedIcon(std::function<void(QPainter&, QColor)> paint) {
     paint(p, QApplication::palette().color(QPalette::WindowText));
     return QIcon(pm);
     };
+}
+
+QPixmap inkGlyph(const QPixmap& icon, const QColor& ink) {
+    const QImage img = icon.toImage();
+    for (int y = 0; y < img.height(); ++y)
+        for (int x = 0; x < img.width(); ++x)
+            if (const QColor c = img.pixelColor(x, y); c.alpha() > 200 && c.value() > 100)
+                return icon;  // coloured or light: it shows on a dark theme as it is
+    QPixmap pm = icon;  // same alpha and anti-aliasing, in the ink, like the tool icons
+    QPainter p(&pm);
+    p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+    p.fillRect(pm.rect(), ink);
+    return pm;
+}
+
+QStyle* themedStyle() {
+    // QMessageBox takes its icon from the icon theme before the style, so fix the pixmap it chose.
+    struct Style : QProxyStyle {
+        using QProxyStyle::polish;
+        void polish(QWidget* w) override {
+            QProxyStyle::polish(w);
+            if (auto* box = qobject_cast<QMessageBox*>(w); box && !box->iconPixmap().isNull())
+                box->setIconPixmap(inkGlyph(box->iconPixmap(), box->palette().color(QPalette::WindowText)));
+        }
+    };
+    return new Style;
 }
 
 static IconMaker docIcon(const Document& d) {
@@ -1213,6 +1637,49 @@ static Document textDoc(const QString& s) {
     return d;
 }
 
+// Screen readers, and tools driving the accessibility API, toggle a checkable button where a user
+// clicks it, and Qt's toggle only flips the check: the tool was never picked (#535). A pressable
+// button answers both press and toggle with a real click.
+class PressableButton : public QAccessibleWidget {
+public:
+    explicit PressableButton(QAbstractButton* b) : QAccessibleWidget(b, QAccessible::CheckBox) {}
+    QAccessible::State state() const override {
+        QAccessible::State s = QAccessibleWidget::state();
+        s.checkable = button()->isCheckable();
+        s.checked = button()->isChecked();
+        return s;
+    }
+    QString text(QAccessible::Text t) const override {
+        const QString s = QAccessibleWidget::text(t);
+        return t == QAccessible::Name && s.isEmpty() ? button()->text() : s;
+    }
+    QStringList actionNames() const override {
+        QStringList names{pressAction(), toggleAction()};
+        if (auto* t = qobject_cast<QToolButton*>(button()); t && t->menu()) names << showMenuAction();
+        return names + QAccessibleWidget::actionNames();
+    }
+    void doAction(const QString& name) override {
+        if (name == pressAction() || name == toggleAction()) button()->click();
+        else if (name == showMenuAction()) static_cast<QToolButton*>(button())->showMenu();
+        else QAccessibleWidget::doAction(name);
+    }
+
+private:
+    QAbstractButton* button() const { return static_cast<QAbstractButton*>(widget()); }
+};
+
+static void pressable(QAbstractButton* b) {
+    static const bool installed = [] {
+        QAccessible::installFactory([](const QString&, QObject* o) -> QAccessibleInterface* {
+            auto* b = qobject_cast<QAbstractButton*>(o);
+            return b && b->property("pressable").toBool() ? new PressableButton(b) : nullptr;
+        });
+        return true;
+    }();
+    Q_UNUSED(installed);
+    b->setProperty("pressable", true);
+}
+
 // Periodic table: main block by group and period, lanthanides and actinides
 // underneath. Organic elements are bold, since they're the ones drawn most.
 // A drop-down of colour swatches plus "Custom…", for the colour and ring fill tools.
@@ -1226,6 +1693,7 @@ static QMenu* colourMenu(QWidget* parent, const QList<QColor>& presets, std::fun
     grid->setContentsMargins(6, 6, 6, 6);
     for (int i = 0; i < presets.size(); ++i) {
         auto* b = new QToolButton;
+        pressable(b);
         b->setFixedSize(24, 24);
         b->setAutoRaise(true);
         b->setToolTip(names.value(i, presets[i].name()));
@@ -1274,6 +1742,132 @@ struct GridArrows : QObject {
                 item->widget()->setFocus(Qt::TabFocusReason);
                 break;
             }
+        return true;
+    }
+};
+
+// A tool flyout: the tools flow into as many columns as fit its width. Drag it by any part that
+// isn't a tool (its title, margins and gaps) to move it off the others (#466), or by a corner
+// to resize it; the tools reflow and the box follows them.
+struct FlyoutFrame : QObject {
+    struct Tool {
+        QWidget* w;
+        int span;
+        bool newRow;
+    };
+    QWidget* fly;
+    QGridLayout* grid;
+    std::vector<Tool> tools;
+    bool nextNewRow = false;
+    static constexpr int kDefaultCols = 4;
+    int cols = kDefaultCols;
+    int corner = 0;  // the corner being dragged: Qt::Edges, or 0 when moving
+    QPoint grab;  // where the drag began, in the window
+    QRect start;  // and the box then
+
+    FlyoutFrame(QWidget* flyout, QGridLayout* g) : QObject(flyout), fly(flyout), grid(g) {
+        flyout->setCursor(Qt::SizeAllCursor);
+        flyout->setMouseTracking(true);
+        flyout->installEventFilter(this);
+    }
+    void newRow() { nextNewRow = true; }  // the next tool starts a row, at the default width (resized, the tools just flow)
+    void add(QWidget* w, int span = 1) {
+        tools.push_back({w, span, std::exchange(nextNewRow, false)});
+        place(cols);
+    }
+    void place(int c) {
+        cols = c;
+        int slot = 0;
+        for (auto& t : tools) {
+            grid->removeWidget(t.w);
+            const int span = std::min(t.span, c);
+            if (t.newRow && c == kDefaultCols) slot = (slot + c - 1) / c * c;
+            if (slot % c + span > c) slot = (slot / c + 1) * c;
+            grid->addWidget(t.w, slot / c, slot % c, 1, span);
+            slot += span;
+        }
+    }
+    QSize sizeFor(int c) {
+        place(c);
+        fly->layout()->invalidate();
+        fly->layout()->activate();
+        return fly->layout()->minimumSize();
+    }
+    // The column count for a box dragged to `want`: as many as fit the width, or, when the drag
+    // was mostly vertical, the fewest that fit the height. Never wider than the window.
+    void fit(QSize want, int maxWidth, bool byHeight) {
+        int most = 0;
+        for (auto& t : tools) most += t.span;
+        int c = 1;
+        if (byHeight) {
+            while (c < most && sizeFor(c).height() > want.height() && sizeFor(c + 1).width() <= maxWidth) ++c;
+        } else {
+            for (int n = 1; n <= most && sizeFor(n).width() <= std::min(want.width(), maxWidth); ++n) c = n;
+        }
+        place(c);
+    }
+    int cornerAt(QPoint p) const {
+        constexpr int zone = 12;
+        int edges = 0;
+        if (p.x() < zone) edges |= Qt::LeftEdge;
+        if (p.x() >= fly->width() - zone) edges |= Qt::RightEdge;
+        if (p.y() < zone) edges |= Qt::TopEdge;
+        if (p.y() >= fly->height() - zone) edges |= Qt::BottomEdge;
+        const bool horizontal = edges & (Qt::LeftEdge | Qt::RightEdge), vertical = edges & (Qt::TopEdge | Qt::BottomEdge);
+        return horizontal && vertical ? edges : 0;
+    }
+    static Qt::CursorShape cursorFor(int edges) {
+        if (!edges) return Qt::SizeAllCursor;
+        const bool topLeftOrBottomRight = bool(edges & Qt::LeftEdge) == bool(edges & Qt::TopEdge);
+        return topLeftOrBottomRight ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor;
+    }
+    void resize(QPoint mouse) {
+        QWidget* window = fly->parentWidget();
+        const QRect old = start;
+        const int left = corner & Qt::LeftEdge ? mouse.x() : old.left(), right = corner & Qt::RightEdge ? mouse.x() : old.right();
+        const int top = corner & Qt::TopEdge ? mouse.y() : old.top(), bottom = corner & Qt::BottomEdge ? mouse.y() : old.bottom();
+        const QPoint moved = mouse - grab;
+        fit({right - left + 1, bottom - top + 1}, window->width(), std::abs(moved.y()) > std::abs(moved.x()));
+        const QSize size = sizeFor(cols);
+        // The corner opposite the one dragged stays put.
+        QPoint at(corner & Qt::LeftEdge ? old.right() + 1 - size.width() : old.left(),
+                  corner & Qt::TopEdge ? old.bottom() + 1 - size.height() : old.top());
+        at.setX(std::clamp(at.x(), 0, std::max(0, window->width() - size.width())));
+        at.setY(std::clamp(at.y(), 0, std::max(0, window->height() - size.height())));
+        fly->setGeometry({at, size});
+    }
+    bool eventFilter(QObject*, QEvent* e) override {
+        if (e->type() == QEvent::Show) {  // the tools keep the ordinary pointer
+            for (auto* b : fly->findChildren<QAbstractButton*>()) b->setCursor(Qt::ArrowCursor);
+            return false;
+        }
+        const auto type = e->type();
+        if (type != QEvent::MouseButtonPress && type != QEvent::MouseMove && type != QEvent::MouseButtonRelease) return false;
+        const auto* me = static_cast<QMouseEvent*>(e);
+        QWidget* window = fly->parentWidget();
+        const QPoint mouse = window->mapFromGlobal(me->globalPosition().toPoint());
+        if (type == QEvent::MouseButtonPress) {
+            corner = cornerAt(me->position().toPoint());
+            grab = corner ? mouse : mouse - fly->pos();
+            start = fly->geometry();
+            fly->raise();  // over another one it overlaps
+            return true;
+        }
+        if (type == QEvent::MouseButtonRelease) {
+            corner = 0;
+            return false;
+        }
+        if (!(me->buttons() & Qt::LeftButton)) {
+            fly->setCursor(cursorFor(cornerAt(me->position().toPoint())));
+            return false;
+        }
+        if (corner) {
+            resize(mouse);
+            return true;
+        }
+        const QPoint to = mouse - grab;
+        fly->move(std::clamp(to.x(), 0, std::max(0, window->width() - fly->width())),
+                  std::clamp(to.y(), 0, std::max(0, window->height() - fly->height())));
         return true;
     }
 };
@@ -1344,19 +1938,18 @@ void MainWindow::buildTools() {
     auto groups = std::make_shared<std::vector<Group>>();
     auto showFlyout = [this, groups](int i) {
         const Group& g = (*groups)[i];
-        for (auto* f : flyouts_)
-            if (f != g.flyout) f->hide();
-        g.flyout->adjustSize();
-        QPoint at = g.railButton->mapTo(this, QPoint(g.railButton->width() + 12, 0));
-        at.setY(std::min(at.y(), height() - g.flyout->height() - 8));
-        g.flyout->move(at);
+        if (!g.flyout->isVisible()) {  // an open one stays where it was dragged
+            g.flyout->ensurePolished();  // its stylesheet decides its size: measure it after that, not on the first show
+            g.flyout->adjustSize();
+            QPoint at = g.railButton->mapTo(this, QPoint(g.railButton->width() + 12, 0));
+            at.setY(std::min(at.y(), height() - g.flyout->height() - 8));
+            g.flyout->move(at);
+        }
         g.flyout->raise();
         g.flyout->show();
     };
-    QGridLayout* grid = nullptr;
-    QWidget* palette = nullptr;  // the current group's flyout
-    int slot = 0;  // next free cell in it, left to right, four to a row
-    constexpr int kColumns = 4;
+    FlyoutFrame* frame = nullptr;  // the current group's flyout
+    QWidget* palette = nullptr;
     auto startGroup = [&](const QString& name, const IconMaker& icon) {
         auto* fly = new QFrame(this);
         fly->setObjectName("toolFlyout");
@@ -1367,20 +1960,21 @@ void MainWindow::buildTools() {
         auto* head = new QHBoxLayout;
         auto* title = new QLabel(name.toUpper());
         title->setObjectName("flyoutTitle");
-        auto* pin = new QToolButton;
-        pin->setObjectName("pin");
-        pin->setCheckable(true);
-        pin->setFocusPolicy(Qt::StrongFocus);
-        pin->setText(tr("Pin"));
-        pin->setToolTip(tr("Keep open while drawing"));
-        pin->setAccessibleName(tr("Keep %1 open").arg(name));
+        auto* close = new QToolButton;
+        close->setObjectName("close");
+        close->setFocusPolicy(Qt::StrongFocus);
+        close->setText("✕");
+        close->setToolTip(tr("Close"));
+        close->setAccessibleName(tr("Close %1").arg(name));
+        connect(close, &QToolButton::clicked, fly, &QWidget::hide);
         head->addWidget(title);
         head->addStretch();
-        head->addWidget(pin);
+        head->addWidget(close);
         layout->addLayout(head);
-        grid = new QGridLayout;
+        auto* grid = new QGridLayout;
         grid->setSpacing(2);
         layout->addLayout(grid);
+        frame = new FlyoutFrame(fly, grid);
         auto* escape = new QAction(fly);
         escape->setShortcut(Qt::Key_Escape);
         escape->setShortcutContext(Qt::WidgetWithChildrenShortcut);
@@ -1393,6 +1987,7 @@ void MainWindow::buildTools() {
         railGroup->addAction(railAction);
         icons_.push_back({railAction, icon});
         auto* b = new QToolButton;
+        pressable(b);
         b->setObjectName("railButton");
         b->setDefaultAction(railAction);
         b->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
@@ -1401,19 +1996,19 @@ void MainWindow::buildTools() {
         b->setAccessibleName(name);
         rail->addWidget(b);
         const int index = int(groups->size());
-        groups->push_back({b, fly, grid});
+        groups->push_back({b, fly, frame->grid});
         connect(railAction, &QAction::triggered, this, [groups, index, showFlyout] {
             (*groups)[index].railButton->defaultAction()->setChecked(true);
             if (auto* last = (*groups)[index].last) last->trigger();
             showFlyout(index);
         });
         palette = fly;
-        slot = 0;
     };
-    auto section = [&] { slot = (slot + kColumns - 1) / kColumns * kColumns; };  // a new row
+    auto section = [&] { frame->newRow(); };
     auto* group = new QActionGroup(this);
     auto button = [&](QAction* a) {
         auto* b = new QToolButton;
+        pressable(b);
         b->setDefaultAction(a);
         b->setIconSize({26, 26});
         b->setAutoRaise(true);
@@ -1422,15 +2017,13 @@ void MainWindow::buildTools() {
         static const QRegularExpression end(R"(\s*(:| \(| —).*$)");
         b->setAccessibleName(QString(a->toolTip()).remove(end));
         b->setAccessibleDescription(a->toolTip());
-        grid->addWidget(b, slot / kColumns, slot % kColumns);
-        ++slot;
+        frame->add(b);
         const int index = int(groups->size()) - 1;
         if (!(*groups)[index].last) (*groups)[index].last = a;
         connect(a, &QAction::triggered, this, [groups, index, a] {
             Group& g = (*groups)[index];
             g.last = a;
             g.railButton->defaultAction()->setChecked(true);
-            if (!g.flyout->findChild<QToolButton*>("pin")->isChecked()) g.flyout->hide();
         });
         return b;
     };
@@ -1458,8 +2051,16 @@ void MainWindow::buildTools() {
         p.drawRect(QRectF(4.5, 5.5, 15, 13));
     });
     startGroup(tr("Select"), select);
-    keys[" "] = add(select, tr("Select (drag to move, Alt+drag to rotate, double-click for fragment) — Space"),
+    keys[" "] = add(select, tr("Select (drag to move, Alt+drag to rotate, or to lasso from empty space; double-click for fragment) — Space"),
                     tool(T::Select));
+    const IconMaker rotate3D = paintedIcon([](QPainter& p, QColor ink) {
+        p.setPen(QPen(ink, 1.3));
+        p.drawEllipse(QRectF(5, 8, 14, 8));
+        p.drawArc(QRectF(3, 3, 18, 18), 40 * 16, 270 * 16);
+        p.drawLine(QPointF(17, 5), QPointF(21, 6));
+        p.drawLine(QPointF(17, 5), QPointF(19, 9));
+    });
+    add(rotate3D, tr("Rotate in 3D: drag a selected molecule out of the page; keeps stereochemistry"), tool(T::Rotate3D));
     const IconMaker eraser = paintedIcon([](QPainter& p, QColor ink) {
         p.translate(12, 12);
         p.rotate(-40);
@@ -1468,6 +2069,39 @@ void MainWindow::buildTools() {
         p.drawLine(QPointF(-2, -4), QPointF(-2, 4));
     });
     add(eraser, tr("Eraser (click an atom, bond, arrow or text)"), tool(T::Erase));
+    // Colour tool: paints atoms, bonds, arrows and text. Clicking the swatch opens the
+    // colours (CPK first); picking one chooses the tool.
+    auto colour = std::make_shared<QColor>(canvas_->colour());
+    const IconMaker colourIcon = paintedIcon([colour](QPainter& p, QColor ink) {
+        p.setPen(QPen(ink, 1));
+        p.setBrush(*colour);
+        p.drawRoundedRect(QRectF(5, 5, 14, 14), 3, 3);
+    });
+    auto* colourTool = add(colourIcon, tr("Colour: click the swatch to pick a colour, then click atoms, bonds, arrows "
+                                          "or text to paint them (again to clear)"),
+                           tool(T::Colour));
+    for (auto* b : palette->findChildren<QToolButton*>())
+        if (b->defaultAction() == colourTool) {
+            b->setPopupMode(QToolButton::InstantPopup);
+            b->setStyleSheet("QToolButton::menu-indicator { image: none; width: 0; }");
+            // CPK (Jmol) colours; sulfur darkened from #FFFF30 so it reads on white paper.
+            b->setMenu(colourMenu(b,
+                                  {Qt::black, QColor(0x30, 0x50, 0xF8), QColor(0xFF, 0x0D, 0x0D), QColor(0xD4, 0xB0, 0x00),
+                                   QColor(0xFF, 0x80, 0x00), QColor(0x90, 0xE0, 0x50), QColor(0x1F, 0xF0, 0x1F),
+                                   QColor(0xA6, 0x29, 0x29), QColor(0x94, 0x00, 0x94), QColor(0xE0, 0x66, 0x33),
+                                   QColor(0x90, 0x90, 0x90), QColor(0xFF, 0xB5, 0xB5)},
+                                  [this] { return canvas_->colour(); },
+                                  [=, this](QColor c) {
+                                      *colour = c;
+                                      canvas_->setColour(c);
+                                      canvas_->setTool(T::Colour);
+                                      colourTool->setChecked(true);
+                                      colourTool->setIcon(colourIcon());
+                                  },
+                                  {tr("Carbon"), tr("Nitrogen"), tr("Oxygen"), tr("Sulfur"), tr("Phosphorus"),
+                                   tr("Fluorine"), tr("Chlorine"), tr("Bromine"), tr("Iodine"), tr("Iron"),
+                                   tr("Carbon (grey)"), tr("Boron")}));
+        }
     const QPointF bondPts[] = {{0, 0}, {0.87, -0.5}};
     auto bondIcon = [&](int order, BondStereo st = BondStereo::None) {
         return docIcon(chainDoc({std::begin(bondPts), std::end(bondPts)}, order, st));
@@ -1558,8 +2192,8 @@ void MainWindow::buildTools() {
     });
     connect(atom, &QAction::triggered, this, [this] { canvas_->setTool(T::Atom); });
     auto* atomButton = button(atom);
-    grid->addWidget(atomButton, (slot - 1) / kColumns, 0, 1, 2);  // two cells wide
-    ++slot;
+    frame->tools.back().span = 2;  // two cells wide
+    frame->place(frame->cols);
     atomButton->setPopupMode(QToolButton::MenuButtonPopup);
     atomButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
     auto* menu = new QMenu(atomButton);
@@ -1585,40 +2219,6 @@ void MainWindow::buildTools() {
     };
     add(charge(true), tr("Positive charge: click an atom to add +1"), tool(T::ChargePlus));
     add(charge(false), tr("Negative charge: click an atom to add −1"), tool(T::ChargeMinus));
-    // Colour tool: paints atoms, bonds, arrows and text. Clicking the swatch opens the
-    // colours (CPK first); picking one chooses the tool.
-    auto colour = std::make_shared<QColor>(canvas_->colour());
-    const IconMaker colourIcon = paintedIcon([colour](QPainter& p, QColor ink) {
-        p.setPen(QPen(ink, 1));
-        p.setBrush(*colour);
-        p.drawRoundedRect(QRectF(5, 5, 14, 14), 3, 3);
-    });
-    auto* colourTool = add(colourIcon, tr("Colour: click the swatch to pick a colour, then click atoms, bonds, arrows "
-                                          "or text to paint them (again to clear)"),
-                           tool(T::Colour));
-    for (auto* b : palette->findChildren<QToolButton*>())
-        if (b->defaultAction() == colourTool) {
-            b->setPopupMode(QToolButton::InstantPopup);
-            b->setStyleSheet("QToolButton::menu-indicator { image: none; width: 0; }");
-            // CPK (Jmol) colours; sulfur darkened from #FFFF30 so it reads on white paper.
-            b->setMenu(colourMenu(b,
-                                  {Qt::black, QColor(0x30, 0x50, 0xF8), QColor(0xFF, 0x0D, 0x0D), QColor(0xD4, 0xB0, 0x00),
-                                   QColor(0xFF, 0x80, 0x00), QColor(0x90, 0xE0, 0x50), QColor(0x1F, 0xF0, 0x1F),
-                                   QColor(0xA6, 0x29, 0x29), QColor(0x94, 0x00, 0x94), QColor(0xE0, 0x66, 0x33),
-                                   QColor(0x90, 0x90, 0x90), QColor(0xFF, 0xB5, 0xB5)},
-                                  [this] { return canvas_->colour(); },
-                                  [=, this](QColor c) {
-                                      *colour = c;
-                                      canvas_->setColour(c);
-                                      canvas_->setTool(T::Colour);
-                                      colourTool->setChecked(true);
-                                      colourTool->setIcon(colourIcon());
-                                  },
-                                  {tr("Carbon"), tr("Nitrogen"), tr("Oxygen"), tr("Sulfur"), tr("Phosphorus"),
-                                   tr("Fluorine"), tr("Chlorine"), tr("Bromine"), tr("Iodine"), tr("Iron"),
-                                   tr("Carbon (grey)"), tr("Boron")}));
-        }
-
     startGroup(tr("Arrows"), docIcon(arrowDoc(ArrowKind::Reaction)));
     auto arrow = [this](ArrowKind k, bool curved, bool dashed = false, bool crossed = false) {
         return [this, k, curved, dashed, crossed] {
@@ -1712,10 +2312,6 @@ void MainWindow::buildMenus() {
         updateTitle();
         welcome_->show();
     });
-    file->addAction(tr("New &Page"), this, &MainWindow::addPage);
-    file->addAction(tr("Rena&me Page…"), this, [this] { renamePage(page_); });
-    auto* deletePageAction = file->addAction(tr("&Delete Page"), this, [this] { deletePage(page_); });
-    connect(file, &QMenu::aboutToShow, this, [=, this] { deletePageAction->setEnabled(pages_.size() > 1); });
     file->addAction(tr("&Open…"), QKeySequence::Open, this, [this] {
         if (!maybeSave()) return;
         QString p = QFileDialog::getOpenFileName(this, tr("Open"), {},
@@ -1736,8 +2332,10 @@ void MainWindow::buildMenus() {
     file->addAction(tr("&Save"), QKeySequence::Save, this, &MainWindow::save);
     file->addAction(tr("Save &As…"), QKeySequence::SaveAs, this, &MainWindow::saveAs);
     file->addSeparator();
-    file->addAction(tr("Import &SMILES…"), QKeySequence(tr("Ctrl+Shift+I")), this, &MainWindow::importSmiles);
-    file->addAction(tr("Import &Name from PubChem…"), this, &MainWindow::importName);
+    auto* importMenu = file->addMenu(tr("&Import"));
+    importMenu->addAction(tr("&SMILES…"), QKeySequence(tr("Ctrl+Shift+I")), this, &MainWindow::importSmiles);
+    importMenu->addAction(tr("&Name…"), this, &MainWindow::importName)->setStatusTip(tr("Look a name up on PubChem"));
+    importMenu->addAction(tr("&Peptide Sequence…"), this, &MainWindow::importSequence);
     file->addAction(tr("&Export…"), QKeySequence(tr("Ctrl+E")), this, &MainWindow::exportImage);
     file->addAction(tr("Export &Descriptors…"), this, &MainWindow::exportDescriptors);
     file->addAction(tr("&Print…"), QKeySequence::Print, this, &MainWindow::print);
@@ -1752,106 +2350,36 @@ void MainWindow::buildMenus() {
     edit->addAction(u);
     edit->addAction(r);
     edit->addSeparator();
-    auto* moveTo = edit->addMenu(tr("Mo&ve to Page"));
-    connect(moveTo, &QMenu::aboutToShow, this, [=, this] {
-        moveTo->clear();
-        for (int i = 0; i < int(pages_.size()); ++i)
-            if (i != page_) moveTo->addAction(pages_[i].name, this, [=, this] { moveSelectionToPage(i); });
-        if (moveTo->isEmpty()) moveTo->addAction(tr("(add a page first)"))->setEnabled(false);
-    });
     edit->addAction(tr("Cu&t"), QKeySequence::Cut, this, [this] {
-        copy();
-        canvas_->deleteSelection();
+        if (copy()) canvas_->deleteSelection();  // a cancelled copy keeps the drawing
     });
     edit->addAction(tr("&Copy"), QKeySequence::Copy, this, &MainWindow::copy);
-    edit->addAction(tr("Copy as S&MILES"), QKeySequence(tr("Ctrl+Alt+C")), this, [this] {
+    auto* copyAs = edit->addMenu(tr("Copy A&s"));
+    copyAs->addAction(tr("&SMILES"), QKeySequence(tr("Ctrl+Alt+C")), this, [this] {
         QApplication::clipboard()->setText(QString::fromStdString(chem::toSmiles(canvas_->selectedSubset())));
     });
-    edit->addAction(tr("Copy as &InChI"), this, [this] {
+    copyAs->addAction(tr("&InChI"), this, [this] {
         QApplication::clipboard()->setText(QString::fromStdString(chem::toInchi(canvas_->selectedSubset())));
     });
-    edit->addAction(tr("Copy as InChI&Key"), this, [this] {
+    copyAs->addAction(tr("InChI&Key"), this, [this] {
         QApplication::clipboard()->setText(QString::fromStdString(chem::toInchiKey(canvas_->selectedSubset())));
     });
-    edit->addAction(tr("Copy as &Reaction SMILES"), this, [this] {
-        if (const auto steps = chem::reactionsOf(canvas_->selectedSubset()); !steps.empty())
-            QApplication::clipboard()->setText(QString::fromStdString(chem::toReactionSmiles(steps)));  // a line a step
-        else
+    copyAs->addAction(tr("&Reaction SMILES"), this, [this] {
+        if (const auto steps = chem::reactionsOf(canvas_->selectedSubset()); !steps.empty()) {
+            const std::string smiles = chem::toReactionSmiles(steps);  // a line a step
+            if (smiles.empty())
+                statusBar()->showMessage(tr("A structure in the reaction is invalid, so nothing was copied"), 6000);
+            else
+                QApplication::clipboard()->setText(QString::fromStdString(smiles));
+        } else
             statusBar()->showMessage(tr("No reaction arrow in the drawing"), 4000);
     });
-    edit->addAction(tr("&Paste"), QKeySequence::Paste, this, &MainWindow::paste);
-    edit->addAction(tr("&Delete"), canvas_, &Canvas::deleteSelection);
-    edit->addSeparator();
-    edit->addAction(tr("Select &All"), QKeySequence::SelectAll, canvas_, &Canvas::selectAll);
-    edit->addSeparator();
-    auto* prefs = edit->addAction(tr("&Preferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
-    prefs->setMenuRole(QAction::PreferencesRole);  // the app menu on macOS
-
-    auto* structure = menuBar()->addMenu(tr("&Structure"));
-    structure->addAction(tr("Flip &Horizontal"), QKeySequence(tr("Ctrl+Shift+H")), this,
-                         [this] { canvas_->flipSelection(true); });
-    structure->addAction(tr("Arrange &Scheme"), this, [this] { canvas_->arrangeScheme(); });
-    structure->addAction(tr("Turn Over &Left to Right (3D)"), this, [this] { canvas_->rotate3D(0, 180); });
-    structure->addAction(tr("Turn Over &Top to Bottom (3D)"), this, [this] { canvas_->rotate3D(180, 0); });
-    auto* brackets = structure->addMenu(tr("&Brackets"));
-    for (bool square : {true, false})
-        brackets->addAction(square ? tr("&Square Brackets Around Selection…") : tr("&Round Brackets Around Selection…"), this,
-                            [this, square] {
-                                bool ok = false;
-                                const QString label = QInputDialog::getText(this, tr("Brackets"), tr("Subscript (e.g. n; may be empty):"),
-                                                                            QLineEdit::Normal, "n", &ok);
-                                if (ok) canvas_->bracketSelection(square, label.trimmed());
-                            });
-    brackets->addAction(tr("Remove &Brackets"), this, [this] { canvas_->removeBrackets(); });
-    structure->addAction(tr("Save Selection as T&emplate…"), this, &MainWindow::saveTemplate);
-    structure->addAction(tr("&Transform…"), this, [this] {
-        QDialog dialog(this);
-        dialog.setWindowTitle(tr("Transform"));
-        auto* form = new QFormLayout(&dialog);
-        auto spin = [&](const QString& label, double lo, double hi, double value, const QString& suffix) {
-            auto* s = new QDoubleSpinBox;
-            s->setRange(lo, hi), s->setValue(value), s->setSuffix(suffix), s->setDecimals(1);
-            form->addRow(label, s);
-            return s;
-        };
-        auto* angle = spin(tr("Rotate:"), -360, 360, 0, "°");
-        auto* scale = spin(tr("Scale:"), 5, 1000, 100, "%");
-        auto* sx = spin(tr("Stretch across:"), 5, 1000, 100, "%");
-        auto* sy = spin(tr("Stretch up and down:"), 5, 1000, 100, "%");
-        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
-        form->addRow(buttons);
-        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-        if (dialog.exec() != QDialog::Accepted) return;
-        const double k = scale->value() / 100;
-        canvas_->transformSelection(QTransform().rotate(angle->value()).scale(k * sx->value() / 100, k * sy->value() / 100),
-                                    tr("Transform"));
-    });
-    structure->addAction(tr("Flip &Vertical"), QKeySequence(tr("Ctrl+Shift+V")), this,
-                         [this] { canvas_->flipSelection(false); });
-    structure->addAction(tr("&Invert Stereochemistry"), this, [this] { canvas_->invertStereo(); });
-    auto* arrange = structure->addMenu(tr("&Align and Distribute"));
-    using A = Canvas::Align;
-    for (auto [label, edge] : {std::pair{tr("Align &Left"), A::Left}, {tr("Align &Centres"), A::HCentre},
-                               {tr("Align &Right"), A::Right}, {tr("Align &Top"), A::Top},
-                               {tr("Align &Middles"), A::VCentre}, {tr("Align &Bottom"), A::Bottom}})
-        arrange->addAction(label, this, [this, edge] { canvas_->alignSelection(edge); });
-    arrange->addSeparator();
-    arrange->addAction(tr("Distribute &Horizontally"), this, [this] { canvas_->distributeSelection(true); });
-    arrange->addAction(tr("Distribute &Vertically"), this, [this] { canvas_->distributeSelection(false); });
-    structure->addSeparator();
-    structure->addAction(tr("Add Explicit &Hydrogens"), this, [this] {
-        canvas_->commit(chem::addHydrogens(canvas_->document()), tr("Add hydrogens"));
-    });
-    structure->addAction(tr("Remove Explicit Hydro&gens"), this, [this] {
-        canvas_->commit(chem::removeHydrogens(canvas_->document()), tr("Remove hydrogens"));
-    });
-    structure->addAction(tr("&Name from PubChem"), this, [this] {
+    copyAs->addAction(tr("IUPAC &Name"), this, [this] {
         const Document doc = canvas_->selectedSubset();
         if (doc.atoms.empty()) return;
         QString error;
         QApplication::setOverrideCursor(Qt::WaitCursor);
-        const QString smiles = QString::fromStdString(chem::toSmiles(doc));
+        const QString smiles = QString::fromStdString(chem::toSmiles(doc)).section(' ', 0, 0);  // plain SMILES, no CXSMILES extension
         const QString name = pubchem::fetch(pubchem::smilesToNameUrl(), "IUPACName", &error,
                                             pubchem::smilesToNameForm(smiles));
         QApplication::restoreOverrideCursor();
@@ -1863,155 +2391,34 @@ void MainWindow::buildMenus() {
         QApplication::clipboard()->setText(name);
         QMessageBox::information(this, tr("Name from PubChem"), tr("%1\n\n(copied to the clipboard)").arg(name));
     });
-    structure->addAction(tr("Chec&k Structure…"), QKeySequence(tr("Ctrl+Alt+K")), this, [this] { checkStructure(); });
-    structure->addAction(tr("&Clean Structure"), QKeySequence(tr("Ctrl+Shift+K")), this, [this] {
-        const auto& sel = canvas_->selection();  // selected molecules only, else everything
-        canvas_->commit(chem::clean2D(canvas_->document(), {sel.begin(), sel.end()}), tr("Clean"));
-    });
-    // Drawing style presets, like ChemDraw's document settings; stored in the .penz.
-    auto* styles = structure->addMenu(tr("Drawing &Style"));
-    auto* styleGroup = new QActionGroup(this);
-    for (const auto& st : drawingStyles()) {
-        auto* act = styles->addAction(st.name);
-        act->setCheckable(true);
-        styleGroup->addAction(act);
-        connect(act, &QAction::triggered, this, [this, name = st.name] {
-            Document next = canvas_->document();
-            next.style = name == drawingStyles()[0].name ? QString() : name;
-            next.labelRatio = 0;  // the style's own label size, not an imported file's (#203)
-            if (!(next == canvas_->document())) canvas_->commit(next, tr("Drawing style"));
-        });
-    }
-    auto syncStyle = [this, styleGroup] {
-        const QString current = drawingStyle(canvas_->document().style).name;
-        for (auto* act : styleGroup->actions()) act->setChecked(act->text() == current);
-    };
-    connect(canvas_, &Canvas::documentChanged, this, syncStyle);
-    syncStyle();
-    structure->addAction(tr("C&olour Selection"), this, [this] { canvas_->colourSelection(); });
-    structure->addAction(tr("Ring &Fill Colour…"), this, [this] {
-        QColor c = QColorDialog::getColor(canvas_->fillColor(), this, tr("Ring fill colour"));
-        if (c.isValid()) canvas_->setFillColor(c);
-    });
-    structure->addAction(tr("&Expand Abbreviations"), QKeySequence(tr("Ctrl+Shift+E")), canvas_,
-                         &Canvas::expandAbbreviations);
+    edit->addAction(tr("&Paste"), QKeySequence::Paste, this, &MainWindow::paste);
+    edit->addAction(tr("&Delete"), canvas_, &Canvas::deleteSelection);
+    edit->addSeparator();
+    edit->addAction(tr("Select &All"), QKeySequence::SelectAll, canvas_, &Canvas::selectAll);
+    edit->addSeparator();
+    auto* prefs = edit->addAction(tr("Pr&eferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
+    prefs->setMenuRole(QAction::PreferencesRole);  // the app menu on macOS
 
-    auto* view = menuBar()->addMenu(tr("&View"));
-    view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { canvas_->zoomBy(1.25); });
-    view->addAction(tr("Zoom &Out"), QKeySequence::ZoomOut, this, [this] { canvas_->zoomBy(0.8); });
-    view->addAction(tr("&Fit to Window"), QKeySequence(tr("Ctrl+0")), canvas_, &Canvas::fitToSelection)
-        ->setStatusTip(tr("Zoom to the selection, or to the whole drawing"));
-    view->addAction(tr("&Next Page"), QKeySequence(tr("Ctrl+PgDown")), this,
+    auto* page = menuBar()->addMenu(tr("&Page"));
+    page->addAction(tr("Ne&w Page"), this, &MainWindow::addPage);
+    page->addAction(tr("Rena&me Page…"), this, [this] { renamePage(page_); });
+    auto* deletePageAction = page->addAction(tr("&Delete Page"), this, [this] { deletePage(page_); });
+    connect(page, &QMenu::aboutToShow, this, [=, this] { deletePageAction->setEnabled(pages_.size() > 1); });
+    page->addSeparator();
+    auto* moveTo = page->addMenu(tr("Mo&ve Selection To"));
+    connect(moveTo, &QMenu::aboutToShow, this, [=, this] {
+        moveTo->clear();
+        for (int i = 0; i < int(pages_.size()); ++i)
+            if (i != page_) moveTo->addAction(pages_[i].name, this, [=, this] { moveSelectionToPage(i); });
+        if (moveTo->isEmpty()) moveTo->addAction(tr("(add a page first)"))->setEnabled(false);
+    });
+    page->addSeparator();
+    page->addAction(tr("&Next Page"), QKeySequence(tr("Ctrl+PgDown")), this,
                     [this] { showPage((page_ + 1) % int(pages_.size())); });
-    view->addAction(tr("&Previous Page"), QKeySequence(tr("Ctrl+PgUp")), this,
+    page->addAction(tr("&Previous Page"), QKeySequence(tr("Ctrl+PgUp")), this,
                     [this] { showPage((page_ + int(pages_.size()) - 1) % int(pages_.size())); });
-    // Guides are the user's own, not the document's: remembered, never saved or exported.
-    auto* grid = view->addAction(tr("&Grid"));
-    auto* rulers = view->addAction(tr("&Rulers"));
-    for (auto* a : {grid, rulers}) {
-        a->setCheckable(true);
-        a->setChecked(QSettings().value(a == grid ? "showGrid" : "showRulers").toBool());
-        connect(a, &QAction::toggled, this, [=, this] {
-            QSettings().setValue("showGrid", grid->isChecked());
-            QSettings().setValue("showRulers", rulers->isChecked());
-            canvas_->setGuides(grid->isChecked(), rulers->isChecked());
-        });
-    }
-    canvas_->setGuides(grid->isChecked(), rulers->isChecked());
-    view->addSeparator();
-    // Display options belong to the document (saved, and in exports), so changing one is an edit.
-    auto setDisplay = [this](auto change, const QString& what) {
-        Document next = canvas_->document();
-        change(next);
-        if (!(next == canvas_->document())) canvas_->commit(next, what);
-    };
-    auto* carbons = view->addMenu(tr("&Carbon Labels"));
-    auto* carbonGroup = new QActionGroup(carbons);
-    using CL = Document::CarbonLabels;
-    for (auto [text, mode] : {std::pair{tr("&None (skeletal)"), CL::None}, {tr("&Terminal CH₃"), CL::Terminal},
-                              {tr("&All Carbons"), CL::All}}) {
-        auto* a = carbons->addAction(text, this, [=] {
-            setDisplay([mode](Document& d) { d.carbonLabels = mode; }, tr("Carbon labels"));
-        });
-        a->setCheckable(true);
-        a->setData(int(mode));
-        carbonGroup->addAction(a);
-    }
-    auto* implicitH = view->addAction(tr("Show &Implicit Hydrogens"));
-    implicitH->setCheckable(true);
-    connect(implicitH, &QAction::triggered, this, [=](bool on) {
-        setDisplay([on](Document& d) { d.hideImplicitH = !on; }, tr("Implicit hydrogens"));
-    });
-    connect(canvas_, &Canvas::documentChanged, this, [this, carbonGroup, implicitH] {
-        for (auto* a : carbonGroup->actions()) a->setChecked(a->data().toInt() == int(canvas_->document().carbonLabels));
-        QSignalBlocker quiet(implicitH);
-        implicitH->setChecked(!canvas_->document().hideImplicitH);
-    });
-    implicitH->setChecked(true);
-    carbonGroup->actions().first()->setChecked(true);
-    // Stereo labels belong to the document (saved, and in exports), so toggling is an edit.
-    auto* stereo = view->addAction(tr("Show &Stereo Labels"));
-    stereo->setCheckable(true);
-    connect(stereo, &QAction::toggled, this, [this](bool on) {
-        if (canvas_->document().showStereo == on) return;
-        Document next = canvas_->document();
-        next.showStereo = on;
-        canvas_->commit(next, on ? tr("Show Stereo Labels") : tr("Hide Stereo Labels"));
-    });
-    connect(canvas_, &Canvas::documentChanged, stereo, [this, stereo] {
-        QSignalBlocker quiet(stereo);
-        stereo->setChecked(canvas_->document().showStereo);
-    });
-    auto* numbers = view->addAction(tr("Atom &Numbers"));
-    numbers->setCheckable(true);
-    numbers->setStatusTip(tr("Number every atom; ' on an atom sets its reaction map number"));
-    connect(numbers, &QAction::toggled, this, [this](bool on) {
-        if (canvas_->document().showAtomNumbers == on) return;
-        Document next = canvas_->document();
-        next.showAtomNumbers = on;
-        canvas_->commit(next, on ? tr("Show atom numbers") : tr("Hide atom numbers"));
-    });
-    connect(canvas_, &Canvas::documentChanged, numbers, [this, numbers] {
-        QSignalBlocker quiet(numbers);
-        numbers->setChecked(canvas_->document().showAtomNumbers);
-    });
-    auto* circles = view->addAction(tr("&Aromatic Circles"));
-    circles->setCheckable(true);
-    connect(circles, &QAction::toggled, this, [this](bool on) {
-        if (canvas_->document().aromaticCircles == on) return;
-        Document next = canvas_->document();
-        next.aromaticCircles = on;
-        next.aromaticCircleOverrides.clear();
-        canvas_->commit(next, on ? tr("Aromatic circles") : tr("Kekulé rings"));
-    });
-    connect(canvas_, &Canvas::documentChanged, circles, [this, circles] {
-        QSignalBlocker quiet(circles);
-        circles->setChecked(canvas_->document().aromaticCircles);
-    });
-    auto* selectedCircles = view->addAction(tr("Circles for Selected &Rings"));
-    selectedCircles->setStatusTip(tr("Select every atom in an aromatic ring"));
-    connect(selectedCircles, &QAction::triggered, this, [this] {
-        Document next = canvas_->document();
-        const auto& selected = canvas_->selection();
-        for (auto ring : chem::aromaticRings(next)) {
-            if (!std::all_of(ring.begin(), ring.end(), [&](int i) { return selected.contains(i); })) continue;
-            std::sort(ring.begin(), ring.end());
-            auto it = std::find(next.aromaticCircleOverrides.begin(), next.aromaticCircleOverrides.end(), ring);
-            if (it == next.aromaticCircleOverrides.end()) next.aromaticCircleOverrides.push_back(ring);
-            else next.aromaticCircleOverrides.erase(it);
-        }
-        if (!(next == canvas_->document())) canvas_->commit(next, tr("Toggle aromatic circles"));
-    });
-    view->addSeparator();
-    auto* templatesToggle = templateDock_->toggleViewAction();
-    templatesToggle->setText(tr("&Templates"));
-    templatesToggle->setShortcut(QKeySequence(tr("Ctrl+Shift+T")));
-    view->addAction(templatesToggle);
-    auto* panelToggle = profileDock_->toggleViewAction();
-    panelToggle->setText(tr("&Properties Panel"));
-    panelToggle->setShortcut(QKeySequence(tr("Ctrl+I")));
-    view->addAction(panelToggle);
-    auto* pageMenu = view->addMenu(tr("&Page"));
+    page->addSeparator();
+    auto* pageMenu = page->addMenu(tr("Page &Size"));
     auto* pageGroup = new QActionGroup(pageMenu);
     QStringList pages{""};
     for (const auto& p : pageSizes()) pages << p.name;
@@ -2036,7 +2443,256 @@ void MainWindow::buildMenus() {
     connect(canvas_, &Canvas::documentChanged, pageGroup, [this, pageGroup] {
         for (auto* a : pageGroup->actions()) a->setChecked(a->data().toString() == canvas_->document().page);
     });
-    auto* themeMenu = view->addMenu(tr("&Theme"));
+
+    auto* structure = menuBar()->addMenu(tr("&Structure"));
+    structure->addAction(tr("&Clean Structure"), QKeySequence(tr("Ctrl+Shift+K")), this, [this] {
+        const auto& sel = canvas_->selection();  // selected molecules only, else everything
+        canvas_->commit(chem::clean2D(canvas_->document(), {sel.begin(), sel.end()}), tr("Clean"));
+    });
+    structure->addAction(tr("Chec&k Structure…"), QKeySequence(tr("Ctrl+Alt+K")), this, [this] { checkStructure(); });
+    auto* pubchem = structure->addAction(tr("Look Up on &PubChem"), this, [this] {  // in the browser; Penzene stays offline
+        const std::string key = chem::toInchiKey(canvas_->selectedSubset());
+        if (key.empty()) return statusBar()->showMessage(tr("No valid structure to look up"), 4000);
+        QDesktopServices::openUrl(QUrl("https://pubchem.ncbi.nlm.nih.gov/#query=" + QString::fromStdString(key)));
+    });
+    connect(structure, &QMenu::aboutToShow, this, [=, this] { pubchem->setEnabled(!canvas_->selectedSubset().atoms.empty()); });
+    structure->addSeparator();
+    structure->addAction(tr("Add Explicit &Hydrogens"), this, [this] {
+        canvas_->commit(chem::addHydrogens(canvas_->document()), tr("Add hydrogens"));
+    });
+    structure->addAction(tr("Remove Explicit Hydro&gens"), this, [this] {
+        canvas_->commit(chem::removeHydrogens(canvas_->document()), tr("Remove hydrogens"));
+    });
+    structure->addAction(tr("&Expand Abbreviations"), QKeySequence(tr("Ctrl+Shift+E")), canvas_,
+                         &Canvas::expandAbbreviations);
+    structure->addAction(tr("&Invert Stereochemistry"), this, [this] { canvas_->invertStereo(); });
+    structure->addSeparator();
+    auto* brackets = structure->addMenu(tr("&Brackets"));
+    for (bool square : {true, false})
+        brackets->addAction(square ? tr("&Square Brackets Around Selection…") : tr("&Round Brackets Around Selection…"), this,
+                            [this, square] {
+                                bool ok = false;
+                                const QString label = QInputDialog::getText(this, tr("Brackets"), tr("Subscript (e.g. n; may be empty):"),
+                                                                            QLineEdit::Normal, "n", &ok);
+                                if (ok) canvas_->bracketSelection(square, label.trimmed());
+                            });
+    brackets->addAction(tr("Remove &Brackets"), this, [this] { canvas_->removeBrackets(); });
+    structure->addAction(tr("Save Selection as &Template…"), this, &MainWindow::saveTemplate);
+
+    auto* arrangeMenu = menuBar()->addMenu(tr("&Arrange"));
+    arrangeMenu->addAction(tr("Flip &Horizontal"), QKeySequence(tr("Ctrl+Shift+H")), this,
+                         [this] { canvas_->flipSelection(true); });
+    arrangeMenu->addAction(tr("Flip &Vertical"), QKeySequence(tr("Ctrl+Shift+V")), this,
+                         [this] { canvas_->flipSelection(false); });
+    arrangeMenu->addAction(tr("&Transform…"), this, [this] {
+        QDialog dialog(this);
+        dialog.setWindowTitle(tr("Transform"));
+        auto* form = new QFormLayout(&dialog);
+        auto spin = [&](const QString& label, double lo, double hi, double value, const QString& suffix) {
+            auto* s = new QDoubleSpinBox;
+            s->setRange(lo, hi), s->setValue(value), s->setSuffix(suffix), s->setDecimals(1);
+            form->addRow(label, s);
+            return s;
+        };
+        auto* angle = spin(tr("Rotate:"), -360, 360, 0, "°");
+        auto* scale = spin(tr("Scale:"), 5, 1000, 100, "%");
+        auto* sx = spin(tr("Stretch across:"), 5, 1000, 100, "%");
+        auto* sy = spin(tr("Stretch up and down:"), 5, 1000, 100, "%");
+        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+        form->addRow(buttons);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        if (dialog.exec() != QDialog::Accepted) return;
+        const double k = scale->value() / 100;
+        canvas_->transformSelection(QTransform().rotate(angle->value()).scale(k * sx->value() / 100, k * sy->value() / 100),
+                                    tr("Transform"));
+    });
+    arrangeMenu->addSeparator();
+    auto* align = arrangeMenu->addMenu(tr("&Align and Distribute"));
+    using A = Canvas::Align;
+    for (auto [label, edge] : {std::pair{tr("Align &Left"), A::Left}, {tr("Align &Centres"), A::HCentre},
+                               {tr("Align &Right"), A::Right}, {tr("Align &Top"), A::Top},
+                               {tr("Align &Middles"), A::VCentre}, {tr("Align &Bottom"), A::Bottom}})
+        align->addAction(label, this, [this, edge] { canvas_->alignSelection(edge); });
+    align->addSeparator();
+    align->addAction(tr("Distribute &Horizontally"), this, [this] { canvas_->distributeSelection(true); });
+    align->addAction(tr("Distribute &Vertically"), this, [this] { canvas_->distributeSelection(false); });
+    arrangeMenu->addAction(tr("Center on &Page"), this, [this] { canvas_->centerOnPage(); })
+        ->setStatusTip(tr("Move the selection, or the whole drawing, to the middle of the page"));
+    arrangeMenu->addSeparator();
+    arrangeMenu->addAction(tr("Arrange &Scheme"), this, [this] { canvas_->arrangeScheme(); });
+    arrangeMenu->addAction(tr("&Number Compounds"), canvas_, &Canvas::numberCompounds)
+        ->setStatusTip(tr("A bold number under each selected molecule, or every one; they renumber in scheme order as you edit"));
+    arrangeMenu->addSeparator();
+    auto* addArrow = arrangeMenu->addAction(tr("Add A&rrow After Selection"), canvas_, &Canvas::addArrowAfter);
+    auto* addText = arrangeMenu->addAction(tr("Add Te&xt After Selection…"), canvas_, &Canvas::addTextAfter);
+    for (auto* a : {addArrow, addText}) a->setStatusTip(tr("Just right of the selection, or at the hotspot"));
+    auto* flipArrow = arrangeMenu->addAction(tr("&Flip Curved Arrow"), this, [this] { canvas_->bendArrow(-1); });
+    flipArrow->setStatusTip(tr("Bow the selected curved arrow the other way; Alt+Up and Alt+Down bend it more or less"));
+    connect(arrangeMenu, &QMenu::aboutToShow, this, [=, this] {
+        addArrow->setEnabled(bool(canvas_->nextPlace()));
+        addText->setEnabled(bool(canvas_->nextPlace()));
+        const auto& arrows = canvas_->selectedArrows();
+        flipArrow->setEnabled(arrows.size() == 1 && canvas_->document().arrows[*arrows.begin()].bend);
+    });
+
+    auto* format = menuBar()->addMenu(tr("F&ormat"));
+    // Drawing style presets, like ChemDraw's document settings; stored in the .penz.
+    auto* styles = format->addMenu(tr("Drawing &Style"));
+    auto* styleGroup = new QActionGroup(this);
+    for (const auto& st : drawingStyles()) {
+        auto* act = styles->addAction(st.name);
+        act->setCheckable(true);
+        styleGroup->addAction(act);
+        connect(act, &QAction::triggered, this, [this, name = st.name] {
+            Document next = canvas_->document();
+            next.style = name == drawingStyles()[0].name ? QString() : name;
+            next.labelRatio = 0;  // the style's own label size, not an imported file's (#203)
+            if (!(next == canvas_->document())) canvas_->commit(next, tr("Drawing style"));
+        });
+    }
+    auto syncStyle = [this, styleGroup] {
+        const QString current = drawingStyle(canvas_->document().style).name;
+        for (auto* act : styleGroup->actions()) act->setChecked(act->text() == current);
+    };
+    connect(canvas_, &Canvas::documentChanged, this, syncStyle);
+    syncStyle();
+    // Display options belong to the document (saved, and in exports), so changing one is an edit.
+    auto setDisplay = [this](auto change, const QString& what) {
+        Document next = canvas_->document();
+        change(next);
+        if (!(next == canvas_->document())) canvas_->commit(next, what);
+    };
+    auto* carbons = format->addMenu(tr("&Carbon Labels"));
+    auto* carbonGroup = new QActionGroup(carbons);
+    using CL = Document::CarbonLabels;
+    for (auto [text, mode] : {std::pair{tr("&None (skeletal)"), CL::None}, {tr("&Terminal CH₃"), CL::Terminal},
+                              {tr("&All Carbons"), CL::All}}) {
+        auto* a = carbons->addAction(text, this, [=] {
+            setDisplay([mode](Document& d) { d.carbonLabels = mode; }, tr("Carbon labels"));
+        });
+        a->setCheckable(true);
+        a->setData(int(mode));
+        carbonGroup->addAction(a);
+    }
+    connect(canvas_, &Canvas::documentChanged, this, [this, carbonGroup] {
+        for (auto* a : carbonGroup->actions()) a->setChecked(a->data().toInt() == int(canvas_->document().carbonLabels));
+    });
+    carbonGroup->actions().first()->setChecked(true);
+    format->addSeparator();
+    // Stereo labels belong to the document (saved, and in exports), so toggling is an edit.
+    auto* stereo = format->addAction(tr("S&tereo Labels"));
+    stereo->setCheckable(true);
+    connect(stereo, &QAction::toggled, this, [this](bool on) {
+        if (canvas_->document().showStereo == on) return;
+        Document next = canvas_->document();
+        next.showStereo = on;
+        canvas_->commit(next, on ? tr("Show Stereo Labels") : tr("Hide Stereo Labels"));
+    });
+    connect(canvas_, &Canvas::documentChanged, stereo, [this, stereo] {
+        QSignalBlocker quiet(stereo);
+        stereo->setChecked(canvas_->document().showStereo);
+    });
+    auto* numbers = format->addAction(tr("Atom &Numbers"));
+    numbers->setCheckable(true);
+    numbers->setStatusTip(tr("Number every atom; ' on an atom sets its reaction map number"));
+    connect(numbers, &QAction::toggled, this, [this](bool on) {
+        if (canvas_->document().showAtomNumbers == on) return;
+        Document next = canvas_->document();
+        next.showAtomNumbers = on;
+        canvas_->commit(next, on ? tr("Show atom numbers") : tr("Hide atom numbers"));
+    });
+    connect(canvas_, &Canvas::documentChanged, numbers, [this, numbers] {
+        QSignalBlocker quiet(numbers);
+        numbers->setChecked(canvas_->document().showAtomNumbers);
+    });
+    auto* shifts = format->addAction(tr("Predicted N&MR Shifts"));
+    shifts->setCheckable(true);
+    shifts->setStatusTip(tr("13C and 1H shifts beside each atom, looked up in nmrshiftdb2 by HOSE code"));
+    connect(shifts, &QAction::toggled, this, [this](bool on) {
+        if (canvas_->document().showShifts == on) return;
+        Document next = canvas_->document();
+        next.showShifts = on;
+        canvas_->commit(next, on ? tr("Show predicted NMR shifts") : tr("Hide predicted NMR shifts"));
+    });
+    connect(canvas_, &Canvas::documentChanged, shifts, [this, shifts] {
+        QSignalBlocker quiet(shifts);
+        shifts->setChecked(canvas_->document().showShifts);
+    });
+    auto* circles = format->addAction(tr("&Aromatic Circles"));
+    circles->setCheckable(true);
+    connect(circles, &QAction::toggled, this, [this](bool on) {
+        if (canvas_->document().aromaticCircles == on) return;
+        Document next = canvas_->document();
+        next.aromaticCircles = on;
+        next.aromaticCircleOverrides.clear();
+        canvas_->commit(next, on ? tr("Aromatic circles") : tr("Kekulé rings"));
+    });
+    connect(canvas_, &Canvas::documentChanged, circles, [this, circles] {
+        QSignalBlocker quiet(circles);
+        circles->setChecked(canvas_->document().aromaticCircles);
+    });
+    auto* selectedCircles = format->addAction(tr("Circles in Selected &Rings"));
+    selectedCircles->setStatusTip(tr("Turn aromatic circles on or off in the rings whose atoms are all selected"));
+    connect(selectedCircles, &QAction::triggered, this, [this] {
+        Document next = canvas_->document();
+        const auto& selected = canvas_->selection();
+        for (auto ring : chem::aromaticRings(next)) {
+            if (!std::all_of(ring.begin(), ring.end(), [&](int i) { return selected.contains(i); })) continue;
+            std::sort(ring.begin(), ring.end());
+            auto it = std::find(next.aromaticCircleOverrides.begin(), next.aromaticCircleOverrides.end(), ring);
+            if (it == next.aromaticCircleOverrides.end()) next.aromaticCircleOverrides.push_back(ring);
+            else next.aromaticCircleOverrides.erase(it);
+        }
+        if (!(next == canvas_->document())) canvas_->commit(next, tr("Toggle aromatic circles"));
+    });
+    format->addSeparator();
+    format->addAction(tr("C&olour Selection"), this, [this] { canvas_->colourSelection(); });
+    format->addAction(tr("Ring &Fill Colour…"), this, [this] {
+        QColor c = QColorDialog::getColor(canvas_->fillColor(), this, tr("Ring fill colour"));
+        if (c.isValid()) canvas_->setFillColor(c);
+    });
+    auto* heads = format->addMenu(tr("Arrow&head Size"));
+    for (auto [name, size] : {std::pair{tr("&Small"), 0.6}, {tr("&Normal"), 1.0}, {tr("&Large"), 1.5}, {tr("&Extra Large"), 2.2}})
+        heads->addAction(name, this, [this, size] { canvas_->setArrowHead(size); });
+    connect(format, &QMenu::aboutToShow, this, [=, this] { heads->setEnabled(!canvas_->selectedArrows().isEmpty()); });
+
+    auto* view = menuBar()->addMenu(tr("&View"));
+    view->addAction(tr("Zoom &In"), QKeySequence::ZoomIn, this, [this] { canvas_->zoomBy(1.25); });
+    view->addAction(tr("Zoom &Out"), QKeySequence::ZoomOut, this, [this] { canvas_->zoomBy(0.8); });
+    view->addAction(tr("&Fit to Window"), QKeySequence(tr("Ctrl+0")), canvas_, &Canvas::fitToSelection)
+        ->setStatusTip(tr("Zoom to the selection, or to the whole drawing"));
+    view->addSeparator();
+    // Guides are the user's own, not the document's: remembered, never saved or exported.
+    auto* grid = view->addAction(tr("&Grid"));
+    auto* rulers = view->addAction(tr("&Rulers"));
+    for (auto* a : {grid, rulers}) {
+        a->setCheckable(true);
+        a->setChecked(QSettings().value(a == grid ? "showGrid" : "showRulers", true).toBool());
+        connect(a, &QAction::toggled, this, [=, this] {
+            QSettings().setValue("showGrid", grid->isChecked());
+            QSettings().setValue("showRulers", rulers->isChecked());
+            canvas_->setGuides(grid->isChecked(), rulers->isChecked());
+        });
+    }
+    canvas_->setGuides(grid->isChecked(), rulers->isChecked());
+    view->addSeparator();
+    auto* templatesToggle = templateDock_->toggleViewAction();
+    templatesToggle->setText(tr("&Templates"));
+    templatesToggle->setShortcut(QKeySequence(tr("Ctrl+Shift+T")));
+    view->addAction(templatesToggle);
+    auto* panelToggle = profileDock_->toggleViewAction();
+    panelToggle->setText(tr("&Properties Panel"));
+    panelToggle->setShortcut(QKeySequence(tr("Ctrl+I")));
+    view->addAction(panelToggle);
+    auto* massToggle = massDock_->toggleViewAction();
+    massToggle->setText(tr("&Mass Spec Panel"));
+    view->addAction(massToggle);
+    auto* nmrToggle = nmrDock_->toggleViewAction();
+    nmrToggle->setText(tr("&NMR Panel"));
+    view->addAction(nmrToggle);
+    view->addSeparator();
+    auto* themeMenu = view->addMenu(tr("T&heme"));
     auto* themeGroup = themeGroup_ = new QActionGroup(this);
     const QString current = QSettings().value("theme", "System").toString();
     for (const auto& t : themes()) {
@@ -2064,6 +2720,9 @@ moves off, so you can keep typing.</p>
 <tr><th colspan="2" align="left">Moving the hotspot</th></tr>
 <tr><td><b>←↑→↓</b></td><td>atom → bond → atom; with <b>Shift</b>: atom → atom, bond → bond (with a selection: nudge it, below)</td></tr>
 <tr><td><b>Space</b> / <b>g</b></td><td>select the hotspot's molecule / just its atom or bond</td></tr>
+<tr><td><b>G</b></td><td>add the hotspot's atom or bond to the selection; the arrow keys go on to the next (Esc when done)</td></tr>
+<tr><td><b>&gt;</b> … <b>&gt;</b></td><td>a curved arrow from the first hotspot to the second, selected</td></tr>
+<tr><td><b>Alt+↑</b> / <b>Alt+↓</b></td><td>bend the selected curved arrow more / less (Arrange → Flip Curved Arrow turns it over)</td></tr>
 <tr><td><b>Esc</b></td><td>clear hotspot and selection</td></tr>
 <tr><th colspan="2" align="left">Atom: sprout</th></tr>
 <tr><td><b>1</b> / <b>0</b></td><td>single bond, linear / cyclic mode (0 is longer on 2°/3° carbons)</td></tr>
@@ -2106,18 +2765,80 @@ moves off, so you can keep typing.</p>
 <tr><td><b>Enter</b></td><td>back to a hotspot on the selection</td></tr>
 <tr><td><b>Drag onto an atom</b></td><td>merge (Select tool) &nbsp;•&nbsp; <b>Shift+drag</b> move straight; draw a bond at any angle</td></tr>
 <tr><td><b>Ctrl+←↑→↓</b></td><td>duplicate across the next arrow that way (or alongside)</td></tr>
-<tr><td><b>Alt+← →</b></td><td>rotate 15° &nbsp;•&nbsp; <b>Alt+drag</b> rotate freely • <b>double-click</b> select fragment, or edit text</td></tr>
+<tr><td><b>Alt+← →</b></td><td>rotate 15° &nbsp;•&nbsp; <b>Alt+drag</b> rotate freely, or lasso from empty space • <b>double-click</b> select fragment, or edit text</td></tr>
 <tr><td><b>Ctrl+0</b></td><td>zoom to the selection (to everything with none)</td></tr>
-<tr><td><b>Shift+Alt+←↑→↓</b></td><td>rotate 15° out of the page (3D), keeping stereo &nbsp;•&nbsp; <b>Shift+Alt+drag</b> freely</td></tr>
+<tr><td><b>Shift+Alt+←↑→↓</b></td><td>rotate 15° out of the page (3D), keeping stereo &nbsp;•&nbsp; choose the Rotate in 3D tool from Select and drag freely</td></tr>
 </table>)"));
         box.exec();
     });
     help->addAction(tr("&What's New"), this, &MainWindow::showWhatsNew);
     help->addAction(tr("Check for &Updates…"), this, [this] { checkForUpdates(false); });
     help->addAction(tr("&About Penzene"), this, [this] {
-        QMessageBox::about(this, tr("About Penzene"),
-                           tr("<h3>Penzene %1</h3><p>An open-source chemical structure editor.</p>"
-                              "<p>GPL-3.0 • <a href='https://github.com/JamesOBrien2/penzene'>GitHub</a></p>"
-                              "<p>Chemistry by RDKit. GUI by Qt.</p>").arg(PENZENE_BUILD));
+        QMessageBox about(this);
+        about.setWindowTitle(tr("About Penzene"));
+        about.setText(tr("<h3>Penzene %1</h3><p>An open-source chemical structure editor.</p>"
+                         "<p>GPL-3.0 • <a href='https://github.com/JamesOBrien2/penzene'>GitHub</a></p>"
+                         "<p>Chemistry by RDKit. GUI by Qt.</p>").arg(PENZENE_BUILD));
+        auto* licenses = about.addButton(tr("Third-party licenses…"), QMessageBox::ActionRole);
+        about.addButton(QMessageBox::Close);
+        about.exec();
+        if (about.clickedButton() != licenses) return;
+
+        QFile file(":/THIRD_PARTY_LICENSES.md");
+        if (!file.open(QIODevice::ReadOnly)) return;
+        QDialog dialog(this);
+        dialog.setWindowTitle(tr("Third-party licenses"));
+        auto* layout = new QVBoxLayout(&dialog);
+        auto* text = new QTextBrowser;
+        text->setMarkdown(QString::fromUtf8(file.readAll()));
+        text->setOpenExternalLinks(true);
+        layout->addWidget(text);
+        auto* close = new QDialogButtonBox(QDialogButtonBox::Close);
+        connect(close, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        layout->addWidget(close);
+        dialog.resize(700, 550);
+        dialog.exec();
     });
 }
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+bool EmfClipboard::canConvertFromMime(const FORMATETC& format, const QMimeData* mime) const {
+    return format.cfFormat == CF_ENHMETAFILE && (format.tymed & TYMED_ENHMF) && mime->hasFormat(kEmfMime);
+}
+
+bool EmfClipboard::convertFromMime(const FORMATETC& format, const QMimeData* mime, STGMEDIUM* medium) const {
+    if (!canConvertFromMime(format, mime)) return false;
+    const QByteArray emf = mime->data(kEmfMime);
+    HENHMETAFILE handle = SetEnhMetaFileBits(UINT(emf.size()), reinterpret_cast<const BYTE*>(emf.constData()));
+    if (!handle) return false;
+    medium->tymed = TYMED_ENHMF;  // a fresh handle each time: the receiver frees it
+    medium->hEnhMetaFile = handle;
+    medium->pUnkForRelease = nullptr;
+    return true;
+}
+
+QList<FORMATETC> EmfClipboard::formatsForMime(const QString& type, const QMimeData*) const {
+    if (type != kEmfMime) return {};
+    return {FORMATETC{CF_ENHMETAFILE, nullptr, DVASPECT_CONTENT, -1, TYMED_ENHMF}};
+}
+
+void MainWindow::editEmbedded(const std::vector<Sheet>& sheets, std::function<bool()> save) {
+    setPages(sheets.empty() ? std::vector<Sheet>{{tr("Page 1"), Document{}}} : sheets);
+    canvas_->fitToDocument();
+    path_.clear();
+    embeddedSave_ = std::move(save);
+    updateTitle();
+}
+
+void MainWindow::setEmbeddedIn(const QString& document) {
+    embeddedIn_ = document;
+    updateTitle();
+}
+
+QByteArray MainWindow::embeddedPicture() const { return renderEmf(sheets()[0].doc, exportOptions()); }
+#endif

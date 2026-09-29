@@ -4,13 +4,73 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
-## Unreleased
+## 1.8.0 (2026-09-29)
 
+- **Mass spec for the SI**: copy an HRMS line ("[M+H]+ calcd for C9H9O4 181.0495"), export the isotope pattern as CSV, and list the EI ions to look for (#398, #554). <!-- icon: chart-bar -->
+- **Peptides**: File → Import → Peptide Sequence… (and `--peptide`) draws `GFLS`, `Gly-Phe-Leu-Ser` or `H-Gly-D-Phe-OH` with a straight backbone and side chains clear of each N–H (#503, #502, #559, #570). <!-- icon: hexagons -->
+- **Screen readers and the keyboard**: every atom, bond, arrow and text can be read and pressed; `G` picks atoms one by one, `>` … `>` draws a curved arrow and Alt+↑/↓ bends it (#536, #541, #549). <!-- icon: sparkles -->
+- Arrange → Add Arrow / Add Text After Selection place them without the mouse; Arrange → Flip Curved Arrow turns one over (#549).
+- Macrocycles are laid out more cleanly: cyclophane bridges stand clear of their rings (#502).
+- The Mass Spec panel's [M] is M⁺• for a neutral molecule, one electron lighter, as the spectrometer sees it (#556).
+- An aldehyde's C=O and a chain-end C=C sit toward their neighbour, so the single bond meets the double bond cleanly (#542).
+- A drawing opened at launch fills the window instead of opening tiny (#545).
+- Arrowhead sizes go out to ChemDraw files and come back, at the size ChemDraw draws them (#538).
+
+## 1.7.0 (2026-09-29)
+
+- **Tidier menus**: new Page, Arrange and Format menus; Copy As and Import submenus (#512). <!-- icon: menu-2 -->
+- **Arrows that follow**: a curved arrow drawn on an atom, lone pair or bond lights it up, settles on it and moves with it (#498). <!-- icon: refresh -->
+- **Edit in Word and PowerPoint** (Windows): a copied drawing pastes as a Penzene object; double-click it to edit it in Penzene (#229). <!-- icon: file-import -->
+- A selected arrow has handles on its ends and at the top of its curve to reshape it; Format → Arrowhead Size (#534).
+- Alt+drag from empty space draws a lasso: a freehand loop that selects what it takes in (#499).
+- Structure → Look Up on PubChem opens the selection's PubChem page in the browser, by InChIKey (#500).
+- Custom colours on atoms, bonds, text and arrows survive saving to ChemDraw files and reopening (#426).
+- ChemDraw exports sit inside the page instead of at its top-left corner (#443).
+- Reaction SMILES lines in a `.smi` batch file render as schemes, and `--descriptors` marks them `reaction` (#501).
+- Copy and paste within Penzene keeps brackets and ring fills (#523).
+- The Colour tool is in the Select group, since it paints bonds, arrows and text as well as atoms (#532).
+- Tool buttons work with screen readers and other accessibility tools: pressing one picks its tool and opens its group (#535).
+
+## 1.6.0 (2026-09-29)
+
+- **Floating flyouts**: tool flyouts stay open until closed; drag them anywhere and resize them from a corner. <!-- icon: layout-sidebar -->
+- **Rotate in 3D**: a Select-flyout tool that turns a molecule out of the page, keeping its stereochemistry. <!-- icon: rotate-3d -->
+- Pinch a trackpad to zoom; the canvas menu has Zoom In and Out, and the grid and rulers start on.
+- Structure → Align and Distribute → Center on Page centres the selection or the drawing.
+- Charges keep off bonds: in the widest gap, or above an atom with one bond (#494, #514).
+- Wedge and hash wide ends lie along the bonds beside them, clear of double bonds (#509, #518).
+- Ions and molecules from a multi-part SMILES (Na⁺ Cl⁻) are laid out in a row (#516).
+- A bond no longer reappears across two labels dragged together (#496).
+- A triple bond leaves a gap where a bond in front crosses it.
+- A chair fused onto another chair no longer overlaps it.
+- Orbitals move with their atom in Arrange Scheme and Align; an off-centre click draws a full-size one.
+- Deleting a selection keeps the page size (#492).
+- A drawing recovered after a crash opens untitled, so Save can't overwrite another file (#491).
+- Opening a moved or deleted file says so, and Open Recent drops it.
+- Copy as Reaction SMILES reports an invalid molecule instead of leaving it out.
+- Dragging with Predicted NMR Shifts on is smooth again (#476).
+- Quitting on macOS no longer crashes.
+- `--render` reports a bad `--drawing-style`, `--format`, input or output clearly, and names that differ only by case get their own files (#477, #493).
+- Python: `read` of a missing file raises `FileNotFoundError`; an unknown `style` lists the choices.
+- Removed: View → Show Implicit Hydrogens (labels always show them) and the Turn Over commands (Shift+Alt+drag still turns).
+
+## 1.5.0 (2026-09-28)
+
+- The nmrshiftdb2 Database License for the built-in NMR shift table is now in the bundled third-party notices, so About → Third-party licenses shows it.
+- **Predicted NMR shifts**: View → Predicted NMR Shifts writes each carbon's ¹³C shift, and the ¹H shift of atoms with hydrogens, beside the structure, looked up by HOSE code in data from nmrshiftdb2 (about 2.4 ppm ¹³C and 0.27 ppm ¹H mean error). <!-- icon: atom -->
+- Cancelling the structure warning during Cut keeps the drawing, as it does for Copy.
+- Copy pastes into Word and PowerPoint as a picture with a plain ⌘V or Ctrl+V (it no longer carries the SMILES as text; Copy as SMILES does), and the copied PNG keeps the drawing inside it on every platform, so pasting it back into Penzene gives the editable structure (not from Office, which re-renders pictures it copies).
 - A reaction scheme that wraps onto a new row keeps the link between rows: the last product of one row is the next row's reactant when exported.
 - Structure → Invert Stereochemistry turns every wedge into a hash and every hash into a wedge, giving the enantiomer without redrawing it (the selection's molecules, or the whole drawing).
+- Copy as SMILES and to_smiles() keep stereo groups: a drawing with &1 or or1 centres is written as CXSMILES (`C[C@H](N)C(=O)O |&1:1|`), one without them as plain SMILES as before.
+- **Stereo groups**: Tag a stereocentre abs, &1 or or1 from its right-click menu, as in ChemDraw; drawn beside the centre and kept in MOL V3000 and ChemDraw files, and read from CXSMILES. <!-- icon: atom -->
 - Open reads MDL RD files (.rdf): the steps open as one scheme, left to right, with a step's product carrying on as the next step's reactant.
+- On Windows, Copy also offers an Enhanced Metafile, so Word and PowerPoint paste a vector picture that stays sharp when scaled.
 - Preferences can check structures before export and copy: unassigned stereocentres and valence errors are listed first, with Export Anyway or Cancel.
-- .penz files are now format version 2, with every page a document of its own and the shared drawing settings at the top. Version 1 files still open with all their pages, and Save As → Penzene 1 (single page) writes a file Penzene 1.x opens.
+- The Python API reference gives the version that added each function, class, method and property, and the stability policy spells out that argument names, argument order and return types are stable while repr() strings and exact image bytes are not.
+- The question icon in prompts such as "Save changes to this document?" shows on dark themes like Catppuccin Mocha, where it was black on macOS.
+- The chair keys (9 and 0) fuse the chair onto the bond, pointing away from the ring, so it no longer overlaps the ring, even on a second bond of the same ring.
+- **Isotope patterns**: View → Mass Spec Panel draws the isotope pattern of the selection, or the whole drawing, as a stick spectrum for [M], [M+H]⁺, [M+Na]⁺ or [M−H]⁻, with the m/z of the main peaks. <!-- icon: chart-bar -->
 
 ## 1.4.0 (2026-09-28)
 

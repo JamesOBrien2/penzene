@@ -14,13 +14,18 @@
 #include <GraphMol/Descriptors/MolSurf.h>
 #include <algorithm>
 #include <map>
+#include <set>
 #include <type_traits>
 #include <GraphMol/inchi.h>
 #include <GraphMol/FileParsers/FileParsers.h>
 #include <GraphMol/FileParsers/FileWriters.h>
+#include <GraphMol/FileParsers/SequenceParsers.h>
 #include <GraphMol/MolOps.h>
+#include <GraphMol/atomic_data.h>
+#include <GraphMol/new_canon.h>
 #include <GraphMol/SmilesParse/SmilesParse.h>
 #include <GraphMol/SmilesParse/SmilesWrite.h>
+#include <GraphMol/Substruct/SubstructMatch.h>
 
 #include <QDateTime>
 #include <QFile>
@@ -236,6 +241,20 @@ static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
                           b.stereo == BondStereo::Wedge ? 1u : b.stereo == BondStereo::Hash ? 6u : 4u);
         }
     }
+    // Stereo groups: all abs centres in one, each &n and orn its own, n kept as the group's id.
+    std::map<std::pair<StereoGroup, int>, std::vector<RDKit::Atom*>> groups;
+    for (size_t i = 0; i < in.atoms.size(); ++i)
+        if (const Atom& a = in.atoms[i]; a.stereoGroup != StereoGroup::None)
+            groups[{a.stereoGroup, a.stereoGroup == StereoGroup::Abs ? 0 : a.stereoGroupNumber}].push_back(mol->getAtomWithIdx(i));
+    std::vector<RDKit::StereoGroup> stereoGroups;
+    for (auto& [key, atoms] : groups) {
+        const auto type = key.first == StereoGroup::Abs  ? RDKit::StereoGroupType::STEREO_ABSOLUTE
+                          : key.first == StereoGroup::And ? RDKit::StereoGroupType::STEREO_AND
+                                                          : RDKit::StereoGroupType::STEREO_OR;
+        stereoGroups.emplace_back(type, atoms, std::vector<RDKit::Bond*>{}, unsigned(key.second));
+        stereoGroups.back().setWriteId(key.second);
+    }
+    mol->setStereoGroups(std::move(stereoGroups));
     conf->set3D(false);
     mol->addConformer(conf, true);
     return mol;
@@ -260,13 +279,63 @@ static bool perceive(RWMol& mol, bool aromatic = true) {
     return true;
 }
 
-// ponytail: RDKit depictor + ring templates. CoordGen looks nicer for macrocycles,
-// but its preferCoordGen switch is a global the Windows DLL doesn't export.
+// What RDKit's own depictor crowds (#502): a macrocycle (a cyclophane's bridge crossed a ring)
+// or a peptide (each C=O ran into the next NH). CoordGen lays these out cleanly, but turns and
+// crowds everyday molecules, so it's only for them.
+static bool forCoordGen(RWMol& mol) {
+    if (!mol.getRingInfo()->isInitialized()) RDKit::MolOps::fastFindRings(mol);
+    for (const auto& ring : mol.getRingInfo()->atomRings())
+        if (ring.size() >= 9) return true;
+    static const std::unique_ptr<RWMol> peptideBond(RDKit::SmartsToMol("[CX4][CX3](=O)[NX3][CX4]"));
+    return RDKit::SubstructMatch(mol, *peptideBond).size() >= 2;  // a tripeptide or longer
+}
+
+// RDKit's depictor with its ring templates, or CoordGen (through it) where that does better.
 static void layout(RWMol& mol) {
     RDDepict::Compute2DCoordParameters params;
     params.canonOrient = true;
     params.useRingTemplates = true;
-    RDDepict::compute2DCoords(mol, params);
+    RDDepict::preferCoordGen = true;  // honoured only where forceRDKit is off
+    params.forceRDKit = !forCoordGen(mol);
+    if (params.forceRDKit) {
+        RDDepict::compute2DCoords(mol, params);
+    } else {  // with the H of each N-H, O-H… in a chain as an atom, so side chains keep off where its label goes (#559)
+        std::vector<unsigned> hetero;
+        for (const auto* a : mol.atoms())
+            if (a->getAtomicNum() != 6 && a->getDegree() >= 2 && a->getTotalNumHs()) hetero.push_back(a->getIdx());
+        RWMol withH(mol);
+        RDKit::MolOps::addHs(withH, false, false, &hetero);
+        RDDepict::compute2DCoords(withH, params);
+        auto* conf = new RDKit::Conformer(mol.getNumAtoms());
+        conf->set3D(false);
+        for (unsigned i = 0; i < mol.getNumAtoms(); ++i) conf->setAtomPos(i, withH.getConformer().getAtomPos(i));
+        mol.clearConformers();
+        mol.addConformer(conf, true);
+    }
+    // RDKit packs separate fragments by their atoms alone, so the labels of ions and small
+    // molecules run into each other (Na⁺Cl⁻, 3 H₂O): line them up left to right instead.
+    std::vector<std::vector<int>> frags;
+    if (RDKit::MolOps::getMolFrags(mol, frags) < 2) return;
+    auto& conf = mol.getConformer();
+    double x = 0;
+    for (const auto& f : frags) {  // in SMILES order
+        double lo = 1e9, hi = -1e9, top = 1e9, bottom = -1e9;
+        for (int i : f) {
+            const auto* a = mol.getAtomWithIdx(i);
+            const auto& p = conf.getAtomPos(i);
+            // ponytail: a label's extent guessed at 0.65 Å a character, its first letter centred on the atom.
+            int chars = 0;
+            if (a->getAtomicNum() != 6 || a->getFormalCharge() || !a->getDegree()) {
+                const int h = int(a->getTotalNumHs()), q = std::abs(a->getFormalCharge());
+                chars = int(a->getSymbol().size()) + (h ? 1 + (h > 1) : 0) + (q ? 1 + (q > 1) : 0);
+            }
+            lo = std::min(lo, p.x - (chars ? 0.35 : 0));
+            hi = std::max(hi, p.x + (chars ? 0.65 * chars - 0.3 : 0));
+            top = std::min(top, p.y), bottom = std::max(bottom, p.y);
+        }
+        for (int i : f) conf.getAtomPos(i) += RDGeom::Point3D(x - lo, -(top + bottom) / 2, 0);
+        x += hi - lo + 0.6;
+    }
 }
 
 // scale 0: normalise whatever bond length the source used to ours.
@@ -309,6 +378,18 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
                                                                  : BondStereo::None;
         doc.bonds.push_back(out);
     }
+    auto groups = mol.getStereoGroups();
+    RDKit::assignStereoGroupIds(groups);  // numbers for groups the source left unnumbered
+    for (const auto& g : groups) {
+        const auto type = g.getGroupType();
+        for (const auto* a : g.getAtoms()) {
+            Atom& out = doc.atoms[a->getIdx()];
+            out.stereoGroup = type == RDKit::StereoGroupType::STEREO_ABSOLUTE ? StereoGroup::Abs
+                              : type == RDKit::StereoGroupType::STEREO_AND    ? StereoGroup::And
+                                                                             : StereoGroup::Or;
+            out.stereoGroupNumber = type == RDKit::StereoGroupType::STEREO_ABSOLUTE ? 0 : int(g.getWriteId());
+        }
+    }
     return doc;
 }
 
@@ -320,6 +401,40 @@ std::optional<Document> fromSmiles(const std::string& smiles) {
         return std::nullopt;
     }
     if (!mol) return std::nullopt;
+    layout(*mol);
+    RDKit::Chirality::wedgeMolBonds(*mol, &mol->getConformer());
+    return fromRDKit(*mol);
+}
+
+std::optional<Document> fromSequence(const QString& sequence) {
+    static const QHash<QString, QChar> codes{
+        {"ala", 'A'}, {"arg", 'R'}, {"asn", 'N'}, {"asp", 'D'}, {"cys", 'C'}, {"gln", 'Q'}, {"glu", 'E'},
+        {"gly", 'G'}, {"his", 'H'}, {"ile", 'I'}, {"leu", 'L'}, {"lys", 'K'}, {"met", 'M'}, {"phe", 'F'},
+        {"pro", 'P'}, {"ser", 'S'}, {"thr", 'T'}, {"trp", 'W'}, {"tyr", 'Y'}, {"val", 'V'}};
+    // Three-letter codes: Gly-Phe or GLY PHE, with H-…-OH free ends and D- or L- before a residue; a lone
+    // unhyphenated one only as written (Gly), since GLY is also Gly-Leu-Tyr.
+    QStringList words = sequence.split(QRegularExpression("[\\s-]+"), Qt::SkipEmptyParts);
+    const bool hyphens = sequence.contains('-');
+    if (hyphens && words.size() > 1 && words.first() == "H") words.removeFirst();
+    if (hyphens && words.size() > 1 && words.last() == "OH") words.removeLast();
+    QString letters;
+    bool three = !words.isEmpty();
+    for (int i = 0; i < words.size() && three; ++i) {
+        const QString w = words[i].toLower();
+        const bool prefix = (words[i] == "D" || words[i] == "L") && i + 1 < words.size() && codes.contains(words[i + 1].toLower());
+        three = prefix || (codes.contains(w) && (hyphens || words.size() > 1 || words[i] == words[i].left(1).toUpper() + w.mid(1)));
+        if (three && !prefix) letters += i > 0 && words[i - 1] == "D" ? codes[w].toLower() : codes[w];
+    }
+    if (!three && hyphens) return std::nullopt;  // Ala-X-Phe: refused, not read as one-letter codes
+    if (!three) letters = sequence.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts).join("");  // one-letter, lower case for D
+    if (letters.isEmpty()) return std::nullopt;
+    std::unique_ptr<RWMol> mol;
+    try {
+        mol.reset(RDKit::SequenceToMol(letters.toStdString(), true, true));  // lower case: D
+    } catch (...) {
+        return std::nullopt;
+    }
+    if (!mol || !mol->getNumAtoms()) return std::nullopt;
     layout(*mol);
     RDKit::Chirality::wedgeMolBonds(*mol, &mol->getConformer());
     return fromRDKit(*mol);
@@ -401,13 +516,20 @@ struct LabelNode {
     int headCharge = 0;  // the charge on the fragment's atom under the label (RDKit drops it)
 };
 
+// The colours the file gives atoms and bonds, by node position: RDKit reads none of them.
+struct FileInks {
+    std::vector<std::pair<QPointF, QColor>> atoms;
+    std::vector<std::tuple<QPointF, QPointF, QColor>> bonds;  // from, to
+};
+
 // Arrows, free text and label nodes from the CDXML itself; RDKit only reads the
 // molecules. Returns the label nodes and how many bonds each node id has.
 // ponytail: plain lines, brackets, shapes and binary .cdx graphics are skipped.
 static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& doc, QHash<int, int>& bondCount,
-                                               std::vector<QPointF>& lonePairs) {
+                                               std::vector<QPointF>& lonePairs, FileInks& inks) {
     QXmlStreamReader r(xml);
     double scale = kBondLength / 30;  // CDXML's default BondLength
+    double lineWidth = 1;  // and LineWidth, in points
     struct Open { QString tag; int label = -1; };  // label: index into `labels` for label <n>s
     std::vector<Open> stack;
     std::vector<LabelNode> labels;
@@ -421,6 +543,16 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     bool superscript = false;  // the current style run is superscript (face 64)
     auto inside = [&](const char* tag) {
         return std::any_of(stack.begin(), stack.end(), [&](const Open& o) { return o.tag == tag; });
+    };
+    // Colour numbers: 0 and 1 are the hard-wired black and white, the file's table starts at 2
+    // (its first two entries are the page background and default ink).
+    // Black is the ink (it follows the theme), so it comes back as no colour.
+    std::vector<QColor> table;
+    QHash<int, QPointF> nodePos;
+    auto ink = [&](const QXmlStreamAttributes& at) {
+        const int i = at.value("color").toInt() - 2;
+        const QColor c = i >= 0 && i < int(table.size()) ? table[i] : QColor();
+        return c == QColor(Qt::black) ? QColor() : c;
     };
     static const QStringList labelTypes{"Fragment",    "Nickname",  "GenericNickname", "Unspecified", "Anonymous",
                                         "AnonymousAlternativeGroup", "NamedAlternativeGroup", "Variable"};
@@ -452,22 +584,33 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         if (tok != QXmlStreamReader::StartElement) continue;
         const QString tag = r.name().toString();
         const auto at = r.attributes();
-        auto pushArrow = [&](const Arrow& a) {
+        auto pushArrow = [&](Arrow a) {
+            a.color = ink(at);
             doc.arrows.push_back(a);
             arrowZ.push_back(at.hasAttribute("Z") ? at.value("Z").toDouble() : std::numeric_limits<double>::quiet_NaN());
         };
         const int parentLabel = stack.empty() ? -1 : stack.back().label;
         stack.push_back({tag});
+        const bool inLabel = std::any_of(stack.begin(), stack.end(), [](const Open& o) { return o.label >= 0; });
+        if (tag == "color")
+            table.push_back(QColor(qRound(at.value("r").toDouble() * 255), qRound(at.value("g").toDouble() * 255),
+                                   qRound(at.value("b").toDouble() * 255)));  // 8-bit, as the colours are chosen
         if (tag == "CDXML") {
             const double bond = at.hasAttribute("BondLength") ? std::max(1.0, at.value("BondLength").toDouble()) : 30;
             scale = kBondLength / bond;
+            if (const double w = at.value("LineWidth").toDouble(); w > 0) lineWidth = w;
             // The file's labels relative to its bonds, which may be far from our styles' (#203).
             if (at.hasAttribute("LabelSize")) doc.labelRatio = at.value("LabelSize").toDouble() / bond;
         } else if (tag == "b") {
-            ++bondCount[at.value("B").toInt()], ++bondCount[at.value("E").toInt()];
+            const int from = at.value("B").toInt(), to = at.value("E").toInt();
+            ++bondCount[from], ++bondCount[to];
+            if (const QColor c = ink(at); c.isValid() && !inLabel && nodePos.contains(from) && nodePos.contains(to))
+                inks.bonds.push_back({nodePos[from], nodePos[to], c});
         } else if (tag == "n") {
             if (at.hasAttribute("Z")) moleculeZ = std::min(moleculeZ, at.value("Z").toDouble());
             const int id = at.value("id").toInt();
+            nodePos[id] = point(at.value("p"));
+            if (const QColor c = ink(at); c.isValid() && !inLabel) inks.atoms.push_back({nodePos[id], c});
             for (const Open& o : stack)  // an atom inside a label's fragment (its link out isn't one)
                 if (o.label >= 0 && at.value("NodeType") != u"ExternalConnectionPoint") {
                     LabelNode& l = labels[o.label];
@@ -485,6 +628,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             labelText = parentLabel;
         }
         if (tag == "s") superscript = at.value("face").toInt() & 64;
+        if (tag == "s" && text && !text->color.isValid()) text->color = ink(at);
         if (tag == "s" && (text || labelText >= 0) && at.hasAttribute("size")) {
             const double rel = at.value("size").toDouble() * scale / 10;  // 10 pt: the default (ACS) label size
             if (rel > 0) (text ? text->scale : labels[labelText].textScale) = rel;  // size="0" would save unopenable (#316)
@@ -495,6 +639,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             if (box.size() == 4) p.setX(std::min(box[0].toDouble(), box[2].toDouble()) * scale);
             doc.texts.push_back({p, {}});
             text = &doc.texts.back();
+            text->color = ink(at);
         } else if (tag == "graphic") {
             // Plain lines, boxes and ellipses (not filled ones), and orbitals. A graphic ChemDraw
             // marks SupersededBy is the old copy of an <arrow> read above: skip it.
@@ -543,6 +688,10 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             const auto head = at.value("ArrowheadHead"), tail = at.value("ArrowheadTail");
             Arrow a{point(at.value("Tail3D")), point(at.value("Head3D"))};
             a.crossed = at.value("NoGo") == u"Cross";
+            // ChemDraw's head is HeadSize % of the line width long (1000 when not given).
+            const double width = at.value("LineWidth").toDouble() > 0 ? at.value("LineWidth").toDouble() : lineWidth;
+            const double size = (at.hasAttribute("HeadSize") ? at.value("HeadSize").toDouble() : 1000) / 100 * width * scale / kHeadLength;
+            if (size > 0) a.head = std::clamp(size, 0.25, 4.0);
             if (head.isEmpty() && tail.isEmpty()) {  // a plain line
                 a.kind = ArrowKind::Line;
                 a.dashed = at.value("LineType").contains(u"Dash");
@@ -675,7 +824,18 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         Document graphics;
         QHash<int, int> bondCount;
         std::vector<QPointF> lonePairs;
-        placeLabels(doc, chemDrawGraphics(data, graphics, bondCount, lonePairs), bondCount);
+        FileInks inks;
+        placeLabels(doc, chemDrawGraphics(data, graphics, bondCount, lonePairs, inks), bondCount);
+        auto atomAt = [&](QPointF p) {
+            for (int i = 0; i < int(doc.atoms.size()); ++i)
+                if (QLineF(doc.atoms[i].pos, p).length() < 0.6) return i;
+            return -1;
+        };
+        for (const auto& [p, c] : inks.atoms)
+            if (const int i = atomAt(p); i >= 0) doc.atoms[i].color = c;
+        for (const auto& [from, to, c] : inks.bonds)
+            for (Bond& b : doc.bonds)
+                if ((atomAt(from) == b.a && atomAt(to) == b.b) || (atomAt(from) == b.b && atomAt(to) == b.a)) b.color = c;
         for (QPointF lp : lonePairs) {  // onto the nearest atom
             int best = -1;
             double bestDist = 1.4 * kBondLength;
@@ -717,7 +877,9 @@ std::vector<Record> readRecords(const QString& path) {
             const QStringList cols = part.split(QRegularExpression("\\s+"));
             if (out.empty() && cols[0].compare("SMILES", Qt::CaseInsensitive) == 0) continue;  // a header row (#329)
             const std::string first = cols[0].toStdString();
-            out.push_back({cols.size() > 1 ? cols[1] : n, ext == "inchi" ? fromInchi(first) : fromSmiles(first)});
+            out.push_back({cols.size() > 1 ? cols[1] : n, ext == "inchi"                        ? fromInchi(first)
+                                                          : first.find('>') != std::string::npos ? fromReactionSmiles(first)
+                                                                                                 : fromSmiles(first)});
         }
     }
     return out;
@@ -836,17 +998,27 @@ std::optional<Reaction> reactionOf(const Document& doc) {
 
 std::string toReactionSmiles(const std::vector<Reaction>& steps) {
     std::string out;
-    for (const auto& r : steps) out += (out.empty() ? "" : "\n") + toReactionSmiles(r);
+    for (const auto& r : steps) {
+        const std::string line = toReactionSmiles(r);
+        if (line.empty()) return "";
+        out += (out.empty() ? "" : "\n") + line;
+    }
     return out;
 }
 
 std::string toReactionSmiles(const Reaction& r) {
-    auto side = [](const std::vector<Document>& ms) {
+    bool valid = true;
+    auto side = [&valid](const std::vector<Document>& ms) {
         std::string s;
-        for (const auto& m : ms) s += (s.empty() ? "" : ".") + toSmiles(m);
+        for (const auto& m : ms) {
+            const std::string smiles = toSmiles(m);
+            if (smiles.empty()) valid = false;
+            s += (s.empty() ? "" : ".") + smiles.substr(0, smiles.find(' '));  // no CXSMILES extension mid-reaction
+        }
         return s;
     };
-    return side(r.reactants) + ">" + side(r.agents) + ">" + side(r.products);
+    const std::string line = side(r.reactants) + ">" + side(r.agents) + ">" + side(r.products);
+    return valid ? line : "";  // as toSmiles: an invalid molecule gives nothing, not a reaction without it
 }
 
 std::string toRxn(const Reaction& r) {
@@ -988,12 +1160,47 @@ QByteArray toCdxml(const Document& doc) {
     w.writeStartDocument();
     w.writeDTD(R"(<!DOCTYPE CDXML SYSTEM "http://www.cambridgesoft.com/xml/cdxml.dtd">)");
     int id = 1;
-    auto pt = [](QPointF p) { return QString("%1 %2").arg(p.x(), 0, 'f', 2).arg(p.y(), 0, 'f', 2); };
+    // Placed as ChemDraw places its own: across the middle of a US Letter page, an inch from the top (#443).
+    const QRectF box = documentBounds(doc);
+    const QPointF shift(std::round(std::max(306 - box.center().x(), 72 - box.left())), std::round(72 - box.top()));  // whole points: coordinates keep their decimals
+    auto pt = [shift](QPointF p) { p += shift; return QString("%1 %2").arg(p.x(), 0, 'f', 2).arg(p.y(), 0, 'f', 2); };
     auto pt3 = [&](QPointF p) { return pt(p) + " 0"; };
+    // The colour table starts at colour 2 (0 and 1 are black and white); its first two entries are
+    // ChemDraw's page background and default ink, so white and black lead it and the colours used follow.
+    std::vector<QColor> palette{Qt::white, Qt::black};
+    auto colorNo = [&](const QColor& c) {
+        auto it = std::find(palette.begin(), palette.end(), c);
+        if (it == palette.end()) it = palette.insert(palette.end(), c);
+        return int(it - palette.begin()) + 2;
+    };
+    auto paint = [&](const QColor& c) {
+        if (c.isValid()) w.writeAttribute("color", QString::number(colorNo(c)));
+    };
+    for (const Atom& a : doc.atoms) if (a.color.isValid()) colorNo(a.color);
+    for (const Bond& b : doc.bonds) if (b.color.isValid()) colorNo(b.color);
+    for (const Text& tx : doc.texts) if (tx.color.isValid()) colorNo(tx.color);
+    for (const Arrow& a : doc.arrows) if (a.color.isValid()) colorNo(a.color);
     w.writeStartElement("CDXML");
     w.writeAttribute("BondLength", QString::number(kBondLength));
     if (doc.labelRatio > 0) w.writeAttribute("LabelSize", QString::number(doc.labelRatio * kBondLength));
     w.writeAttribute("CreationProgram", "Penzene");
+    if (palette.size() > 2) {
+        w.writeStartElement("colortable");
+        for (const QColor& c : palette) {
+            w.writeEmptyElement("color");
+            w.writeAttribute("r", QString::number(c.redF(), 'f', 4));
+            w.writeAttribute("g", QString::number(c.greenF(), 'f', 4));
+            w.writeAttribute("b", QString::number(c.blueF(), 'f', 4));
+        }
+        w.writeEndElement();
+    }
+    // ChemDraw draws a style run in its colour only when the run names a font.
+    w.writeStartElement("fonttable");
+    w.writeEmptyElement("font");
+    w.writeAttribute("id", "3");
+    w.writeAttribute("charset", "iso-8859-1");
+    w.writeAttribute("name", "Arial");
+    w.writeEndElement();
     w.writeStartElement("page");
     w.writeAttribute("id", QString::number(id++));
     // Stacking (Z, and document order for readers without it): arrows sent behind the molecule first.
@@ -1029,6 +1236,7 @@ QByteArray toCdxml(const Document& doc) {
                 if (a.kind == ArrowKind::RoundedBox) w.writeAttribute("RectangleType", "RoundEdge");
             }
             if (a.dashed) w.writeAttribute("LineType", "Dashed");
+            paint(a.color);
             w.writeEndElement();
             return;
         }
@@ -1056,6 +1264,11 @@ QByteArray toCdxml(const Document& doc) {
         }
         if (a.kind != ArrowKind::Retro) w.writeAttribute("ArrowheadType", "Solid");
         if (a.crossed) w.writeAttribute("NoGo", "Cross");
+        // At ChemDraw's 1 pt line (no LineWidth is written), a head kHeadLength long; notch and width in its proportions.
+        const double head = a.head * kHeadLength * 100;
+        for (auto [name, share] : {std::pair{"HeadSize", 1.0}, {"ArrowheadCenterSize", 0.875}, {"ArrowheadWidth", 0.25}})
+            w.writeAttribute(name, QString::number(std::lround(head * share)));
+        paint(a.color);
         if (std::abs(a.bend) > 1e-6 && a.kind != ArrowKind::Equilibrium) {
             // The circle through both ends and the arc's midpoint (bend off the chord, as read back).
             const QPointF d = a.to - a.from, mid = (a.from + a.to) / 2;
@@ -1085,6 +1298,10 @@ QByteArray toCdxml(const Document& doc) {
             if (a.charge) w.writeAttribute("Charge", QString::number(a.charge));
             if (a.radicals) w.writeAttribute("Radical", a.radicals == 1 ? "Doublet" : "Triplet");
             if (a.isotope && a.z > 0) w.writeAttribute("Isotope", QString::number(a.isotope));
+            if (a.stereoGroup != StereoGroup::None) {
+                w.writeAttribute("EnhancedStereoType", QStringList{"", "Absolute", "And", "Or"}[int(a.stereoGroup)]);
+                if (a.stereoGroupNumber) w.writeAttribute("EnhancedStereoGroupNum", QString::number(a.stereoGroupNumber));
+            }
         };
         for (size_t i = 0; i < doc.atoms.size(); ++i) {
             const Atom& a = doc.atoms[i];
@@ -1093,6 +1310,7 @@ QByteArray toCdxml(const Document& doc) {
             w.writeAttribute("id", QString::number(node[i]));
             w.writeAttribute("Z", QString::number(z));
             w.writeAttribute("p", pt(a.pos));
+            paint(a.color);
             if (a.label.isEmpty()) {
                 element(a);
                 w.writeEndElement();
@@ -1157,7 +1375,11 @@ QByteArray toCdxml(const Document& doc) {
             }
             w.writeStartElement("t");
             w.writeAttribute("p", pt(a.pos + QPointF(-3, 4)));
-            w.writeTextElement("s", a.label);
+            w.writeStartElement("s");
+            w.writeAttribute("font", "3");
+            paint(a.color);
+            w.writeCharacters(a.label);
+            w.writeEndElement();
             w.writeEndElement();
             w.writeEndElement();
         }
@@ -1174,6 +1396,7 @@ QByteArray toCdxml(const Document& doc) {
             else if (b.order > 1) w.writeAttribute("Order", QString::number(b.order));
             if (display[int(b.stereo)]) w.writeAttribute("Display", display[int(b.stereo)]);
             if (side[int(b.position)]) w.writeAttribute("DoublePosition", side[int(b.position)]);
+            paint(b.color);
             w.writeEndElement();
         }
         w.writeEndElement();
@@ -1182,11 +1405,14 @@ QByteArray toCdxml(const Document& doc) {
         w.writeStartElement("t");
         w.writeAttribute("id", QString::number(id++));
         w.writeAttribute("p", pt(t.pos));
+        paint(t.color);  // on the text and its runs: the binary CDX keeps only the text's
         // One run per script, as ChemDraw styles them: subscript face 32, superscript 64.
         auto run = [&](Script s, const QString& chars) {
             w.writeStartElement("s");
+            w.writeAttribute("font", "3");
             w.writeAttribute("size", QString::number(10 * t.scale));  // 10 pt: the ACS label size
-            if (s != Script::Base) w.writeAttribute("face", s == Script::Sub ? "32" : "64");
+            paint(t.color);
+            if (s != Script::Base || t.compound) w.writeAttribute("face", QString::number((t.compound ? 1 : 0) | (s == Script::Sub ? 32 : s == Script::Super ? 64 : 0)));
             w.writeCharacters(chars);
             w.writeEndElement();
         };
@@ -1224,6 +1450,7 @@ std::string toMolBlock(const Document& doc, bool v3000) {
     auto mol = toRDKit(doc);
     perceive(*mol, false);  // the drawn Kekulé bonds, not aromatic type 4, a query-only type (#321)
     RDKit::Chirality::reapplyMolBlockWedging(*mol);  // keep the user's wedges
+    if (!v3000) mol->setStereoGroups({});  // V2000 has no place for them; RDKit would switch to V3000 (and RXN files are V2000)
     return RDKit::MolToMolBlock(*mol, true, -1, false, v3000);
 }
 
@@ -1236,7 +1463,13 @@ std::string toSdf(const Document& doc, bool v3000) {
 std::string toSmiles(const Document& doc) {
     auto mol = toRDKit(doc);
     if (!perceive(*mol)) return "";
-    std::string smiles = RDKit::MolToSmiles(*mol);
+    // Stereo groups (&1, or1) have no place in plain SMILES: write CXSMILES with only them then (#402).
+    auto write = [](const RWMol& m) {
+        return m.getStereoGroups().empty()
+                   ? RDKit::MolToSmiles(m)
+                   : RDKit::MolToCXSmiles(m, RDKit::SmilesWriteParams(), RDKit::SmilesWrite::CXSmilesFields::CX_ENHANCEDSTEREO);
+    };
+    std::string smiles = write(*mol);
     auto parses = [](const std::string& s) {
         try {
             return std::unique_ptr<RWMol>(RDKit::SmilesToMol(s)) != nullptr;
@@ -1248,7 +1481,7 @@ std::string toSmiles(const Document& doc) {
     // read that SMILES back; write it in Kekulé form then.
     if (parses(smiles)) return smiles;
     mol = toRDKit(doc);  // as drawn, without aromaticity
-    if (perceive(*mol, false)) smiles = RDKit::MolToSmiles(*mol);
+    if (perceive(*mol, false)) smiles = write(*mol);
     return parses(smiles) ? smiles : "";  // e.g. a hydrogen with four bonds (#266)
 }
 
@@ -1293,6 +1526,217 @@ std::optional<Profile> profile(const Document& doc) {
     return p;
 }
 
+// Natural isotopes per atomic number: (mass, abundance as a fraction), from RDKit's isotope table.
+static const std::vector<std::vector<std::pair<double, double>>>& naturalIsotopes() {
+    static const auto table = [] {
+        std::vector<std::vector<std::pair<double, double>>> t(RDKit::elementNames.size() + 1);
+        QByteArray all;
+        for (int i = 0; RDKit::isotopesAtomData[i] != "EOS"; ++i) all += RDKit::isotopesAtomData[i];
+        for (const QByteArray& line : all.split('\n')) {
+            const auto f = line.simplified().split(' ');  // z, symbol, isotope, mass, abundance (%)
+            bool ok = f.size() >= 5;
+            const int z = ok ? f[0].toInt(&ok) : 0;
+            const double abundance = ok ? f[4].toDouble(&ok) : 0;  // C locale, whatever the user's
+            if (ok && abundance > 0 && z > 0 && z < int(t.size())) t[z].push_back({f[3].toDouble(), abundance});
+        }
+        for (auto& isotopes : t) {
+            double sum = 0;
+            for (const auto& [m, a] : isotopes) sum += a;
+            for (auto& [m, a] : isotopes) a /= sum;
+        }
+        return t;
+    }();
+    return table;
+}
+
+static double isotopeMass(int z, unsigned isotope) {
+    RDKit::Atom a(z);
+    a.setIsotope(isotope);
+    return a.getMass();
+}
+
+// Sticks closer than 0.001 Da become one, at their weighted mean; the faintest are dropped.
+static std::vector<Peak> merged(std::vector<Peak> peaks, double floor) {
+    std::sort(peaks.begin(), peaks.end(), [](const Peak& a, const Peak& b) { return a.mz < b.mz; });
+    double top = 0;
+    for (const Peak& p : peaks) top = std::max(top, p.intensity);
+    std::vector<Peak> out;
+    for (const Peak& p : peaks) {
+        if (!out.empty() && p.mz - out.back().mz < 0.001) {
+            Peak& q = out.back();
+            q.mz = (q.mz * q.intensity + p.mz * p.intensity) / (q.intensity + p.intensity);
+            q.intensity += p.intensity;
+        } else {
+            out.push_back(p);
+        }
+    }
+    std::erase_if(out, [&](const Peak& p) { return p.intensity < floor * top; });
+    return out;
+}
+
+static std::vector<Peak> convolve(const std::vector<Peak>& a, const std::vector<Peak>& b) {
+    std::vector<Peak> out;
+    for (const Peak& p : a)
+        for (const Peak& q : b) out.push_back({p.mz + q.mz, p.intensity * q.intensity});
+    return merged(std::move(out), 1e-7);  // pruned: the faint combinations never reach 0.1%
+}
+
+constexpr double electron = 0.000548579909;  // Da
+
+std::vector<Peak> isotopePattern(const Document& doc, Ion ion) {
+    if (doc.atoms.empty()) return {};
+    auto mol = toRDKit(doc);
+    if (!perceive(*mol)) return {};
+    std::map<int, int> natural;  // atomic number → count
+    std::vector<Peak> pattern{{0, 1}};
+    int charge = 0;
+    for (const auto* a : mol->atoms()) {
+        if (a->getAtomicNum() == 0) return {};  // R groups have no mass
+        charge += a->getFormalCharge();
+        natural[1] += int(a->getTotalNumHs());
+        if (a->getIsotope()) pattern[0].mz += isotopeMass(a->getAtomicNum(), a->getIsotope());
+        else ++natural[a->getAtomicNum()];
+    }
+    if (ion == Ion::M && charge == 0) charge = 1;  // a neutral molecule is seen as M+•, one electron lighter (#556)
+    if (ion == Ion::MplusH) ++natural[1], ++charge;
+    if (ion == Ion::MplusNa) ++natural[11], ++charge;
+    if (ion == Ion::MminusH) --natural[1], --charge;
+    if (natural[1] < 0) return {};
+    // ponytail: one atom at a time; square-and-multiply if thousand-atom polymers get slow.
+    for (const auto& [z, n] : natural) {
+        if (n == 0) continue;
+        std::vector<Peak> one;
+        for (const auto& [m, a] : naturalIsotopes()[z]) one.push_back({m, a});
+        if (one.empty()) return {};  // no stable isotope (Tc, Pm…)
+        for (int i = 0; i < n; ++i) pattern = convolve(pattern, one);
+    }
+    pattern = merged(std::move(pattern), 0.001);
+    const double top = std::max_element(pattern.begin(), pattern.end(), [](const Peak& a, const Peak& b) {
+                           return a.intensity < b.intensity;
+                       })->intensity;
+    for (Peak& p : pattern) {
+        p.mz = (p.mz - charge * electron) / std::max(1, std::abs(charge));
+        p.intensity *= 100 / top;
+    }
+    return pattern;
+}
+
+QString hrmsLine(const Document& doc, Ion ion) {
+    if (doc.atoms.empty()) return {};
+    auto mol = toRDKit(doc);
+    if (!perceive(*mol)) return {};
+    for (const auto* a : mol->atoms())
+        if (a->getAtomicNum() == 0) return {};
+    const int drawn = RDKit::MolOps::getFormalCharge(*mol);  // calcExactMW takes its electrons off already
+    int charge = drawn;
+    auto add = [&](int z) {
+        auto* a = new RDKit::Atom(z);
+        a->setNoImplicit(true);
+        mol->addAtom(a, false, true);
+        ++charge;
+    };
+    if (ion == Ion::MplusH) add(1);
+    if (ion == Ion::MplusNa) add(11);
+    if (ion == Ion::MminusH) {
+        auto it = std::find_if(mol->atoms().begin(), mol->atoms().end(), [](const RDKit::Atom* a) { return a->getTotalNumHs() > 0; });
+        if (it == mol->atoms().end()) return {};
+        (*it)->setNumExplicitHs((*it)->getTotalNumHs() - 1);
+        (*it)->setNoImplicit(true);
+        --charge;
+    }
+    const bool ei = ion == Ion::M && charge == 0;  // the molecular ion M+ of electron impact
+    if (ei) charge = 1;
+    mol->updatePropertyCache(false);
+    const double mz = (RDKit::Descriptors::calcExactMW(*mol) - (charge - drawn) * electron) / std::abs(charge);
+    const char* label[] = {"[M]", "[M+H]+", "[M+Na]+", "[M-H]-"};
+    QString what = label[int(ion)];
+    if (ion == Ion::M) what += QString(std::abs(charge), charge > 0 ? '+' : '-');
+    return QString("HRMS (%1) m/z: %2 calcd for %3 %4")
+        .arg(ei ? "EI" : "ESI", what, QString::fromStdString(RDKit::Descriptors::calcMolFormula(*mol, true)))
+        .arg(mz, 0, 'f', 4);
+}
+
+using Counts = std::map<int, int>;  // atomic number → how many
+
+static QString hill(const Counts& c) {
+    QString out;
+    auto put = [&](int z) {
+        if (c.count(z) && c.at(z) > 0) out += QString::fromStdString(symbol(z)) + (c.at(z) > 1 ? QString::number(c.at(z)) : "");
+    };
+    put(6), put(1);
+    std::vector<std::pair<std::string, int>> rest;  // alphabetical, as Hill orders the others
+    for (const auto& [z, n] : c)
+        if (z != 1 && z != 6) rest.push_back({symbol(z), z});
+    std::sort(rest.begin(), rest.end());
+    for (const auto& r : rest) put(r.second);
+    return out;
+}
+
+std::vector<EiIon> eiIons(const Document& doc) {
+    if (doc.atoms.empty()) return {};
+    auto mol = toRDKit(doc);
+    if (!perceive(*mol) || RDKit::MolOps::getFormalCharge(*mol)) return {};  // EI ionises neutral molecules
+    Counts m;
+    auto add = [&](Counts& c, const RDKit::Atom* a) { ++c[a->getAtomicNum()], c[1] += int(a->getTotalNumHs()); };
+    for (const auto* a : mol->atoms()) {
+        if (a->getAtomicNum() == 0) return {};
+        add(m, a);
+    }
+    auto mass = [](const Counts& c) {
+        double sum = 0;
+        for (const auto& [z, n] : c) {
+            const auto& iso = naturalIsotopes()[z];
+            if (iso.empty()) return 0.0;
+            sum += n * std::max_element(iso.begin(), iso.end(), [](auto& x, auto& y) { return x.second < y.second; })->first;
+        }
+        return sum;
+    };
+    std::vector<EiIon> out;
+    auto ion = [&](const Counts& c, const QString& from) {
+        const QString formula = hill(c) + "+";
+        if (mass(c) > 0 && std::none_of(out.begin(), out.end(), [&](const EiIon& i) { return i.formula == formula; }))
+            out.push_back({mass(c) - electron, formula, from});
+    };
+    auto loss = [&](const Counts& lost, const QString& from) {
+        Counts c = m;
+        for (const auto& [z, n] : lost)
+            if ((c[z] -= n) < 0) return;
+        ion(c, "M − " + hill(lost) + ", " + from);
+    };
+    auto has = [&](const char* smarts) {
+        const std::unique_ptr<RWMol> q(RDKit::SmartsToMol(smarts));
+        return RDKit::SubstructMatch(*mol, *q);
+    };
+    ion(m, "M⁺•");
+    if (!has("[CH3][CX4]").empty()) loss({{6, 1}, {1, 3}}, "methyl");
+    if (!has("[CX4][OX2H]").empty()) loss({{1, 2}, {8, 1}}, "alcohol");
+    if (!has("[CX3](=O)[OX2H]").empty()) loss({{1, 1}, {8, 1}}, "acid"), loss({{6, 1}, {1, 1}, {8, 2}}, "acid");
+    if (!has("[CX3](=O)[OX2][CH3]").empty()) loss({{6, 1}, {1, 3}, {8, 1}}, "methyl ester");
+    if (!has("[CX3](=O)[OX2][CH2][CH3]").empty()) loss({{6, 2}, {1, 5}, {8, 1}}, "ethyl ester");
+    if (!has("[CX4]([CH3])([CH3])[CH3]").empty()) ion({{6, 4}, {1, 9}}, "tert-butyl"), loss({{6, 4}, {1, 9}}, "tert-butyl");
+    if (!has("[Cl]").empty()) loss({{17, 1}}, "chlorine");
+    if (!has("[Br]").empty()) loss({{35, 1}}, "bromine");
+    if (!has("[CH3][CX3]=O").empty()) ion({{6, 2}, {1, 3}, {8, 1}}, "acetyl");
+    if (!has("[cH]1[cH][cH][cH][cH]c1[CH2]").empty()) ion({{6, 7}, {1, 7}}, "benzyl (tropylium)");
+    if (!has("[cH]1[cH][cH][cH][cH]c1[CX3]=O").empty()) ion({{6, 7}, {1, 5}, {8, 1}}, "benzoyl"), ion({{6, 6}, {1, 5}}, "phenyl");
+    // McLafferty: a γ-H moves to the carbonyl O and the alkene beyond Cα leaves.
+    for (const auto& match : has("[CX3](=O)[CX4]!@[CX4][#6;!H0]")) {
+        const int alpha = match[2].second, beta = match[3].second;
+        Counts alkene;
+        std::set<int> seen{alpha, beta};
+        std::vector<int> stack{beta};
+        while (!stack.empty()) {
+            const auto* a = mol->getAtomWithIdx(stack.back());
+            stack.pop_back();
+            add(alkene, a);
+            for (const auto* n : mol->atomNeighbors(a))
+                if (seen.insert(int(n->getIdx())).second) stack.push_back(int(n->getIdx()));
+        }
+        if (--alkene[1] >= 0) loss(alkene, "McLafferty");
+    }
+    return out;
+}
+
 QStringList descriptorColumns() {
     return {"id", "name", "smiles", "inchikey", "formula", "mw", "exact_mass", "clogp", "tpsa", "hbd", "hba",
             "rotatable_bonds", "heavy_atoms", "aromatic_rings", "lipinski_violations", "veber", "error"};
@@ -1308,9 +1752,10 @@ std::string descriptorsCsv(const std::vector<Record>& records, const QStringList
     int id = 0;
     for (const auto& r : records) {
         QHash<QString, QString> v{{"id", QString::number(++id)}, {"name", r.name}};
-        const auto p = r.doc ? profile(*r.doc) : std::nullopt;
+        const bool reaction = r.doc && !r.doc->arrows.empty();  // its molecules' descriptors don't add up to one row
+        const auto p = r.doc && !reaction ? profile(*r.doc) : std::nullopt;
         if (!p) {
-            v["error"] = r.doc ? "not valid chemistry" : "unreadable";
+            v["error"] = reaction ? "reaction" : r.doc ? "not valid chemistry" : "unreadable";
         } else {
             const Document& d = *r.doc;
             auto num = [](double x, int places) { return QString::number(x, 'f', places); };
@@ -1691,6 +2136,282 @@ Document project3D(const Document& doc, const Pose3D& pose, double aboutX, doubl
         out.bonds[k].stereo = b->getBondDir() == RDKit::Bond::BEGINWEDGE ? BondStereo::Wedge : BondStereo::Hash;
     }
     return out;
+}
+
+}  // namespace chem
+
+namespace chem {
+
+// HOSE codes (Bremser 1978), following the description of CDK's HOSECodeGenerator (default mode):
+// spheres of neighbours out from the root, each sphere's branches ranked by element, bond and the
+// degree of their children, with & for an atom met before (a ring closure) and "," between branches.
+// cmake/nmr-table.py builds the shift table with this same function, through the Python module.
+namespace {
+struct HoseNode {
+    int atom = -1;    // -1: the empty branch after a terminal atom
+    int parent = -1;  // node index; -1: the root
+    int bond = 0;     // 1-3, 4 aromatic, 0 for an empty branch
+    int degree = 0;
+    long score = 0;
+    int ranking = 0, sortOrder = 1;
+    bool stopper = false;
+};
+
+QString hoseCharge(int charge) {
+    if (!charge) return {};
+    if (std::abs(charge) == 1) return charge < 0 ? "-" : "+";
+    return "'" + QString(charge > 0 ? "+" : "") + QString::number(charge) + "'";
+}
+
+long hoseRank(int z) {  // CDK's element ranks; other elements by their mass
+    switch (z) {
+    case 6: return 9000; case 8: return 8900; case 7: return 8800; case 16: return 8700; case 15: return 8600;
+    case 14: return 8500; case 5: return 8400; case 9: return 8300; case 17: return 8200; case 35: return 8100;
+    case 53: return 7900; case 0: return 800000;
+    }
+    // ponytail: rounded average mass, not the major isotope's mass number (PeriodicTable's inline
+    // lookups aren't exported by the Windows DLL); it only orders rare elements, the same way everywhere.
+    return 800000 - std::lround(RDKit::Atom(z).getMass());
+}
+
+std::string hoseSymbol(int z) {  // the one-letter stand-ins inside the spheres
+    return z == 14 ? "Q" : z == 17 ? "X" : z == 35 ? "Y" : symbol(z);
+}
+
+// One atom's code to `spheres` spheres. `mol` has no H atoms; `ranks` are its canonical ranks.
+std::string hoseCode(const RDKit::ROMol& mol, int root, int spheres, const std::vector<unsigned>& ranks) {
+    static const char* delimiters[] = {"(", "/", "/", ")", "/", "/", "/", "/", "/", "/", "/", "/"};
+    static const char* bondSymbols[] = {"", "", "=", "%", "*"};
+    static const long bondRanks[] = {0, 0, 200000, 300000, 100000};
+    auto neighbours = [&](int a) {
+        std::vector<int> out;
+        for (const auto* n : mol.atomNeighbors(mol.getAtomWithIdx(a))) out.push_back(int(n->getIdx()));
+        return out;
+    };
+    auto bondType = [&](int a, int b) {
+        const auto* bond = mol.getBondBetweenAtoms(a, b);
+        if (bond->getIsAromatic()) return 4;
+        const auto t = bond->getBondType();
+        return t == RDKit::Bond::DOUBLE ? 2 : t == RDKit::Bond::TRIPLE ? 3 : 1;
+    };
+    std::vector<HoseNode> nodes;
+    auto atomOf = [&](int parent) { return parent < 0 ? root : nodes[parent].atom; };
+    auto byRank = [&](std::vector<int>& sphere) {  // the canonical order, which ties keep
+        std::stable_sort(sphere.begin(), sphere.end(), [&](int x, int y) {
+            const long rx = nodes[x].atom < 0 ? -1 : long(ranks[nodes[x].atom]);
+            const long ry = nodes[y].atom < 0 ? -1 : long(ranks[nodes[y].atom]);
+            return rx < ry;
+        });
+    };
+    auto add = [&](int atom, int parent, int bond) {
+        nodes.push_back({atom, parent, bond, atom < 0 ? 0 : int(mol.getAtomWithIdx(atom)->getDegree())});
+        return int(nodes.size()) - 1;
+    };
+    // Breadth first, one sphere past the last written (its degrees rank the last one).
+    std::vector<std::vector<int>> sphere(spheres + 1);
+    for (int n : neighbours(root)) sphere[0].push_back(add(n, -1, bondType(root, n)));
+    byRank(sphere[0]);
+    for (int s = 1; s <= spheres; ++s) {
+        for (int k : sphere[s - 1]) {
+            const int atom = nodes[k].atom;
+            if (atom < 0) continue;
+            const auto next = neighbours(atom);
+            if (next.size() == 1) {
+                sphere[s].push_back(add(-1, k, 0));
+                continue;
+            }
+            for (int n : next)
+                if (n != atomOf(nodes[k].parent)) sphere[s].push_back(add(n, k, bondType(atom, n)));
+        }
+        byRank(sphere[s]);
+    }
+    for (int s = spheres; s >= 1; --s)
+        for (int k : sphere[s]) nodes[nodes[k].parent].ranking += nodes[k].degree;
+    std::vector<bool> visited(mol.getNumAtoms());
+    auto parentOrder = [&](int k) { return nodes[k].parent < 0 ? 1 : nodes[nodes[k].parent].sortOrder; };
+    for (int s = 0; s < spheres; ++s) {
+        for (int k : sphere[s]) {
+            HoseNode& n = nodes[k];
+            n.score += n.atom >= 0 && visited[n.atom] ? 1100 : n.atom >= 0 ? hoseRank(mol.getAtomWithIdx(n.atom)->getAtomicNum()) : 1000;
+            n.score += bondRanks[n.bond] + n.ranking;
+        }
+        for (int k : sphere[s])
+            if (nodes[k].atom >= 0) visited[nodes[k].atom] = true;
+        std::stable_sort(sphere[s].begin(), sphere[s].end(), [&](int x, int y) {
+            if (parentOrder(x) != parentOrder(y)) return parentOrder(x) > parentOrder(y);
+            return nodes[x].score > nodes[y].score;
+        });
+        for (size_t i = 0; i < sphere[s].size(); ++i) nodes[sphere[s][i]].sortOrder = int(sphere[s].size() - i);
+    }
+    const auto* r = mol.getAtomWithIdx(root);
+    QString code = QString::fromStdString(symbol(r->getAtomicNum())) + "-" +
+                   QString::number(r->getDegree() + r->getTotalNumHs()) + hoseCharge(r->getFormalCharge()) + ";";
+    std::fill(visited.begin(), visited.end(), false);
+    for (int s = 0; s < spheres; ++s) {
+        if (!sphere[s].empty()) {
+            int branch = atomOf(nodes[sphere[s][0]].parent);
+            for (int k : sphere[s]) {
+                HoseNode& n = nodes[k];
+                const bool parentStops = n.parent >= 0 && nodes[n.parent].stopper;
+                if (!parentStops) {
+                    if (atomOf(n.parent) != branch) branch = atomOf(n.parent), code += ',';
+                    code += bondSymbols[n.bond];
+                    if (n.atom >= 0) {
+                        const auto* a = mol.getAtomWithIdx(n.atom);
+                        if (visited[n.atom]) code += '&', n.stopper = true;
+                        else code += QString::fromStdString(hoseSymbol(a->getAtomicNum()));
+                        code += hoseCharge(a->getFormalCharge());
+                    }
+                }
+                if (n.atom >= 0) visited[n.atom] = true;
+                if (parentStops) n.stopper = true;
+            }
+        }
+        code += delimiters[s];
+    }
+    for (int s = spheres; s < 4; ++s) code += delimiters[s];
+    return code.toStdString();
+}
+
+// Every atom's codes, on a copy without H atoms (explicit or not, the same codes); with `classes`,
+// also each atom's symmetry class (equal for atoms the molecule can't tell apart; -1 for H atoms).
+std::vector<std::vector<std::string>> hoseCodesOf(const RWMol& in, int maxSpheres, std::vector<int>* classes = nullptr) {
+    std::vector<std::vector<std::string>> out(in.getNumAtoms());
+    if (classes) classes->assign(in.getNumAtoms(), -1);
+    RWMol mol(in);
+    for (auto* a : mol.atoms()) a->setProp("penzeneIndex", int(a->getIdx()));
+    try {
+        RDKit::MolOps::removeAllHs(mol, false);
+        mol.updatePropertyCache(false);
+        std::vector<unsigned> ranks;
+        RDKit::Canon::rankMolAtoms(mol, ranks, true, false, false, false, false, false);
+        std::vector<unsigned> symmetry;  // ties kept: equivalent atoms share a rank
+        if (classes) RDKit::Canon::rankMolAtoms(mol, symmetry, false, false, false, false, false, false);
+        for (const auto* a : mol.atoms()) {
+            if (classes) (*classes)[a->getProp<int>("penzeneIndex")] = int(symmetry[a->getIdx()]);
+            auto& codes = out[a->getProp<int>("penzeneIndex")];
+            for (int s = 1; s <= maxSpheres; ++s) codes.push_back(hoseCode(mol, int(a->getIdx()), s, ranks));
+        }
+    } catch (...) {
+        return {};
+    }
+    return out;
+}
+
+// The table: sorted "<spheres> <code>\t13C\tcount\t1H\tcount" lines, found by binary search.
+struct ShiftTable {
+    QByteArray text;
+    std::vector<std::string_view> lines;
+    ShiftTable() {
+        QFile f(":/nmr/hose.tsv");
+        if (!f.open(QIODevice::ReadOnly)) return;
+        text = f.readAll();
+        std::string_view all(text.constData(), size_t(text.size()));
+        for (size_t at = 0; at < all.size();) {
+            const size_t end = std::min(all.find('\n', at), all.size());
+            if (end > at && all[at] != '#') lines.push_back(all.substr(at, end - at));
+            at = end + 1;
+        }
+    }
+    // The 13C (column 0) or 1H (column 1) shift for a code, if the table has one.
+    std::optional<double> find(const std::string& key, int column) const {
+        auto keyOf = [](std::string_view line) { return line.substr(0, line.find('\t')); };
+        auto it = std::lower_bound(lines.begin(), lines.end(), key,
+                                   [&](std::string_view line, const std::string& k) { return keyOf(line) < k; });
+        if (it == lines.end() || keyOf(*it) != key) return std::nullopt;
+        const auto fields = QByteArray(it->data(), qsizetype(it->size())).split('\t');
+        bool ok = false;
+        const double v = fields.value(1 + 2 * column).toDouble(&ok);
+        return ok ? std::optional(v) : std::nullopt;
+    }
+};
+}  // namespace
+
+std::vector<std::vector<std::string>> hoseCodes(const std::string& molBlock, int maxSpheres) {
+    try {
+        std::unique_ptr<RWMol> mol(RDKit::MolBlockToMol(molBlock, true, false));
+        return mol ? hoseCodesOf(*mol, maxSpheres) : std::vector<std::vector<std::string>>{};
+    } catch (...) {
+        return {};
+    }
+}
+
+static std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSpheres, std::vector<int>* classes) {
+    auto mol = toRDKit(doc);
+    if (doc.atoms.empty() || !perceive(*mol)) return {};  // half-perceived: codes the table can't match
+    auto codes = hoseCodesOf(*mol, maxSpheres, classes);
+    codes.resize(std::min(codes.size(), doc.atoms.size()));  // not expanded abbreviations' atoms
+    return codes;
+}
+
+std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSpheres) {
+    return hoseCodes(doc, maxSpheres, nullptr);
+}
+
+std::vector<Shift> predictShifts(const Document& doc) {
+    static const ShiftTable table;
+    // Shifts follow the bonding, not where atoms are drawn, so dragging an atom reuses the last answer.
+    std::string key;
+    for (const Atom& a : doc.atoms)
+        key += std::to_string(a.z) + ',' + std::to_string(a.charge) + ',' + std::to_string(a.radicals) + ',' +
+               std::to_string(a.isotope) + ',' + a.label.toStdString() + ';';
+    for (const Bond& b : doc.bonds)
+        key += std::to_string(b.a) + '-' + std::to_string(b.b) + ',' + std::to_string(b.order) + ',' +
+               std::to_string(int(b.stereo)) + ';';
+    static thread_local std::string lastKey;
+    static thread_local std::vector<Shift> last;
+    if (!last.empty() && key == lastKey) return last;
+    std::vector<Shift> out;
+    std::vector<int> classes;
+    const auto codes = hoseCodes(doc, 4, &classes);
+    const auto info = atomInfo(doc);
+    std::vector<int> hydrogens(codes.size());
+    for (size_t i = 0; i < codes.size(); ++i) hydrogens[i] = info[i].hydrogens;
+    for (const Bond& b : doc.bonds)  // drawn H atoms too
+        for (auto [h, to] : {std::pair{b.a, b.b}, std::pair{b.b, b.a}})
+            if (doc.atoms[h].z == 1 && size_t(to) < codes.size()) ++hydrogens[to];
+    for (size_t i = 0; i < codes.size(); ++i) {
+        Shift s{int(i)};
+        s.hydrogens = hydrogens[i], s.symmetry = classes[i];
+        if (doc.atoms[i].z == 6)  // H on O or N exchange, so split nothing and aren't split
+            for (int nb : doc.neighbors(int(i)))
+                if (doc.atoms[nb].z == 6 && classes[nb] != classes[i]) s.coupled += hydrogens[nb];
+        auto look = [&](int column, double& value, int& spheres) {
+            for (int n = int(codes[i].size()); n >= 1 && !spheres; --n)
+                if (auto v = table.find(std::to_string(n) + " " + codes[i][n - 1], column)) value = *v, spheres = n;
+        };
+        if (codes[i].empty()) continue;
+        if (doc.atoms[i].z == 6) look(0, s.carbon, s.carbonSpheres);
+        if (hydrogens[i] && doc.atoms[i].z != 1) look(1, s.proton, s.protonSpheres);
+        if (s.carbonSpheres || s.protonSpheres) out.push_back(s);
+    }
+    lastKey = key, last = out;
+    return out;
+}
+
+std::vector<NmrStick> nmrSticks(const Document& doc, bool proton, const std::vector<int>& only) {
+    const std::set<int> wanted(only.begin(), only.end());
+    std::map<int, NmrStick> byClass;  // atoms the molecule can't tell apart make one stick
+    for (const Shift& s : predictShifts(doc)) {
+        if (!(proton ? s.protonSpheres : s.carbonSpheres) || (!wanted.empty() && !wanted.count(s.atom))) continue;
+        NmrStick& k = byClass[s.symmetry];
+        k.ppm = proton ? s.proton : s.carbon;
+        k.count += proton ? s.hydrogens : 1;
+        k.atoms.push_back(s.atom);
+        k.weak = (proton ? s.protonSpheres : s.carbonSpheres) < 3;
+        k.coupled = s.coupled;
+    }
+    std::vector<NmrStick> out;
+    for (auto& [c, k] : byClass) out.push_back(std::move(k));
+    std::sort(out.begin(), out.end(), [](const NmrStick& a, const NmrStick& b) { return a.ppm > b.ppm; });  // as a spectrum reads, left to right
+    return out;
+}
+
+QString nmrLine(const Document& doc, bool proton, const std::vector<int>& only) {
+    QStringList parts;
+    for (const auto& k : nmrSticks(doc, proton, only))
+        parts << (proton ? QString("%1 (%2, %3H)").arg(k.ppm, 0, 'f', 2).arg(k.multiplicity()).arg(k.count) : QString::number(k.ppm, 'f', 1));
+    return parts.isEmpty() ? QString() : (proton ? "1H" : "13C") + QString(" NMR (predicted) δ ") + parts.join(", ") + ".";
 }
 
 }  // namespace chem

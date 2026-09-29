@@ -3,6 +3,7 @@
 #include <QPointF>
 #include <QColor>
 #include <QString>
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -17,6 +18,9 @@ constexpr double kBondLength = 14.4;
 // double it was, so hydrogens (and the formula) stay those of the reactants.
 enum class BondStereo { None, Wedge, Hash, Bold, Dashed, Wavy, Interaction, Partial };
 enum class BondPosition { Auto, Left, Centre, Right };  // double bond's second line, seen from a to b
+// Enhanced stereo (MDL/ChemDraw): a stereocentre as drawn (abs), or one of a group
+// whose centres are all as drawn or all inverted, as a mixture (&n) or unknown which (orn).
+enum class StereoGroup { None, Abs, And, Or };
 
 struct Atom {
     QPointF pos;
@@ -30,6 +34,8 @@ struct Atom {
     int lonePairs = 0, radicals = 0;
     int partial = 0;  // +1 δ+, −1 δ−
     int isotope = 0;  // mass number (13 for ¹³C, 2 for D); 0 = natural abundance
+    StereoGroup stereoGroup = StereoGroup::None;
+    int stereoGroupNumber = 0;  // n of &n / orn
 };
 
 struct Bond {
@@ -39,6 +45,8 @@ struct Bond {
     BondPosition position = BondPosition::Auto;
     QColor color;
 };
+
+QString stereoGroupTag(const Atom& a);  // as drawn and saved: "abs", "&1", "or2"; "" for none
 
 // The order chemistry sees: 0 for an interaction or a partial single bond.
 inline int chemicalOrder(const Bond& b) {
@@ -70,6 +78,9 @@ struct Arrow {
     OrbitalLook look = OrbitalLook::Outline;  // orbitals only
     bool behind = false;  // under the molecule (Send to Back), not over it
     bool crossed = false;  // "no reaction": an ✕ across the middle (ChemDraw's NoGo)
+    // What a curved arrow's end starts or ends on, and moves with: one atom, a bond's two, or none (-1).
+    std::array<int, 2> fromAt{-1, -1}, toAt{-1, -1};
+    double head = 1;  // arrowhead size, relative to the usual
     bool operator==(const Arrow&) const = default;
 };
 
@@ -80,6 +91,8 @@ struct Text {
     QString text;
     double scale = 1;  // relative to the drawing style's label size
     QColor color;
+    bool compound = false;  // a compound number (#504): bold, renumbered in scheme order on every edit
+    int anchor = -1;        // an atom of the molecule it numbers, which it follows; -1 = free
     bool operator==(const Text&) const = default;
 };
 
@@ -108,10 +121,10 @@ struct Document {
     std::vector<Bracket> brackets;
     QString style;  // drawing style preset name; empty means ACS 1996
     enum class CarbonLabels { None, Terminal, All } carbonLabels = CarbonLabels::None;  // skeletal by default
-    bool hideImplicitH = false;  // labels without their implicit H (NH2 drawn as N)
     double labelRatio = 0;  // label size over bond length, as a ChemDraw file sets it; 0 = the style's own
     bool showStereo = false;  // draw CIP (R)/(S) and (E)/(Z) labels
     bool showAtomNumbers = false;  // draw each atom's index (from 1)
+    bool showShifts = false;  // draw predicted 13C and 1H NMR shifts (#403)
     bool aromaticCircles = false;  // default for every aromatic ring
     QString page;         // a pageSizes() name: laid out at final size; "" = no page
     QPointF pageOrigin;   // the page's top-left corner
@@ -148,13 +161,13 @@ struct Sheet {
     bool operator==(const Sheet&) const = default;
 };
 QByteArray sheetsToJson(const std::vector<Sheet>& sheets);    // version 2
-QByteArray sheetsToJsonV1(const std::vector<Sheet>& sheets);  // for Penzene 1.4 and earlier
+QByteArray sheetsToJsonV1(const std::vector<Sheet>& sheets);  // for Penzene 1.x
 std::vector<Sheet> sheetsFromJson(const QByteArray& data);  // empty if it isn't a .penz file
 
 inline bool operator==(const Atom& x, const Atom& y) {
     return x.pos == y.pos && x.z == y.z && x.charge == y.charge && x.label == y.label && x.color == y.color &&
            x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial &&
-           x.isotope == y.isotope;
+           x.isotope == y.isotope && x.stereoGroup == y.stereoGroup && x.stereoGroupNumber == y.stereoGroupNumber;
 }
 inline bool operator==(const Bond& x, const Bond& y) {
     return x.a == y.a && x.b == y.b && x.order == y.order && x.stereo == y.stereo &&

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: JamesOBrien2.Penzene
+PackageVersion: @VERSION@
+PackageLocale: en-US
+Publisher: Penzene contributors
+PublisherUrl: https://github.com/JamesOBrien2/penzene
+PublisherSupportUrl: https://github.com/JamesOBrien2/penzene/issues
+PackageName: Penzene
+PackageUrl: https://github.com/JamesOBrien2/penzene
+License: GPL-3.0-or-later
+LicenseUrl: https://github.com/JamesOBrien2/penzene/blob/main/LICENSE
+ShortDescription: Draw chemical structures and reaction schemes
+Moniker: penzene
+Tags:
+- chemistry
+- molecule
+- structure-editor
+ReleaseNotesUrl: https://github.com/JamesOBrien2/penzene/releases/tag/v@VERSION@
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

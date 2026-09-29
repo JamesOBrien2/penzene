@@ -18,6 +18,24 @@ static const char* kArrow[] = {"reaction", "equilibrium", "resonance", "retro", 
                                "s-orbital", "p-orbital", "lobe", "hybrid-orbital"};
 static const char* kLook[] = {"outline", "shaded", "gradient"};
 
+QString stereoGroupTag(const Atom& a) {
+    switch (a.stereoGroup) {
+    case StereoGroup::Abs: return "abs";
+    case StereoGroup::And: return "&" + QString::number(a.stereoGroupNumber);
+    case StereoGroup::Or: return "or" + QString::number(a.stereoGroupNumber);
+    default: return {};
+    }
+}
+
+static void setStereoGroupTag(Atom& a, const QString& tag) {  // anything else: none
+    static const QRegularExpression re("^(abs|&|or)([1-9][0-9]{0,3})?$");
+    const auto m = re.match(tag);
+    const bool numbered = m.captured(1) != "abs";
+    if (!m.hasMatch() || numbered == m.captured(2).isEmpty()) return;
+    a.stereoGroup = !numbered ? StereoGroup::Abs : m.captured(1) == "&" ? StereoGroup::And : StereoGroup::Or;
+    a.stereoGroupNumber = m.captured(2).toInt();
+}
+
 QByteArray Document::toJson() const {
     QJsonArray as, bs;
     for (const auto& a : atoms) {
@@ -30,6 +48,7 @@ QByteArray Document::toJson() const {
         if (a.radicals) o["radicals"] = a.radicals;
         if (a.partial) o["partial"] = a.partial;
         if (a.isotope) o["isotope"] = a.isotope;
+        if (a.stereoGroup != StereoGroup::None) o["stereoGroup"] = stereoGroupTag(a);
         as.append(o);
     }
     for (const auto& b : bonds) {
@@ -50,12 +69,17 @@ QByteArray Document::toJson() const {
         if (a.look != OrbitalLook::Outline) o["look"] = kLook[int(a.look)];
         if (a.behind) o["behind"] = true;
         if (a.crossed) o["crossed"] = true;
+        if (a.head != 1) o["head"] = a.head;
+        for (auto [key, at] : {std::pair{"fromAt", a.fromAt}, std::pair{"toAt", a.toAt}})
+            if (at[0] >= 0) o[key] = at[1] >= 0 ? QJsonArray{at[0], at[1]} : QJsonArray{at[0]};
         ar.append(o);
     }
     for (const auto& t : texts) {
         QJsonObject o{{"x", t.pos.x()}, {"y", t.pos.y()}, {"text", t.text}};
         if (t.scale != 1) o["scale"] = t.scale;
         if (t.color.isValid()) o["color"] = t.color.name();
+        if (t.compound) o["compound"] = true;
+        if (t.anchor >= 0) o["anchor"] = t.anchor;
         ts.append(o);
     }
     if (!ar.isEmpty()) root["arrows"] = ar;
@@ -79,10 +103,10 @@ QByteArray Document::toJson() const {
     if (!bs2.isEmpty()) root["brackets"] = bs2;
     if (!style.isEmpty()) root["style"] = style;
     if (carbonLabels != CarbonLabels::None) root["carbonLabels"] = carbonLabels == CarbonLabels::All ? "all" : "terminal";
-    if (hideImplicitH) root["hideImplicitH"] = true;
     if (labelRatio > 0) root["labelRatio"] = labelRatio;
     if (showStereo) root["showStereo"] = true;
     if (showAtomNumbers) root["showAtomNumbers"] = true;
+    if (showShifts) root["showShifts"] = true;
     if (aromaticCircles) root["aromaticCircles"] = true;
     if (!page.isEmpty()) root["page"] = QJsonObject{{"name", page}, {"x", pageOrigin.x()}, {"y", pageOrigin.y()}};
     QJsonArray circleOverrides;
@@ -143,10 +167,10 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
     doc.carbonLabels = carbons == "all"        ? Document::CarbonLabels::All
                        : carbons == "terminal" ? Document::CarbonLabels::Terminal
                                                : Document::CarbonLabels::None;
-    doc.hideImplicitH = root["hideImplicitH"].toBool();
     doc.labelRatio = std::max(0.0, root["labelRatio"].toDouble());
     doc.showStereo = root["showStereo"].toBool();
     doc.showAtomNumbers = root["showAtomNumbers"].toBool();
+    doc.showShifts = root["showShifts"].toBool();
     doc.aromaticCircles = root["aromaticCircles"].toBool();
     const auto page = root["page"].toObject();
     doc.page = page["name"].toString();
@@ -163,6 +187,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         Atom& a = doc.atoms.back();
         if (a.z < 0 || a.z > 118 || !std::isfinite(a.pos.x()) || !std::isfinite(a.pos.y())) return std::nullopt;
         if (a.isotope < a.z) a.isotope = 0;  // lighter than its protons: no such isotope, as a typed label (#368)
+        setStereoGroupTag(a, o["stereoGroup"].toString());
     }
     const int n = int(doc.atoms.size());
     for (const auto& v : root["bonds"].toArray()) {
@@ -198,6 +223,13 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         a.look = OrbitalLook(look - std::begin(kLook));
         a.behind = o["behind"].toBool();
         a.crossed = o["crossed"].toBool();
+        if (const double head = o["head"].toDouble(1); std::isfinite(head)) a.head = std::clamp(head, 0.25, 4.0);
+        for (auto [key, at] : {std::pair{"fromAt", &a.fromAt}, std::pair{"toAt", &a.toAt}}) {
+            const QJsonArray v = o[key].toArray();
+            for (int k = 0; k < std::min<int>(2, v.size()); ++k) (*at)[k] = v[k].toInt(-1);
+            auto atom = [&](int i) { return i >= 0 && i < int(doc.atoms.size()); };
+            if (!atom((*at)[0]) || ((*at)[1] != -1 && !atom((*at)[1]))) *at = {-1, -1};  // not this drawing's: a free end
+        }
         doc.arrows.push_back(a);
     }
     for (const auto& v : root["texts"].toArray()) {
@@ -205,6 +237,8 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         Text t{{o["x"].toDouble(), o["y"].toDouble()}, o["text"].toString(), o["scale"].toDouble(1),
                QColor(o["color"].toString())};
         if (!(t.scale > 0)) t.scale = 1;  // files saved before #316 could hold 0
+        t.compound = o["compound"].toBool();
+        if (const int a = o["anchor"].toInt(-1); a >= 0 && a < int(doc.atoms.size())) t.anchor = a;
         if (!finite({t.pos.x(), t.pos.y(), t.scale})) return std::nullopt;
         doc.texts.push_back(t);
     }
@@ -240,8 +274,17 @@ void Document::append(const Document& o, QPointF shift) {
     const int base = int(atoms.size());
     for (auto a : o.atoms) a.pos += shift, atoms.push_back(a);
     for (auto b : o.bonds) b.a += base, b.b += base, bonds.push_back(b);
-    for (auto a : o.arrows) a.from += shift, a.to += shift, arrows.push_back(a);
-    for (auto t : o.texts) t.pos += shift, texts.push_back(t);
+    for (auto a : o.arrows) {
+        a.from += shift, a.to += shift;
+        for (int* i : {&a.fromAt[0], &a.fromAt[1], &a.toAt[0], &a.toAt[1]})
+            if (*i >= 0) *i += base;
+        arrows.push_back(a);
+    }
+    for (auto t : o.texts) {
+        t.pos += shift;
+        if (t.anchor >= 0) t.anchor += base;
+        texts.push_back(t);
+    }
     for (auto f : o.fills) {
         for (int& i : f.atoms) i += base;
         fills.push_back(f);
@@ -303,6 +346,15 @@ void Document::removeAtom(int atom) {
 void Document::removeAtoms(const std::vector<int>& drop) {
     std::vector<int> remap(atoms.size(), 0);
     for (int i : drop) remap[i] = -1;
+    for (auto& t : texts) {  // a compound number whose atom goes takes the nearest of its molecule's that stays
+        std::vector<int> todo{t.anchor};
+        for (size_t k = 0; t.anchor >= 0 && remap[t.anchor] < 0 && k < todo.size(); ++k)
+            for (int nb : neighbors(todo[k]))
+                if (std::find(todo.begin(), todo.end(), nb) == todo.end()) {
+                    todo.push_back(nb);
+                    if (remap[nb] == 0 && remap[t.anchor] < 0) t.anchor = nb;
+                }
+    }
     std::vector<Atom> kept;
     for (size_t i = 0; i < atoms.size(); ++i)
         if (remap[i] != -1) remap[i] = int(kept.size()), kept.push_back(atoms[i]);
@@ -324,6 +376,14 @@ void Document::removeAtoms(const std::vector<int>& drop) {
     });
     for (auto& ring : aromaticCircleOverrides)
         for (int& i : ring) i = remap[i];
+    for (auto& a : arrows)
+        for (auto* at : {&a.fromAt, &a.toAt}) {
+            if ((*at)[0] < 0) continue;
+            const bool gone = remap[(*at)[0]] < 0 || ((*at)[1] >= 0 && remap[(*at)[1]] < 0);  // its atom, or its bond
+            *at = gone ? std::array{-1, -1} : std::array{remap[(*at)[0]], (*at)[1] < 0 ? -1 : remap[(*at)[1]]};
+        }
+    for (auto& t : texts)
+        if (t.anchor >= 0) t.anchor = remap[t.anchor];  // -1 if gone: the number stays, free
 }
 
 // Direction pointing away from all of the atom's bonds: the bisector of the
@@ -350,8 +410,8 @@ static QJsonObject sheetObject(const Sheet& s) {
 }
 
 // Document settings: at the top of a version 2 file when every page has the same, else on each page.
-static const char* kShared[] = {"style", "carbonLabels", "hideImplicitH", "labelRatio",
-                                "showStereo", "showAtomNumbers", "aromaticCircles"};
+static const char* kShared[] = {"style", "carbonLabels", "labelRatio", "showStereo",
+                                "showAtomNumbers", "showShifts", "aromaticCircles"};
 
 QByteArray sheetsToJson(const std::vector<Sheet>& sheets) {
     QJsonArray pages;

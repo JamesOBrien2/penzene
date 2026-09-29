@@ -10,7 +10,7 @@ on:
   push:
     tags: ['v*']
   pull_request:
-    paths: ['.github/workflows/wheels.yml', 'pyproject.toml', 'python/**', 'CMakeLists.txt', 'cmake/bundle-libstdcxx.py', 'cmake/build-rdkit.sh', 'cmake/check-no-chemdraw.sh']
+    paths: ['.github/workflows/wheels.yml', 'pyproject.toml', 'python/**', 'CMakeLists.txt', 'THIRD_PARTY_LICENSES.md', 'cmake/bundle-libstdcxx.py', 'cmake/build-rdkit.sh', 'cmake/check-no-chemdraw.sh']
 
 jobs:
   wheel:
@@ -71,6 +71,20 @@ jobs:
           pixi run delvewheel repair --no-mangle-all -w wheelhouse --add-path "$(pwd -W)/rdkit-prefix/lib;$(pwd -W)/.pixi/envs/default/Library/bin" dist/*.whl
       - run: ls -la wheelhouse
         shell: bash
+      - name: Check license files
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          wheels = list(Path('wheelhouse').glob('*.whl'))
+          assert wheels, 'wheel missing'
+          for wheel in wheels:
+              with ZipFile(wheel) as archive:
+                  names = archive.namelist()
+                  assert any(name.endswith('.dist-info/licenses/LICENSE') for name in names), names
+                  assert any(name.endswith('.dist-info/licenses/THIRD_PARTY_LICENSES.md') for name in names), names
+          PY
       - name: No RDKit ChemDraw library (#233)
         shell: bash
         run: |

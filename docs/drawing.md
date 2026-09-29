@@ -2,10 +2,11 @@
 
 ## Tools and the hotspot
 
-The rail on the left holds the tools in six groups: **Select** (select, eraser), **Bonds** (single,
-double, triple, wedge, hash, interaction, partial, chain), **Rings**, **Atoms** (element, charges,
-colour), **Arrows**, and **Shapes** (lines, boxes, ellipses, text). Click a group to open its tools
-beside the rail; picking one closes them again, unless you **Pin** them open. Clicking a group also
+The rail on the left holds the tools in six groups: **Select** (select, rotate in 3D, eraser, colour), **Bonds** (single,
+double, triple, wedge, hash, interaction, partial, chain), **Rings**, **Atoms** (element,
+charges), **Arrows**, and **Shapes** (lines, boxes, ellipses, text). Click a group to open its tools
+beside the rail. They stay open, so you can keep several on screen and drag each by its title or
+any bare part of it, or drag a corner to resize it (the tools reflow to fit); close one with its **✕**. Clicking a group also
 picks the tool you last used from it. Hover over a tool to see its key.
 
 Point at an atom or bond and it becomes the **hotspot**, marked in green. It stays put when the mouse
@@ -43,6 +44,12 @@ Space select.
   state). Neither counts as a covalent bond, so a drawn transition state keeps its reactants'
   formula.
 - `f` brings a bond to the front: bonds it crosses are drawn with a gap.
+- **Stereo groups** (enhanced stereo): right-click a stereocentre (or a selection) and pick
+  **Stereo Group → Absolute**, **And n** or **Or n**. `&1` marks centres drawn as one of a mixture
+  with their mirror image (racemic), `or1` centres that are one or the other, unknown which; centres
+  sharing a number go together. The tag is drawn beside the centre and kept in MOL V3000 and ChemDraw
+  files, and read from and written as CXSMILES (`C[C@H](N)C(=O)O |&1:1|`) by Copy as SMILES and `to_smiles()`;
+  reaction SMILES leave them out.
 
 ## Rings and templates
 
@@ -65,17 +72,18 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
 
 ## Selecting and arranging
 
-- Drag to select; double-click selects a whole molecule. Drag a selection to move it, and drop an
+- Drag to select, or Alt+drag from empty space to draw a loop round what you want; double-click selects a whole molecule. Drag a selection to move it, and drop an
   atom on another to merge them.
 - The arrow keys nudge a selection (Shift for 10 points). Ctrl+arrow duplicates it across the next
   reaction arrow.
 - **Rotate:** drag the round handle above a selection (Shift turns in 15° steps; Ctrl lands it square to the
   page or at 45°, however it started), Alt+drag,
-  or Alt+←/→ in 15° steps. **Out of the page:** Shift+Alt+drag or
-  Shift+Alt+arrows turn it in 3D and keep its stereo; **Structure → Turn Over** flips it 180°.
+  or Alt+←/→ in 15° steps. **Out of the page:** choose **Rotate in 3D** from the Select tool's
+  flyout and drag a molecule, or use Shift+Alt+drag or Shift+Alt+arrows. Stereo is preserved.
 - **Stretch and squash:** drag the handles around a selection (corners scale, edges stretch), or use
-  **Structure → Transform** for exact values.
-- **Structure → Align and Distribute**, **Flip**, and **Arrange Scheme** (lines up a reaction scheme,
+  **Arrange → Transform** for exact values.
+- **Arrange → Align and Distribute**, **Center on Page** (for the selection or the whole
+  drawing), **Flip**, and **Arrange Scheme** (lines up a reaction scheme,
   with agents centred over their arrows).
 - **Structure → Brackets** puts square or round brackets, with a subscript such as *n*, around the
   selected atoms.
@@ -83,7 +91,11 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
 ## Arrows, text, shapes and colour
 
 - Arrows: reaction, no reaction (crossed), equilibrium, resonance, retrosynthesis, and curved (electron pair) and fishhook
-  (single electron) arrows. Click a curved arrow again to flip its curve.
+  (single electron) arrows. Click a curved arrow again to flip its curve. While you draw a curved arrow, the atom
+  or bond under each end lights up and the end settles on it; the arrow then moves with it when the structure is
+  moved, turned or cleaned up.
+- Select a single arrow to reshape it: drag either end, or drag the round handle at the top of a curve to make
+  it deeper, shallower or bow the other way. Format → Arrowhead Size sets the heads of the selected arrows.
 - Text: formulas get subscripts automatically (H2O → H₂O), and a charge at the end of a formula
   is set as a superscript (NH4+ → NH₄⁺, Cu2+ → Cu²⁺, [Fe(CN)6]3- → [Fe(CN)₆]³⁻). Where the digits
   could be either, mark the charge with ^: SO4^2- → SO₄²⁻.
@@ -99,11 +111,13 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
 ## Pages, grid and rulers
 
 - A drawing can have several pages, as tabs along the bottom of the window. **+** adds one; drag
-  a tab to reorder it, double-click to rename it, and right-click to rename or delete it.
+  a tab to reorder it, double-click to rename it, and right-click (or the **Page** menu) to rename or delete it.
   Ctrl+PgDown and Ctrl+PgUp step through them. Each page has its own undo history.
-- **Edit → Move to Page** moves the selection to another page. Copy and paste work between pages
+- **Page → Move Selection To** moves the selection to another page. Copy and paste work between pages
   too.
 - Pages are saved together in a `.penz` file. Other formats (MOL, ChemDraw) hold one page, so save
   as `.penz`, or export the page you want.
 - **View → Grid** and **View → Rulers** measure the drawing at its final size: 5 mm grid squares,
-  and rulers in centimetres from the page's corner.
+  and rulers in centimetres from the page's corner. Both start on; turn either off there and
+  Penzene remembers. On a trackpad, spread two fingers to zoom in and pinch to zoom out, and drag
+  with two fingers to pan.

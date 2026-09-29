@@ -5,7 +5,7 @@ on:
     tags: ['v*']
   workflow_dispatch:   # builds + smoke-tests the packages without publishing
   pull_request:        # ...and whenever packaging itself changes
-    paths: ['.github/workflows/release.yml', '.github/workflows/rdkit.yml', 'cmake/**']
+    paths: ['.github/workflows/release.yml', '.github/workflows/rdkit.yml', 'CMakeLists.txt', 'THIRD_PARTY_LICENSES.md', 'cmake/**']
 
 permissions:
   contents: write
@@ -45,6 +45,8 @@ jobs:
         run: |
           mkdir dist && cp -R build/bin/penzene.app dist/
           pixi run macdeployqt6 dist/penzene.app -libpath="$PWD/rdkit-prefix/lib" -libpath="$PWD/.pixi/envs/default/lib"
+          test -s dist/penzene.app/Contents/Resources/LICENSE
+          test -s dist/penzene.app/Contents/Resources/THIRD_PARTY_LICENSES.md
           test -d dist/penzene.app/Contents/PlugIns/tls   # HTTPS for the PubChem lookups
           bash cmake/check-no-chemdraw.sh dist/penzene.app
           codesign --force --deep --sign - dist/penzene.app
@@ -128,6 +130,7 @@ jobs:
         run: |
           New-Item -ItemType Directory dist/penzene | Out-Null
           Copy-Item build/bin/penzene.exe dist/penzene/
+          Copy-Item LICENSE,THIRD_PARTY_LICENSES.md dist/penzene/
           $qtpaths = (Get-ChildItem .pixi/envs/default/Library -Recurse -Filter "qtpaths*.exe" | Select-Object -First 1).FullName
           if (!$qtpaths) { throw "qtpaths not found in the pixi env" }
           pixi run windeployqt6 --qtpaths "$qtpaths" --release --no-translations --no-system-d3d-compiler dist/penzene/penzene.exe
@@ -184,9 +187,18 @@ jobs:
           $p = Start-Process ./penzene-windows-x64-setup.exe -ArgumentList "/VERYSILENT","/CURRENTUSER","/DIR=$PWD\installed" -PassThru
           if (!$p.WaitForExit(300000)) { throw "installer hung" }
           if (!(Test-Path installed/penzene.exe)) { throw "installer did not install penzene.exe" }
+          if (!(Test-Path installed/LICENSE) -or !(Test-Path installed/THIRD_PARTY_LICENSES.md)) { throw "installer omitted license notices" }
           $p = Start-Process installed/penzene.exe -ArgumentList "--render","c1ccccc1O","installed.svg" -NoNewWindow -PassThru
           if (!$p.WaitForExit(120000)) { $p.Kill(); throw "installed app hung" }
           if (!(Test-Path installed.svg)) { throw "installed app failed to render" }
+          # Registered for Word and PowerPoint's embedded drawings (#229); /CURRENTUSER writes HKCU.
+          $clsid = "HKCU:\Software\Classes\CLSID\{F6858801-14D9-488C-B79A-8C7D07452862}"
+          foreach ($key in "LocalServer32", "InprocHandler32", "Insertable", "Verb\0", "DefaultIcon") {
+            if (!(Test-Path "$clsid\$key")) { throw "installer did not register $key (#229)" }
+          }
+          $server = (Get-ItemProperty "$clsid\LocalServer32").'(default)'
+          if ($server -notlike "*installed\penzene.exe*") { throw "LocalServer32 is $server, not the installed penzene.exe" }
+          if ((Get-ItemProperty "HKCU:\Software\Classes\Penzene.Drawing\CLSID").'(default)' -ne "{F6858801-14D9-488C-B79A-8C7D07452862}") { throw "Penzene.Drawing has no CLSID" }
       - uses: actions/upload-artifact@v4
         with: {name: windows, path: "penzene-windows-x64*"}
 
@@ -223,12 +235,15 @@ jobs:
           DESK
           QT_QPA_PLATFORM=offscreen build/bin/penzene --render 'c1ccccc1' penzene.svg
           env="$PWD/.pixi/envs/default"
+          mkdir -p AppDir/usr/share/licenses/penzene
+          cp LICENSE THIRD_PARTY_LICENSES.md AppDir/usr/share/licenses/penzene/
           QMAKE="$env/bin/qmake6" LD_LIBRARY_PATH="$PWD/rdkit-prefix/lib:$env/lib" \
             ./linuxdeploy-x86_64.AppImage --appdir AppDir -e build/bin/penzene \
             -d penzene.desktop -i penzene.svg --plugin qt --output appimage \
             -l "$env/lib/libstdc++.so.6" -l "$env/lib/libgcc_s.so.1"  # conda-built, newer than the host's
           mv Penzene*.AppImage penzene-linux-x86_64.AppImage
           test -d AppDir/usr/plugins/tls   # HTTPS for the PubChem lookups
+          test -s AppDir/usr/share/licenses/penzene/THIRD_PARTY_LICENSES.md
           bash cmake/check-no-chemdraw.sh AppDir penzene-linux-x86_64.AppImage
           mv .pixi .pixi-hidden
           xvfb-run -a ./penzene-linux-x86_64.AppImage --render 'c1ccccc1O' smoke.svg

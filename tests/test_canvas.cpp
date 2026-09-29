@@ -1,6 +1,7 @@
 #include "Canvas.h"
 #include "Chem.h"
 #include "Edit.h"
+#include "Geometry.h"
 #include "MainWindow.h"
 #include "Online.h"
 #include "WhatsNew.h"
@@ -8,6 +9,7 @@
 #include "Render.h"
 
 #include <QApplication>
+#include <QNativeGestureEvent>
 #include <QSettings>
 #include <QStatusBar>
 #include <QFileDialog>
@@ -15,6 +17,9 @@
 
 #include <QLockFile>
 #include <QMessageBox>
+#include <QPainter>
+#include <QStyle>
+#include <memory>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QListWidget>
@@ -38,6 +43,7 @@
 #include <QLineEdit>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QInputDialog>
 #include <QTimer>
 #include <QCheckBox>
 #include <QTreeWidget>
@@ -49,9 +55,15 @@
 #include <QMenu>
 #include <QTabBar>
 #include <QToolButton>
+#include <QTextBrowser>
 #include <QWidgetAction>
 #include <QUndoStack>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/reporters/catch_reporter_event_listener.hpp>
+#include <catch2/reporters/catch_reporter_registrars.hpp>
 
 // Drives the real canvas with synthetic mouse events (QT_QPA_PLATFORM=offscreen).
 struct App {  // base class so the QApplication exists before any widget member
@@ -64,6 +76,14 @@ struct App {  // base class so the QApplication exists before any widget member
         QStandardPaths::setTestModeEnabled(true);  // and their app data (autosave)
     }
 };
+
+// Catch2 runs the tests in a random order, and rendering needs the application's fonts,
+// so it exists before the first test rather than when some test first asks for it.
+struct AppFirst : Catch::EventListenerBase {
+    using EventListenerBase::EventListenerBase;
+    void testRunStarting(const Catch::TestRunInfo&) override { App(); }
+};
+CATCH_REGISTER_LISTENER(AppFirst)
 
 struct Fixture : App {
     Fixture() {
@@ -164,6 +184,23 @@ TEST_CASE("select and delete, charges") {
     CHECK(f.canvas.document().atoms.empty());
     f.undo.undo();
     CHECK(f.canvas.document().atoms.size() == 2);
+}
+
+TEST_CASE("Alt-drag on empty space selects what a freehand loop takes in (#499)") {
+    Fixture f;
+    Document d;  // any rectangle round atoms 0 and 2 takes in atom 1 too
+    d.atoms = {{{0, 0}}, {{30, 10}}, {{40, 40}}};
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Select);
+    const std::vector<QPointF> loop{{-8, 0}, {0, -8}, {48, 40}, {40, 48}};  // a band along the diagonal
+    QTest::mousePress(f.canvas.viewport(), Qt::LeftButton, Qt::AltModifier, f.at(loop[0]));
+    for (QPointF p : loop) {
+        QMouseEvent move(QEvent::MouseMove, f.at(p), f.canvas.viewport()->mapToGlobal(f.at(p)), Qt::NoButton, Qt::LeftButton,
+                         Qt::AltModifier);
+        QApplication::sendEvent(f.canvas.viewport(), &move);
+    }
+    QTest::mouseRelease(f.canvas.viewport(), Qt::LeftButton, Qt::AltModifier, f.at(loop.back()));
+    CHECK(f.canvas.selection() == QSet<int>{0, 2});
 }
 
 TEST_CASE("insert centres the fragment and selects it") {
@@ -450,6 +487,102 @@ TEST_CASE("allene and alkyne centres are linear") {
     CHECK(angleAt(h.doc(), 1, 0, 2) > 179);
 }
 
+TEST_CASE("a curved arrow stays on the atoms and bonds it's drawn between (#498)") {
+    Fixture f;
+    Document d;  // H3C–C=O, a little off the grid so Clean moves it
+    const QPointF c(kBondLength, 2), o = c + QPointF(0.5, -0.866) * kBondLength;
+    d.atoms = {{{0, 0}}, {c}, {o, 8}};
+    d.bonds = {{0, 1}, {1, 2, 2}};
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Arrow);
+    f.canvas.setArrow(ArrowKind::Reaction, true);
+    f.drag(c + (o - c) * 0.4, o + QPointF(0.6, -0.2) * kBondLength);  // from along the C=O bond to beside the O
+    f.canvas.setArrow(ArrowKind::Reaction, false);
+    f.drag({0, 60}, {40, 60});
+    REQUIRE(f.doc().arrows.size() == 2);
+    CHECK(f.doc().arrows[0].fromAt == std::array{1, 2});
+    CHECK(f.doc().arrows[0].toAt == std::array{2, -1});
+    CHECK(len(f.doc().arrows[0].from - (c + o) / 2) < 1e-6);  // snapped to the bond's middle
+    CHECK(std::abs(len(f.doc().arrows[0].to - o) - 0.55 * kBondLength) < 1e-6);  // and to just off the O's label
+    CHECK(f.doc().arrows[1].fromAt == std::array{-1, -1});  // a reaction arrow rests on nothing
+    f.canvas.setArrow(ArrowKind::Reaction, true);
+    f.click(arrowPath(f.doc().arrows[0]).pointAtPercent(0.5));  // flipped, it still rests on them
+    CHECK(f.doc().arrows[0].toAt == std::array{2, -1});
+    CHECK(f.doc().arrows[0].fromAt == std::array{1, 2});
+
+    // Drag the O: the end on it moves as far, the one on the bond half as far.
+    f.canvas.setTool(Canvas::Tool::Select);
+    Document was = f.doc();
+    f.drag(d.atoms[2].pos, d.atoms[2].pos + QPointF(10, 0));
+    QPointF moved = f.doc().atoms[2].pos - was.atoms[2].pos;
+    REQUIRE(len(moved) > 5);
+    CHECK(len(f.doc().arrows[0].to - (was.arrows[0].to + moved)) < 1e-6);
+    CHECK(len(f.doc().arrows[0].from - (was.arrows[0].from + moved / 2)) < 1e-6);
+    CHECK(f.doc().arrows[1] == was.arrows[1]);
+    was = f.doc();
+    f.drag(c, c + QPointF(0, 8));  // now the C: the O's end stays
+    moved = f.doc().atoms[1].pos - was.atoms[1].pos;
+    REQUIRE(len(moved) > 5);
+    CHECK(len(f.doc().arrows[0].from - (was.arrows[0].from + moved / 2)) < 1e-6);
+    CHECK(f.doc().arrows[0].to == was.arrows[0].to);
+
+    // Clean moves the atoms too.
+    was = f.doc();
+    f.canvas.commit(chem::clean2D(f.doc()), "Clean");
+    moved = f.doc().atoms[2].pos - was.atoms[2].pos;
+    REQUIRE(len(moved) > 0.5);
+    CHECK(len(f.doc().arrows[0].to - (was.arrows[0].to + moved)) < 1e-6);
+
+    // Saved and opened again, it still knows.
+    CHECK(Document::fromJson(f.doc().toJson())->arrows == f.doc().arrows);
+
+    // Delete the O: the arrow stays, with both ends free (the C=O bond went too).
+    f.canvas.setSelection({2});
+    f.canvas.deleteSelection();
+    REQUIRE(f.doc().arrows.size() == 2);
+    CHECK(f.doc().arrows[0].fromAt == std::array{-1, -1});
+    CHECK(f.doc().arrows[0].toAt == std::array{-1, -1});
+}
+
+TEST_CASE("a lone selected curved arrow reshapes by its handles; heads come in sizes (#534)") {
+    Fixture f;
+    Document d;
+    d.atoms = {{{0, 0}}, {{60, 0}, 8}, {{0, 60}, 7}};
+    Arrow a{{10, 0}, {50, 0}};
+    a.bend = 10, a.fromAt = {0, -1}, a.toAt = {1, -1};
+    d.arrows = {a};
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Select);
+    f.canvas.setSelection({}, {0});
+    auto top = [&] { return arrowPath(f.doc().arrows[0]).boundingRect().top(); };
+    REQUIRE(std::abs(top() + 10) < 0.5);
+
+    f.drag({30, -10}, {32, -30});  // the curve's handle: its top goes where it's dropped
+    CHECK(std::abs(top() + 30) < 0.5);
+    f.drag({30, -30}, {30, 12});  // and through the chord, to the other side
+    CHECK(std::abs(arrowPath(f.doc().arrows[0]).boundingRect().bottom() - 12) < 0.5);
+
+    f.drag({50, 0}, {4, 64});  // an end dropped by the N rests on it, just off it
+    CHECK(f.doc().arrows[0].toAt == std::array{2, -1});
+    CHECK(std::abs(len(f.doc().arrows[0].to - QPointF(0, 60)) - 0.55 * kBondLength) < 1e-6);
+    f.drag(f.doc().arrows[0].to, {-5, 62});  // moved round the N, it stays on it
+    CHECK(f.doc().arrows[0].toAt == std::array{2, -1});
+    const QPointF end = f.doc().arrows[0].to;
+    f.drag({0, 60}, {20, 60});  // and follows it
+    CHECK(len(f.doc().arrows[0].to - (end + QPointF(20, 0))) < 1e-6);
+
+    f.canvas.setSelection({}, {0});
+    f.canvas.setArrowHead(1.5);
+    CHECK(f.doc().arrows[0].head == 1.5);
+    CHECK(Document::fromJson(f.doc().toJson())->arrows == f.doc().arrows);
+    QJsonObject file = QJsonDocument::fromJson(f.doc().toJson()).object();  // a file asking for a huge head
+    QJsonArray arrows = file["arrows"].toArray();
+    QJsonObject huge = arrows[0].toObject();
+    huge["head"] = 1e9;
+    arrows[0] = huge, file["arrows"] = arrows;
+    CHECK(Document::fromJson(QJsonDocument(file).toJson())->arrows[0].head == 4);
+}
+
 TEST_CASE("arrows: draw, restyle, select, move, delete; text subscripts") {
     Fixture f;
     f.canvas.setTool(Canvas::Tool::Arrow);
@@ -582,6 +715,32 @@ TEST_CASE("themes: Catppuccin palettes; exports stay black") {
     CHECK(dark);  // black ink, not the theme's pale text
 }
 
+TEST_CASE("message box icons: a black glyph takes the theme's text colour (#418)") {
+    App app;
+    const QColor text = theme("Catppuccin Mocha").text;
+    QPixmap glyph(32, 32);  // like macOS's question mark: black on clear
+    glyph.fill(Qt::transparent);
+    QPainter(&glyph).fillRect(12, 4, 8, 24, Qt::black);
+    const QImage inked = inkGlyph(glyph, text).toImage();
+    CHECK(inked.pixelColor(16, 16) == text);
+    CHECK(inked.pixelColor(2, 2).alpha() == 0);
+    QPixmap coloured = glyph;  // Fusion's blue circle keeps its own colours
+    QPainter(&coloured).fillRect(0, 0, 8, 8, QColor(40, 120, 255));
+    CHECK(inkGlyph(coloured, text).toImage() == coloured.toImage());
+    QPixmap light = glyph;  // macOS's grey-and-white information bubble
+    light.fill(Qt::lightGray);
+    CHECK(inkGlyph(light, text).toImage() == light.toImage());
+    std::unique_ptr<QStyle> style(themedStyle());
+    QMessageBox box;
+    QPalette pal = box.palette();
+    pal.setColor(QPalette::WindowText, text);
+    box.setPalette(pal);
+    box.setIconPixmap(glyph);
+    box.setStyle(style.get());
+    box.ensurePolished();  // as showing it does
+    CHECK(box.iconPixmap().toImage().pixelColor(16, 16) == text);
+}
+
 TEST_CASE("ring fill: click inside toggles; survives delete, copy and save") {
     Fixture f;
     auto nap = chem::fromSmiles("c1ccc2ccccc2c1");
@@ -708,6 +867,29 @@ TEST_CASE("a no-reaction arrow is crossed, draws its cross, and keeps it through
     CHECK(chem::toCdxml(crossed).contains("NoGo=\"Cross\""));
 }
 
+TEST_CASE("arrowhead size goes out to ChemDraw and comes back (#538)") {
+    Document d = *chem::fromSmiles("CCO");
+    d.arrows.push_back({{40, 0}, {100, 0}});
+    d.arrows[0].head = 1.5;
+    const QByteArray xml = chem::toCdxml(d);
+    CHECK(xml.contains("HeadSize=\"900\""));  // 9 pt at ChemDraw's 1 pt line: 1.5 × our 6
+    CHECK(xml.contains("ArrowheadCenterSize=\"788\""));
+    CHECK(xml.contains("ArrowheadWidth=\"225\""));
+    CHECK(std::abs(chem::fromChemDraw(xml)->arrows[0].head - 1.5) < 1e-9);
+    CHECK(std::abs(chem::fromChemDraw(chem::toCdx(d))->arrows[0].head - 1.5) < 1e-9);
+
+    // ChemDraw draws a head HeadSize % of the line width long: 1000 on a 0.6 pt line is our 6
+    auto head = [](const char* root, const char* arrow) {
+        const QString xml = QString(R"(<CDXML BondLength="14.4" %1><page><arrow Tail3D="0 0 0" Head3D="100 0 0" )"
+                                    R"(ArrowheadHead="Full" ArrowheadType="Solid" %2/></page></CDXML>)").arg(root, arrow);
+        return chem::fromChemDraw(xml.toUtf8())->arrows.at(0).head;
+    };
+    CHECK(std::abs(head(R"(LineWidth="0.6")", R"(HeadSize="1000")") - 1) < 1e-9);
+    CHECK(std::abs(head(R"(LineWidth="0.6")", "") - 1) < 1e-9);
+    CHECK(std::abs(head(R"(LineWidth="0.6")", R"(HeadSize="1000" LineWidth="1.2")") - 2) < 1e-9);
+    CHECK(std::abs(head(R"(LineWidth="0.6")", R"(HeadSize="2250")") - 2.25) < 1e-9);
+}
+
 TEST_CASE("a huge arrow bend is drawn with a bounded number of points (#314)") {
     Arrow a{{0, 0}, {10, 0}};
     a.bend = 1e7;  // from a file: this took 2.9 GB to draw
@@ -832,6 +1014,22 @@ TEST_CASE("terminal bond deletion drops the end atom through each UI path") {
     }
 }
 
+TEST_CASE("no two items in a menu share an access key") {
+    App app;
+    MainWindow w;
+    for (auto* menu : w.findChildren<QMenu*>()) {
+        QMap<QChar, QString> taken;
+        for (auto* a : menu->actions()) {
+            const QString t = a->text();
+            const int i = t.indexOf('&');
+            if (i < 0 || i + 1 >= t.size() || t[i + 1] == '&') continue;
+            INFO(menu->title().toStdString() << ": " << t.toStdString());
+            CHECK_FALSE(taken.contains(t[i + 1].toLower()));
+            taken[t[i + 1].toLower()] = t;
+        }
+    }
+}
+
 TEST_CASE("right-click menus for atoms, bonds, selection and canvas (#89)") {
     Fixture f;
     Document d;
@@ -856,6 +1054,19 @@ TEST_CASE("right-click menus for atoms, bonds, selection and canvas (#89)") {
     CHECK(findAction(f.canvas.contextMenuAt(f.doc().atoms[0].pos), "Flip Horizontal"));
     f.canvas.setSelection({});
     CHECK(findAction(f.canvas.contextMenuAt({200, 200}), "Select All"));
+}
+
+TEST_CASE("a stereocentre's menu tags it And 1, then offers And 2 (#389)") {
+    Fixture f;
+    auto d = chem::fromSmiles("C[C@H](N)C(=O)O");  // alanine
+    REQUIRE(d);
+    f.canvas.setDocumentSilently(*d);
+    CHECK_FALSE(findAction(f.canvas.contextMenuAt(f.doc().atoms[0].pos), "And 1"));  // not a stereocentre
+    findAction(f.canvas.contextMenuAt(f.doc().atoms[1].pos), "And 1")->trigger();
+    CHECK(stereoGroupTag(f.doc().atoms[1]) == "&1");
+    CHECK(findAction(f.canvas.contextMenuAt(f.doc().atoms[1].pos), "And 2"));
+    findAction(f.canvas.contextMenuAt(f.doc().atoms[1].pos), "None")->trigger();
+    CHECK(f.doc().atoms[1].stereoGroup == StereoGroup::None);
 }
 
 TEST_CASE("colour atoms, bonds, arrows and text; exports keep the colour (#82)") {
@@ -895,6 +1106,21 @@ TEST_CASE("colour atoms, bonds, arrows and text; exports keep the colour (#82)")
     CHECK(sawRed);
 }
 
+TEST_CASE("copy and paste within Penzene keeps what ChemDraw files don't, such as brackets") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    Document d = *chem::fromSmiles("CCO");
+    d.brackets.push_back({{0, 1}, true, "n"});
+    canvas->setDocumentSilently(d);
+    canvas->selectAll();
+    for (const QString text : {"&Copy", "&Paste"})
+        for (auto* a : w.findChildren<QAction*>())
+            if (a->text() == text) a->trigger();
+    REQUIRE(canvas->document().atoms.size() == 6);
+    CHECK(canvas->document().brackets.size() == 2);
+}
+
 TEST_CASE("choosing a tool explains it in the status bar (#93)") {
     App app;
     MainWindow w;
@@ -906,6 +1132,24 @@ TEST_CASE("choosing a tool explains it in the status bar (#93)") {
     chain->trigger();
     CHECK(w.statusBar()->currentMessage().startsWith("Chain"));
     CHECK(w.statusBar()->currentMessage().contains("drag"));
+}
+
+TEST_CASE("Look Up on PubChem needs a structure (#500)") {
+    App app;
+    MainWindow w;
+    QAction* lookUp = nullptr;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "Look Up on &PubChem") lookUp = a;
+    REQUIRE(lookUp);
+    QMenu* structure = nullptr;
+    for (auto* m : w.findChildren<QMenu*>())
+        if (m->title() == "&Structure") structure = m;
+    REQUIRE(structure);
+    emit structure->aboutToShow();
+    CHECK_FALSE(lookUp->isEnabled());  // an empty drawing
+    w.findChild<Canvas*>()->setDocumentSilently(*chem::fromSmiles("c1ccccc1"));
+    emit structure->aboutToShow();
+    CHECK(lookUp->isEnabled());
 }
 
 TEST_CASE("drop an atom on another to merge; Shift for free angles and straight moves (#88)") {
@@ -1005,8 +1249,9 @@ TEST_CASE("recent files, autosave and crash recovery (#91)") {
     QFile::remove(crashed);
     REQUIRE(QFile::rename(MainWindow::autosavePath(), crashed));
 
-    // A fresh window after the crash offers the autosave back; answer Yes.
+    // A fresh window after the crash, opened on a file, offers the autosave back; answer Yes.
     MainWindow after;
+    REQUIRE(after.openFile(QString(PENZENE_TEST_DATA) + "/aspirin.mol"));
     QTimer::singleShot(0, &after, [] {
         if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
             box->button(QMessageBox::Yes)->click();
@@ -1014,6 +1259,7 @@ TEST_CASE("recent files, autosave and crash recovery (#91)") {
     after.offerRecovery();
     auto* c2 = after.findChild<Canvas*>();
     CHECK(chem::toSmiles(c2->document()) == "CCO");
+    CHECK(after.windowTitle().startsWith("Untitled"));  // so Save doesn't overwrite aspirin.mol (#491)
     CHECK_FALSE(QFile::exists(crashed));  // offered once only
 
     after.autosave();  // once changes are saved (the stack is clean), autosave removes its copy
@@ -1132,6 +1378,19 @@ TEST_CASE("export checks the structure first, when turned on in Preferences (#39
     CHECK(firstDialog().contains("Stereocentre"));
     canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));  // aspirin: nothing to report
     CHECK(firstDialog() == "file dialog");
+    // Cut is a copy first: cancelling the warning leaves the drawing where it was (#428).
+    QAction* cut = nullptr;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "Cu&t") cut = a;
+    REQUIRE(cut);
+    const Document butanol = *chem::fromSmiles("CC(O)CC");
+    canvas->setDocumentSilently(butanol);
+    canvas->selectAll();
+    QTimer::singleShot(0, &w, [] {
+        if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) box->button(QMessageBox::Cancel)->click();
+    });
+    cut->trigger();
+    CHECK(canvas->document() == butanol);
     QSettings().setValue("checkBeforeExport", false);
     canvas->setDocumentSilently(*chem::fromSmiles("CC(O)CC"));
     CHECK(firstDialog() == "file dialog");
@@ -1154,7 +1413,7 @@ TEST_CASE("selected aromatic rings can use circles independently (#98)") {
     QAction* oneRing = nullptr;
     QAction* allRings = nullptr;
     for (auto* action : w.findChildren<QAction*>()) {
-        if (action->text() == "Circles for Selected &Rings") oneRing = action;
+        if (action->text() == "Circles in Selected &Rings") oneRing = action;
         if (action->text() == "&Aromatic Circles") allRings = action;
     }
     REQUIRE(oneRing);
@@ -1196,6 +1455,168 @@ TEST_CASE("properties panel shows descriptors for the selection (#96)") {
     CHECK(panel->text().contains("C<sub>9</sub>H<sub>8</sub>O<sub>4</sub>"));
     CHECK(panel->text().contains("63.6"));
     if (auto out = qgetenv("PENZENE_PANEL_SHOT"); !out.isEmpty()) w.grab().save(out);
+}
+
+TEST_CASE("mass spec panel shows the isotope pattern of the selection (#397)") {
+    App app;
+    for (QString t : {"Light", "Dark"}) {
+        QSettings().setValue("theme", t);
+        MainWindow w;
+        w.resize(1100, 700);
+        w.show();
+        auto* canvas = w.findChild<Canvas*>();
+        canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));
+        QAction* toggle = nullptr;
+        for (auto* a : w.findChildren<QAction*>())
+            if (a->text() == "&Mass Spec Panel") toggle = a;
+        REQUIRE(toggle);
+        toggle->trigger();
+        QApplication::processEvents();
+        auto* dock = w.findChild<QDockWidget*>("massSpec");
+        REQUIRE(dock);
+        QWidget* spectrum = nullptr;
+        for (auto* c : dock->findChildren<QWidget*>())
+            if (c->accessibleName() == "Isotope pattern") spectrum = c;
+        REQUIRE(spectrum);
+        CHECK(spectrum->accessibleDescription().startsWith("181.0495 (100.0%), 182.05"));
+        auto* ion = dock->findChild<QComboBox*>();
+        ion->setCurrentIndex(0);  // [M]: EI, with the ions to look for
+        QLabel* ei = nullptr;
+        for (auto* l : dock->findChildren<QLabel*>())
+            if (l->text().contains("EI ions")) ei = l;
+        REQUIRE(ei);
+        CHECK(ei->isVisible());
+        CHECK(ei->text().contains("43.0178"));  // aspirin's acetyl
+        ion->setCurrentIndex(3);  // [M−H]⁻
+        CHECK_FALSE(ei->isVisible());
+        CHECK(spectrum->accessibleDescription().startsWith("179.0350 (100.0%)"));
+        canvas->setDocumentSilently(*chem::fromSmiles("Clc1ccccc1"));
+        emit canvas->documentChanged();
+        CHECK(spectrum->accessibleDescription().contains("(32.0%)"));
+        ion->setCurrentIndex(1);
+        canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));
+        emit canvas->documentChanged();
+        QApplication::processEvents();
+        for (auto* b : dock->findChildren<QPushButton*>())
+            if (b->text() == "Copy HRMS Line") b->click();
+        CHECK(QGuiApplication::clipboard()->text() == "HRMS (ESI) m/z: [M+H]+ calcd for C9H9O4 181.0495");
+        canvas->setDocumentSilently(*chem::fromSmiles("*CC"));  // an R group has no mass: the clipboard keeps what it had
+        for (auto* b : dock->findChildren<QPushButton*>())
+            if (b->text() == "Copy HRMS Line") b->click();
+        CHECK(QGuiApplication::clipboard()->text() == "HRMS (ESI) m/z: [M+H]+ calcd for C9H9O4 181.0495");
+        canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));
+        if (auto out = qEnvironmentVariable("PENZENE_MASS_SHOT"); !out.isEmpty())
+            w.grab().save(QString(out).replace(".png", "-" + t.toLower() + ".png"));
+    }
+    QSettings().remove("theme");
+}
+
+TEST_CASE("Arrange → Number Compounds numbers each molecule once, in scheme order as they move (#504)") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("CCO.c1ccccc1"));
+    QAction* number = nullptr;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "&Number Compounds") number = a;
+    REQUIRE(number);
+    number->trigger();
+    const auto& d = canvas->document();
+    REQUIRE(d.texts.size() == 2);
+    CHECK(d.texts[0].text == "1");
+    CHECK(d.texts[1].text == "2");
+    CHECK(d.texts[0].compound);
+    CHECK(d.atoms[d.texts[1].anchor].z == 6);
+    double lo = 1e9, hi = -1e9;
+    for (int i = 3; i < 9; ++i) lo = std::min(lo, d.atoms[i].pos.x()), hi = std::max(hi, d.atoms[i].pos.x());
+    CHECK(std::abs(textPath(d.texts[1], documentStyle(d)).boundingRect().center().x() - (lo + hi) / 2) < 0.1 * kBondLength);  // centred under it
+    number->trigger();
+    CHECK(d.texts.size() == 2);  // numbered already
+    canvas->setSelection({3, 4, 5, 6, 7, 8});
+    canvas->transformSelection(QTransform::fromTranslate(-30 * kBondLength, 0), "Move");  // benzene first now
+    CHECK(d.texts[1].text == "1");
+    CHECK(d.texts[0].text == "2");
+    CHECK(textPath(d.texts[1], documentStyle(d)).boundingRect().center().x() < d.atoms[0].pos.x());  // it came along
+    canvas->setSelection({});
+    canvas->arrangeScheme();  // numbers stay under their molecules, not lined up between them
+    for (const Text& t : d.texts) {
+        const auto mol = edit::moleculeOf(d, t.anchor);
+        double lo = 1e9, hi = -1e9, bottom = -1e9;
+        for (int i : mol) lo = std::min(lo, d.atoms[i].pos.x()), hi = std::max(hi, d.atoms[i].pos.x()), bottom = std::max(bottom, d.atoms[i].pos.y());
+        const QRectF box = textPath(t, documentStyle(d)).boundingRect();
+        CHECK(box.center().x() > lo - 0.1 * kBondLength);
+        CHECK(box.center().x() < hi + 0.1 * kBondLength);
+        CHECK(box.top() > bottom);
+    }
+    if (auto out = qEnvironmentVariable("PENZENE_NUMBERS_SHOT"); !out.isEmpty()) {
+        w.resize(1000, 600), w.show(), canvas->setSelection({}), canvas->fitToDocument();
+        w.grab().save(out);
+    }
+}
+
+TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the canvas (#444)") {
+    App app;
+    MainWindow w;
+    w.resize(1100, 700);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("CCO.Cc1ccccc1"));  // ethanol 0-2, toluene 3-9
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "&NMR Panel") a->trigger();
+    QApplication::processEvents();
+    auto* dock = w.findChild<QDockWidget*>("nmr");
+    REQUIRE(dock);
+    REQUIRE(dock->isVisible());
+    QWidget* view = nullptr;
+    for (auto* c : dock->findChildren<QWidget*>())
+        if (c->accessibleName() == "Predicted spectrum") view = c;
+    REQUIRE(view);
+    CHECK(view->accessibleDescription().split("; ").size() == 5);  // one molecule: the largest, toluene
+    canvas->setSelection({1});
+    CHECK(view->accessibleDescription().split("; ").size() == 2);  // the selected one, all of it: ethanol
+    canvas->setSelection({0, 1, 4});
+    CHECK(view->accessibleDescription().split("; ").size() == 2);  // the one with most of the selection
+    canvas->setSelection({3, 4, 5, 6, 7, 8, 9});
+    CHECK(view->accessibleDescription().split("; ").size() == 5);
+    CHECK(view->accessibleDescription().contains("2 C: C7, C9"));  // the two meta carbons, one stick
+    view->setFocus();
+    QTest::keyClick(view, Qt::Key_Right);
+    CHECK(view->accessibleDescription().startsWith("δ 13"));  // the ipso carbon first, as a spectrum reads
+    CHECK(canvas->highlight() == QSet<int>{4});
+    if (auto out = qEnvironmentVariable("PENZENE_NMR_SHOT"); !out.isEmpty()) w.grab().save(out);
+    QTest::keyClick(view, Qt::Key_Right);
+    CHECK(canvas->highlight().size() == 2);
+    QEvent leave(QEvent::Leave);
+    QApplication::sendEvent(view, &leave);  // the pointer gone: every stick is read again
+    CHECK(view->accessibleDescription().split("; ").size() == 5);
+    QTest::keyClick(view, Qt::Key_Right);
+    QTest::keyClick(view, Qt::Key_Left);
+    CHECK(canvas->highlight() == QSet<int>{4});
+    dock->findChild<QPushButton*>()->click();
+    CHECK(QGuiApplication::clipboard()->text().startsWith("13C NMR (predicted) δ 13"));  // toluene's, not ethanol's
+    CHECK(QGuiApplication::clipboard()->text().count(", ") == 4);
+    canvas->setHotspot(5);  // and the other way: an ortho carbon under the pointer marks its stick
+    CHECK(canvas->highlight() == QSet<int>{5, 9});
+    CHECK(view->accessibleDescription().startsWith("δ 12"));
+    canvas->setHotspot(-1);
+    CHECK(canvas->highlight().isEmpty());
+    dock->findChild<QComboBox*>()->setCurrentIndex(1);  // 1H
+    CHECK(canvas->highlight().isEmpty());
+    CHECK(view->accessibleDescription().split("; ").last().contains("3 H, s: C4"));  // the methyl, furthest upfield
+    QTest::keyClick(view, Qt::Key_Right);
+    CHECK_FALSE(canvas->highlight().isEmpty());
+    canvas->commit(*chem::fromSmiles("CCO"), "Replace");  // an edit (or undo) that drops atoms: nothing stale stays lit
+    CHECK(canvas->highlight().isEmpty());
+    CHECK(view->accessibleDescription().contains("3 H, t: C1"));  // first order (#552)
+    if (auto out = qEnvironmentVariable("PENZENE_NMR_SHOT"); !out.isEmpty()) w.grab().save(QString(out).replace(".png", "-1h.png"));
+    QTest::keyClick(view, Qt::Key_Right);
+    REQUIRE_FALSE(canvas->highlight().isEmpty());
+    for (int i : canvas->highlight()) CHECK(i < 3);
+    canvas->commit(*chem::fromSmiles("[Na+].[Cl-]"), "Replace");
+    dock->findChild<QPushButton*>()->click();  // nothing predicted: the clipboard keeps what it had
+    CHECK(QGuiApplication::clipboard()->text().startsWith("13C NMR"));
+    dock->hide();
+    CHECK(canvas->highlight().isEmpty());
 }
 
 TEST_CASE("PubChem name lookup: URL and response parsing (#28)") {
@@ -1298,6 +1719,47 @@ TEST_CASE("exported SVG and PNG reopen as the editable drawing (#100)") {
     CHECK(w.findChild<Canvas*>()->document().atoms.size() == doc.atoms.size());
 }
 
+TEST_CASE("copied PNG keeps the embedded drawing and pastes back (#399)") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    Document doc = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
+    doc.texts.push_back({{0, 60}, "aspirin"});
+    canvas->setDocumentSilently(doc);
+    canvas->selectAll();
+    const Document copied = canvas->selectedSubset();
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->shortcut() == QKeySequence::Copy) a->trigger();
+    const QByteArray png = QApplication::clipboard()->mimeData()->data("image/png");
+    REQUIRE(png.startsWith("\x89PNG"));
+    auto embedded = Document::fromEmbedded(png);
+    REQUIRE(embedded);
+    CHECK(*embedded == copied);
+    CHECK(QApplication::clipboard()->mimeData()->hasImage());  // still a bitmap for apps that want one
+    CHECK(!QApplication::clipboard()->mimeData()->hasText());  // else Office pastes the SMILES, not the picture
+#ifdef Q_OS_WIN
+    CHECK(QApplication::clipboard()->mimeData()->data("application/x-qt-windows-mime;value=\"PNG\"") == png);
+#endif
+#ifdef Q_OS_MACOS
+    ChemDrawPasteboard uti;
+    CHECK(uti.utiForMime("image/png") == "public.png");
+    CHECK(uti.mimeForUti("public.png") == "image/png");
+#endif
+
+    // The PNG alone, as another app (Office) hands it back, pastes as the drawing.
+    for (const char* type : {"image/png", "application/x-qt-windows-mime;value=\"PNG\""}) {
+        INFO(type);
+        auto* mime = new QMimeData;
+        mime->setData(type, png);
+        QApplication::clipboard()->setMimeData(mime);
+        canvas->setDocumentSilently(Document{});
+        for (auto* a : w.findChildren<QAction*>())
+            if (a->shortcut() == QKeySequence::Paste) a->trigger();
+        CHECK(canvas->document().atoms.size() == doc.atoms.size());
+        CHECK(canvas->document().texts.size() == 1);
+    }
+}
+
 TEST_CASE("paste from ChemDraw: CDX/CDXML clipboard formats (#104)") {
     App app;
     const QString path = QString(PENZENE_TEST_DATA) + "/scheme.cdxml";
@@ -1392,6 +1854,9 @@ TEST_CASE("page mode: shown, saved, exported at page size (#105)") {
     CHECK(std::abs(img.height() - 684) <= 1);
     canvas->selectAll();
     CHECK(canvas->selectedSubset().page.isEmpty());  // a selection exports just the drawing
+    canvas->setSelection({0});
+    canvas->deleteSelection();
+    CHECK(canvas->document().page == "ACS single column");  // but deleting from it keeps the page (#492)
     if (auto out = qgetenv("PENZENE_PAGE_SHOT"); !out.isEmpty()) {
         w.resize(900, 900);
         w.show();
@@ -1551,6 +2016,22 @@ TEST_CASE("Arrange Scheme lines a reaction up (#109)") {
     CHECK(std::abs(centre("CC(=O)Oc1ccccc1C(=O)O").y() - arrow.from.y()) < 1);           // product on the baseline
 }
 
+TEST_CASE("Arrange Scheme moves an orbital with the atom it is drawn on (#409)") {
+    Fixture f;
+    Document d = *chem::fromSmiles("CO");
+    Arrow orbital{d.atoms[1].pos, d.atoms[1].pos + QPointF(0, -kBondLength)};
+    orbital.kind = ArrowKind::POrbital;
+    d.arrows.push_back(orbital);
+    d.arrows.push_back({{60, 0}, {100, 0}});
+    d.append(*chem::fromSmiles("CC"), {150, 30});
+    f.canvas.setDocumentSilently(d);
+    f.canvas.arrangeScheme();
+    const Document& out = f.doc();
+    REQUIRE(out.arrows.size() == 2);
+    CHECK(QLineF(out.arrows[0].from, out.atoms[1].pos).length() < 1e-6);  // still on the oxygen
+    CHECK(QLineF(out.arrows[0].to - out.arrows[0].from, QPointF(0, -kBondLength)).length() < 1e-6);
+}
+
 TEST_CASE("3D rotation from the mouse and keyboard keeps stereo (#173)") {
     Fixture f;
     const Document menthol = *chem::fromSmiles("CC(C)[C@@H]1CC[C@@H](C)C[C@H]1O");
@@ -1572,6 +2053,46 @@ TEST_CASE("3D rotation from the mouse and keyboard keeps stereo (#173)") {
         exportDocument(menthol, QString::fromUtf8(out) + ".before.png", {150, Qt::white});
         exportDocument(f.doc(), QString::fromUtf8(out), {150, Qt::white});
     }
+}
+
+TEST_CASE("the Select flyout offers 3D rotation without modifier keys") {
+    App app;
+    MainWindow w;
+    w.resize(1000, 700);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    REQUIRE(canvas);
+    QAction* rotate = nullptr;
+    for (auto* action : w.findChildren<QAction*>())
+        if (action->toolTip().startsWith("Rotate in 3D:")) rotate = action;
+    REQUIRE(rotate);
+    rotate->trigger();
+
+    const Document menthol = *chem::fromSmiles("CC(C)[C@@H]1CC[C@@H](C)C[C@H]1O");
+    canvas->setDocumentSilently(menthol);
+    canvas->selectAll();
+    const QPoint on = canvas->mapFromScene(menthol.atoms[3].pos);
+    const QPoint to = on + QPoint(75, 30);
+    QTest::mousePress(canvas->viewport(), Qt::LeftButton, {}, on);
+    QMouseEvent move(QEvent::MouseMove, to, canvas->viewport()->mapToGlobal(to), Qt::NoButton, Qt::LeftButton, {});
+    QApplication::sendEvent(canvas->viewport(), &move);
+    QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, {}, to);
+    CHECK_FALSE(canvas->document() == menthol);
+    CHECK(chem::toSmiles(canvas->document()) == chem::toSmiles(menthol));
+}
+
+TEST_CASE("a triple bond is gapped where a bond in front crosses it (#429)") {
+    Document cross;
+    cross.atoms = {{{-20, 0}}, {{20, 0}}, {{0, -20}}, {{0, 20}}};
+    cross.bonds = {{0, 1}, {2, 3}};
+    cross.bonds[0].order = 3;
+    auto inked = [&](QPointF at) {
+        const QImage img = renderImage(cross, {300, Qt::white});
+        const QPoint px = ((at - documentBounds(cross).topLeft()) * exportScale(cross) * 300 / 72).toPoint();
+        return img.pixelColor(px).lightness() < 160;
+    };
+    CHECK_FALSE(inked({1.6, 0}));  // beside the crossing, on the middle line
+    CHECK(inked({12, 0}));         // but drawn away from it
 }
 
 TEST_CASE("attachment points, π-ligands, bring to front and atom properties (#60)") {
@@ -1637,6 +2158,104 @@ TEST_CASE("ChemDraw shortcut parity: y, W, g, ?, Space, Enter, nudging (#157)") 
     QTest::keyClick(f.canvas.viewport(), Qt::Key_Down);                      // nudge 1
     CHECK(QLineF(f.doc().atoms[0].pos, before + QPointF(10, 1)).length() < 1e-9);
     CHECK(QLineF(f.doc().atoms[3].pos, chem::fromSmiles("CCO.CC")->atoms[3].pos).length() < 1e-9);  // the other molecule stays
+}
+
+TEST_CASE("keyboard: G picks atoms one by one, > draws a curved arrow, no mouse needed (#541)") {
+    Fixture f;
+    f.canvas.setDocumentSilently(*chem::fromSmiles("CC=O"));
+    f.canvas.setFocus();
+    auto key = [&](int k, Qt::KeyboardModifiers m = {}) { QTest::keyClick(f.canvas.viewport(), Qt::Key(k), m); };
+    auto type = [&](char c) { QTest::keyClick(f.canvas.viewport(), c); };
+    f.canvas.setHotspot(0);
+    type('G');
+    CHECK(f.canvas.selection() == QSet<int>{0});
+    key(Qt::Key_Right, Qt::ShiftModifier);  // the hotspot moves on to the next atom instead of nudging atom 0
+    CHECK(f.canvas.hotspotAtom() == 1);
+    type('G');
+    CHECK(f.canvas.selection() == (QSet<int>{0, 1}));
+    const QPointF before = f.doc().atoms[0].pos;
+    key(Qt::Key_Escape);  // done picking: the selection stays and the arrows nudge it
+    CHECK(f.canvas.selection() == (QSet<int>{0, 1}));
+    key(Qt::Key_Down);
+    CHECK(QLineF(f.doc().atoms[0].pos, before + QPointF(0, 1)).length() < 1e-9);
+
+    // From the C=O bond to the oxygen, as an electron-pushing arrow.
+    key(Qt::Key_Escape);
+    f.canvas.setHotspot(-1, 1);
+    type('>');
+    CHECK(f.canvas.accessibleDescription().contains("curved arrow from"));
+    const QPointF toO = f.doc().atoms[2].pos - f.doc().atoms[1].pos;
+    key(std::abs(toO.x()) > std::abs(toO.y()) ? (toO.x() > 0 ? Qt::Key_Right : Qt::Key_Left) : (toO.y() > 0 ? Qt::Key_Down : Qt::Key_Up));
+    CHECK(f.canvas.hotspotAtom() == 2);
+    type('>');
+    REQUIRE(f.doc().arrows.size() == 1);
+    const Arrow& a = f.doc().arrows[0];
+    CHECK(a.kind == ArrowKind::Reaction);
+    CHECK(a.bend != 0);
+    CHECK(a.fromAt == (std::array<int, 2>{1, 2}));
+    CHECK(a.toAt == (std::array<int, 2>{2, -1}));
+
+    // A hotspot the pointer set, with a selection, still nudges: picking is for the keyboard only.
+    f.canvas.setSelection({0});
+    QTest::mouseMove(f.canvas.viewport(), f.at(f.doc().atoms[2].pos));
+    const QPointF c0 = f.doc().atoms[0].pos;
+    key(Qt::Key_Right);
+    CHECK(QLineF(f.doc().atoms[0].pos, c0 + QPointF(1, 0)).length() < 1e-9);
+}
+
+TEST_CASE("keyboard: bend and flip a curved arrow, and place an arrow or text after the selection (#549)") {
+    Fixture f;
+    f.canvas.setDocumentSilently(*chem::fromSmiles("CC=O"));
+    f.canvas.setTool(Canvas::Tool::Select);  // as the window does when the canvas asks for it
+    auto key = [&](int k, Qt::KeyboardModifiers m = {}) { QTest::keyClick(f.canvas.viewport(), Qt::Key(k), m); };
+    auto toward = [](QPointF v) {
+        return std::abs(v.x()) > std::abs(v.y()) ? (v.x() > 0 ? Qt::Key_Right : Qt::Key_Left) : (v.y() > 0 ? Qt::Key_Down : Qt::Key_Up);
+    };
+    f.canvas.setHotspot(-1, 1);
+    QTest::keyClick(f.canvas.viewport(), '>');
+    key(toward(f.doc().atoms[2].pos - f.doc().atoms[1].pos));
+    QTest::keyClick(f.canvas.viewport(), '>');
+    REQUIRE(f.doc().arrows.size() == 1);
+    CHECK(f.canvas.selectedArrows() == QSet<int>{0});  // the new arrow, ready to reshape
+    const Arrow drawn = f.doc().arrows[0];
+    key(toward(f.doc().atoms[1].pos - f.doc().atoms[2].pos));  // the hotspot goes on, the arrow stays put
+    CHECK(f.canvas.hotspotBond() == 1);
+    CHECK(f.doc().arrows[0] == drawn);
+
+    key(Qt::Key_Up, Qt::AltModifier);
+    CHECK(std::abs(f.doc().arrows[0].bend / drawn.bend - 1.25) < 1e-9);
+    key(Qt::Key_Down, Qt::AltModifier);
+    CHECK(std::abs(f.doc().arrows[0].bend - drawn.bend) < 1e-9);
+    f.canvas.setTool(Canvas::Tool::Bond);  // as selected by a screen reader's Press, with another tool on (#561)
+    f.canvas.bendArrow(-1);  // Arrange → Flip Curved Arrow
+    CHECK(std::abs(f.doc().arrows[0].bend + drawn.bend) < 1e-9);
+    f.canvas.setTool(Canvas::Tool::Select);
+
+    // After the molecule: a reaction arrow, then text at the new arrow's right.
+    f.canvas.setSelection({0, 1, 2});
+    double right = -1e9;
+    for (const Atom& a : f.doc().atoms) right = std::max(right, a.pos.x());
+    f.canvas.addArrowAfter();
+    REQUIRE(f.doc().arrows.size() == 2);
+    const Arrow& after = f.doc().arrows[1];
+    CHECK(after.from.x() > right);
+    CHECK(after.bend == 0);
+    CHECK(std::abs(QLineF(after.from, after.to).length() - 3 * kBondLength) < 1e-9);
+    CHECK(f.canvas.selectedArrows() == QSet<int>{1});
+    QTimer::singleShot(0, [] {
+        if (auto* d = qobject_cast<QInputDialog*>(QApplication::activeModalWidget())) d->setTextValue("heat"), d->accept();
+    });
+    f.canvas.addTextAfter();
+    REQUIRE(f.doc().texts.size() == 1);
+    CHECK(f.doc().texts[0].text == "heat");
+    CHECK(f.doc().texts[0].pos.x() > f.doc().arrows[1].to.x());
+
+    key(Qt::Key_Escape);
+    f.canvas.setHotspot(2);
+    REQUIRE(f.canvas.nextPlace());
+    CHECK(len(*f.canvas.nextPlace() - f.doc().atoms[2].pos) >= kBondLength);  // beside the hotspot, not on top of it
+    f.canvas.setHotspot(-1);
+    CHECK_FALSE(f.canvas.nextPlace());  // nothing to place it by
 }
 
 TEST_CASE("update check: parsing GitHub's answer, comparing versions, off by default (#115)") {
@@ -1809,25 +2428,108 @@ TEST_CASE("White and teal theme; tools on a rail whose groups open beside it (#2
     CHECK(rings->isVisible());
     CHECK(rail["Rings"]->isChecked());
     CHECK(rings->findChildren<QToolButton*>().size() >= 8);
-    rail["Arrows"]->click();  // one flyout at a time
-    CHECK_FALSE(rings->isVisible());
-    CHECK(flyout("Arrows")->isVisible());
-    // Picking a tool closes the flyout, unless it's pinned.
+    // Clicking a rail button again leaves its flyout where it opened, whichever group it is.
+    for (const char* g : {"Select", "Bonds", "Rings", "Atoms", "Arrows", "Shapes"}) {
+        rail[g]->click();
+        const QPoint opened = flyout(g)->pos();
+        rail[g]->click();
+        CHECK(flyout(g)->pos() == opened);
+        CHECK(flyout(g)->geometry().bottom() <= w.height());
+    }
+    // Flyouts stay open until closed: picking a tool, opening another group or drawing doesn't hide them.
     auto pick = [](QFrame* f, int i) {
         auto tools = f->findChildren<QToolButton*>();
-        tools.removeIf([](QToolButton* b) { return b->objectName() == "pin"; });
+        tools.removeIf([](QToolButton* b) { return b->objectName() == "close"; });
         tools[i]->click();
     };
-    pick(flyout("Arrows"), 1);
-    CHECK_FALSE(flyout("Arrows")->isVisible());
-    rail["Rings"]->click();
-    rings->findChild<QToolButton*>("pin")->click();
+    rail["Arrows"]->click();
     pick(rings, 2);
+    pick(flyout("Arrows"), 1);
     CHECK(rings->isVisible());
+    CHECK(flyout("Arrows")->isVisible());
+    // The X closes just its own flyout.
+    flyout("Arrows")->findChild<QToolButton*>("close")->click();
+    CHECK_FALSE(flyout("Arrows")->isVisible());
+    CHECK(rings->isVisible());
+    // A flyout can be dragged by its title, and stays there (#466).
+    auto* title = rings->findChild<QLabel*>("flyoutTitle");
+    const QPoint before = rings->pos(), grab = title->rect().center();
+    QTest::mousePress(title, Qt::LeftButton, {}, grab);
+    QTest::mouseMove(title, grab + QPoint(60, 40));
+    QTest::mouseRelease(title, Qt::LeftButton, {}, grab + QPoint(60, 40));
+    CHECK(rings->pos() == before + QPoint(60, 40));
+    rail["Rings"]->click();
+    CHECK(rings->pos() == before + QPoint(60, 40));
+    // ... and by any bare part of it, but not from a tool.
+    const QPoint bare(rings->width() / 2, 2);  // the top margin; the corners resize
+    QTest::mousePress(rings, Qt::LeftButton, {}, bare);
+    QTest::mouseMove(rings, bare + QPoint(-20, 10));
+    QTest::mouseRelease(rings, Qt::LeftButton, {}, bare + QPoint(-20, 10));
+    CHECK(rings->pos() == before + QPoint(40, 50));
+    auto* tool = rings->findChildren<QToolButton*>(Qt::FindDirectChildrenOnly).back();
+    QTest::mousePress(tool, Qt::LeftButton);
+    QTest::mouseMove(tool, tool->rect().center() + QPoint(30, 30));
+    QTest::mouseRelease(tool, Qt::LeftButton, {}, tool->rect().center() + QPoint(500, 500));  // off it: not a click
+    CHECK(rings->pos() == before + QPoint(40, 50));
+    // A corner resizes it: the tools reflow into as many columns as fit, and the box follows them.
+    auto columns = [](QFrame* f) {
+        QSet<int> xs;
+        for (auto* b : f->findChildren<QToolButton*>(Qt::FindDirectChildrenOnly))  // not the menus' swatches
+            if (b->objectName() != "close") xs.insert(b->x());
+        return int(xs.size());
+    };
+    auto holdsTools = [](QFrame* f) {
+        for (auto* b : f->findChildren<QToolButton*>(Qt::FindDirectChildrenOnly))
+            if (!f->rect().contains(b->geometry())) return false;
+        return true;
+    };
+    auto dragCorner = [&](QPoint from, QPoint by, QFrame* f = nullptr) {
+        QFrame* target = f ? f : rings;
+        QTest::mousePress(target, Qt::LeftButton, {}, from);
+        QTest::mouseMove(target, from + by);
+        QTest::mouseRelease(target, Qt::LeftButton, {}, from + by);
+    };
+    const int usual = columns(rings), tall = rings->height();
+    dragCorner({rings->width() - 3, rings->height() - 3}, {200, 0});
+    CHECK(columns(rings) > usual);
+    CHECK(rings->height() < tall);
+    CHECK(holdsTools(rings));
+    const QPoint topLeft = rings->pos();
+    dragCorner({rings->width() - 3, rings->height() - 3}, {40 - rings->width(), 0});
+    CHECK(columns(rings) < usual);
+    CHECK(rings->height() > tall);
+    CHECK(rings->pos() == topLeft);  // the far corner is the one that moves
+    CHECK(holdsTools(rings));
+    const int right = rings->geometry().right();
+    dragCorner({3, 3}, {-60, 0});  // from the top left, the right edge stays
+    CHECK(rings->geometry().right() == right);
+    CHECK(holdsTools(rings));
+    const int fewer = columns(rings);
+    dragCorner({rings->width() - 3, rings->height() - 3}, {0, -rings->height() / 2});  // a shorter box needs more columns
+    CHECK(columns(rings) > fewer);
+    CHECK(holdsTools(rings));
+    // Shapes lays its orbitals in rows at its usual width, but resized it flows like the rest.
+    rail["Shapes"]->click();
+    auto* shapes = flyout("Shapes");
+    dragCorner({shapes->width() - 3, shapes->height() - 3}, {500, 0}, shapes);
+    QSet<int> ys;
+    for (auto* b : shapes->findChildren<QToolButton*>(Qt::FindDirectChildrenOnly))
+        if (b->objectName() != "close") ys.insert(b->y());
+    CHECK(ys.size() <= 2);  // not held to a row for each section
+    CHECK(holdsTools(shapes));
+    // Shrinking the window keeps an open flyout inside it.
+    rail["Select"]->click();
+    auto* select = flyout("Select");
+    select->move(w.width() - select->width() - 10, w.height() - select->height() - 10);
+    w.resize(600, 400);
+    CHECK(w.rect().contains(select->geometry()));
+    w.resize(1000, 700);
+    rings->findChild<QToolButton*>("close")->click();
+    CHECK_FALSE(rings->isVisible());
     // Properties and Templates are in the View menu, not the palette.
     CHECK(w.findChild<QDockWidget*>("properties"));
     CHECK(w.findChild<QDockWidget*>("templates"));
-    CHECK(w.findChildren<QFrame*>("panelCard").size() == 2);
+    CHECK(w.findChildren<QFrame*>("panelCard").size() == 4);  // Properties, Templates, Mass Spec, NMR
     for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
         for (auto* b : f->findChildren<QToolButton*>()) CHECK(b->toolButtonStyle() != Qt::ToolButtonTextOnly);
 }
@@ -2036,6 +2738,50 @@ static double contrast(QColor a, QColor b) {  // WCAG 2 contrast ratio
     return (std::max(x, y) + 0.05) / (std::min(x, y) + 0.05);
 }
 
+TEST_CASE("every tool button does its job pressed through accessibility, as screen readers press it (#535)") {
+    App app;
+    MainWindow w;
+    w.resize(1100, 750);
+    w.show();
+    auto press = [](QToolButton* b) {  // the button's own action, as VoiceOver offers it
+        QAccessibleActionInterface* act = QAccessible::queryAccessibleInterface(b)->actionInterface();
+        REQUIRE(act);
+        const QStringList names = act->actionNames();
+        REQUIRE((names.contains(QAccessibleActionInterface::toggleAction()) || names.contains(QAccessibleActionInterface::pressAction())));
+        act->doAction(names.contains(QAccessibleActionInterface::toggleAction()) ? QAccessibleActionInterface::toggleAction()
+                                                                                 : QAccessibleActionInterface::pressAction());
+        QCoreApplication::processEvents();
+    };
+    for (auto* rail : w.findChildren<QToolButton*>("railButton")) {
+        INFO(rail->text().toStdString());
+        QFrame* fly = nullptr;
+        for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
+            if (f->findChild<QLabel*>("flyoutTitle")->text() == rail->text().toUpper()) fly = f;
+        REQUIRE(fly);
+        fly->hide();
+        press(rail);
+        CHECK(fly->isVisible());  // its tools open
+        for (auto* b : fly->findChildren<QToolButton*>()) {
+            if (!b->defaultAction() || !b->defaultAction()->isCheckable()) continue;  // the close button
+            if (b->popupMode() == QToolButton::InstantPopup) continue;  // a press opens its menu: the swatches, below
+            INFO(b->toolTip().toStdString());
+            const bool current = b->defaultAction()->isChecked();  // its group's tool, picked by the rail
+            w.statusBar()->clearMessage();
+            press(b);
+            CHECK(b->defaultAction()->isChecked());
+            if (!current) CHECK(w.statusBar()->currentMessage() == b->toolTip());  // the tool was picked, not just the button lit
+        }
+    }
+    // A colour swatch picks its colour.
+    QToolButton* oxygen = nullptr;
+    for (auto* wa : w.findChildren<QWidgetAction*>())
+        for (auto* b : wa->defaultWidget()->findChildren<QToolButton*>())
+            if (b->isCheckable() && b->accessibleName() == "Oxygen") oxygen = b;
+    REQUIRE(oxygen);
+    press(oxygen);
+    CHECK(w.findChild<Canvas*>()->colour() == QColor(0xFF, 0x0D, 0x0D));
+}
+
 TEST_CASE("accessibility: named, focusable tools; arrow keys in the periodic table; contrast (#112)") {
     // Every theme: text 4.5:1 or better, marks drawn on the page (hotspot, selection, errors) 3:1.
     for (const auto& t : themes()) {
@@ -2084,6 +2830,20 @@ TEST_CASE("accessibility: named, focusable tools; arrow keys in the periodic tab
 
 }
 
+TEST_CASE("a file opened before the window shows is fitted to the window once it does (#545)") {
+    App app;
+    MainWindow w;
+    w.resize(1100, 750);
+    auto* canvas = w.findChild<Canvas*>();
+    REQUIRE(w.openFile(QString(PENZENE_TEST_DATA) + "/aspirin.mol"));  // as `penzene aspirin.mol` does
+    w.show();
+    QApplication::processEvents();
+    const QRect drawn = canvas->mapFromScene(documentBounds(canvas->document())).boundingRect();
+    const QSize view = canvas->viewport()->size();
+    CHECK((drawn.width() > view.width() / 2 || drawn.height() > view.height() / 2));  // it fills the view, not a corner of it
+    CHECK(canvas->viewport()->rect().contains(drawn));
+}
+
 TEST_CASE("accessibility: the hotspot is announced to screen readers (#112)") {
     Fixture f;
     f.canvas.setDocumentSilently(*chem::fromSmiles("CO"));
@@ -2093,6 +2853,107 @@ TEST_CASE("accessibility: the hotspot is announced to screen readers (#112)") {
     f.hover((f.doc().atoms[0].pos + f.doc().atoms[1].pos) / 2);
     f.canvas.viewport()->repaint();
     CHECK(f.canvas.accessibleDescription() == "Hotspot: single bond, C1 to O2");
+}
+
+TEST_CASE("accessibility: the drawing's atoms, bonds, arrows and text can be read, found and selected (#536)") {
+    Fixture f;
+    Document d = *chem::fromSmiles("CCO");
+    Arrow curved{d.atoms[2].pos + QPointF(0, -8), (d.atoms[0].pos + d.atoms[1].pos) / 2};
+    curved.bend = 6, curved.fromAt = {2, -1}, curved.toAt = {0, 1};
+    d.arrows = {curved, Arrow{{0, 40}, {60, 40}}};
+    d.texts.push_back({{0, 70}, "heat"});
+    f.canvas.setDocumentSilently(d);
+    QAccessibleInterface* canvas = QAccessible::queryAccessibleInterface(&f.canvas);
+    REQUIRE(canvas);
+    auto find = [&](const QString& name) -> QAccessibleInterface* {
+        for (int i = 0; i < canvas->childCount(); ++i)
+            if (auto* c = canvas->child(i); c && c->text(QAccessible::Name) == name) return c;
+        return nullptr;
+    };
+    auto press = [](QAccessibleInterface* c) { c->actionInterface()->doAction(QAccessibleActionInterface::pressAction()); };
+
+    QAccessibleInterface* o = find("atom O3, 1 bond");
+    REQUIRE(o);
+    CHECK(o->parent() == canvas);
+    CHECK(canvas->child(canvas->indexOfChild(o)) == o);
+    const QPoint onScreen = f.canvas.viewport()->mapToGlobal(f.at(f.doc().atoms[2].pos));
+    CHECK(o->rect().contains(onScreen));
+    CHECK(canvas->childAt(onScreen.x(), onScreen.y()) == o);
+    press(o);
+    CHECK(f.canvas.selection() == QSet<int>{2});
+    CHECK(o->state().selected);
+    CHECK(o->state().focused);  // the hotspot: a hotkey now builds from the O
+    f.key("n");
+    CHECK(f.doc().atoms[2].z == 7);
+
+    REQUIRE(find("single bond, C2 to N3"));
+    press(find("single bond, C2 to N3"));
+    CHECK(f.canvas.selection() == QSet<int>{1, 2});
+    REQUIRE(find("curved arrow, from N3 to the C1–C2 bond"));
+    press(find("reaction arrow"));
+    CHECK(f.canvas.selectedArrows() == QSet<int>{1});
+    press(find("text: heat"));
+    CHECK(f.canvas.selectedTexts() == QSet<int>{0});
+
+    // A part stays as the pointer moves, stops being valid when the drawing changes, and is then dropped.
+    QAccessibleInterface* n = find("atom N3, 1 bond");
+    REQUIRE(n);
+    f.hover(f.doc().atoms[0].pos);
+    f.canvas.setTheme(Theme{});
+    CHECK(n->isValid());
+    const QAccessible::Id id = QAccessible::uniqueId(n);
+    const int before = canvas->childCount();
+    f.canvas.setSelection({2});
+    f.canvas.deleteSelection();
+    CHECK_FALSE(n->isValid());
+    CHECK(canvas->childCount() == before - 2);  // the N and its bond
+    CHECK(QAccessible::accessibleInterface(id) == nullptr);
+    CHECK_FALSE(find("atom N3, 1 bond"));
+}
+
+TEST_CASE("accessibility: every control is named, in the window, its closed flyouts and its dialogs (#536)") {
+    App app;
+    MainWindow w;
+    w.resize(1100, 750);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("CCO"));
+    canvas->selectAll();
+    QStringList unnamed;
+    auto walk = [&](QWidget* top, const QString& where) {
+        for (QWidget* c : top->findChildren<QWidget*>()) {
+            if (c->focusPolicy() == Qt::NoFocus && !qobject_cast<QAbstractButton*>(c) || qobject_cast<QLabel*>(c)) continue;  // not a control
+            if (c->objectName().startsWith("qt_") || qobject_cast<QAbstractScrollArea*>(c->parentWidget())) continue;  // Qt's own parts
+            bool inside = false;  // a combo box's list or a spin box's editor: read as the box
+            for (QWidget* p = c->parentWidget(); p; p = p->parentWidget()) inside |= qobject_cast<QComboBox*>(p) || qobject_cast<QAbstractSpinBox*>(p);
+            if (inside) continue;
+            if (auto* ai = QAccessible::queryAccessibleInterface(c); ai && ai->text(QAccessible::Name).trimmed().isEmpty())
+                unnamed << where + ": " + c->metaObject()->className() + " " + c->objectName() + " " + c->toolTip();
+        }
+    };
+    walk(&w, "window");
+    auto dialog = [&](const QString& what, const std::function<void()>& open) {
+        QTimer::singleShot(0, &w, [&, what] {
+            if (QWidget* modal = QApplication::activeModalWidget()) {
+                walk(modal, what);
+                if (auto* d = qobject_cast<QDialog*>(modal)) d->reject();
+                else modal->close();
+            }
+        });
+        open();
+        QApplication::processEvents();
+    };
+    // Every dialog a menu opens ("…"), except the system's own file, print and colour pickers.
+    for (QAction* a : w.findChildren<QAction*>()) {
+        const QString text = a->text();
+        if (text.endsWith(u'…') && a->isEnabled() && !text.contains("Open") && !text.contains("Save") && !text.contains("Print") &&
+            !text.contains("Export") && !text.contains("Colour"))
+            dialog(text, [a] { a->trigger(); });
+    }
+    dialog("atom properties", [&] { canvas->editAtomProperties(0); });
+    dialog("text", [&] { canvas->editText(-1, {}); });
+    INFO(unnamed.join("\n").toStdString());
+    CHECK(unnamed.isEmpty());
 }
 
 TEST_CASE("accessibility: an edit at the hotspot is announced too (#244)") {
@@ -2433,6 +3294,40 @@ TEST_CASE("an export that can't be written in full leaves the old file whole (#3
 }
 #endif
 
+TEST_CASE("A trackpad pinch zooms the canvas: spread in, pinch out (#452)") {
+    Fixture f;
+    auto pinch = [&](double value) {
+        QNativeGestureEvent e(Qt::ZoomNativeGesture, QPointingDevice::primaryPointingDevice(), 2, {10, 10}, {10, 10},
+                              {10, 10}, value, {}, {});
+        QApplication::sendEvent(f.canvas.viewport(), &e);
+    };
+    const double before = f.canvas.transform().m11();
+    pinch(0.2);
+    CHECK(std::abs(f.canvas.transform().m11() / before - 1.2) < 1e-9);
+    pinch(-0.2);
+    CHECK(f.canvas.transform().m11() < before * 1.2);
+}
+
+TEST_CASE("Center on Page moves the whole drawing, or just the selection, keeping spacing (#454)") {
+    Fixture f;
+    Document doc = *chem::fromSmiles("CC.O");
+    doc.page = "ACS single column";
+    f.canvas.setDocumentSilently(doc);
+    const QPointF middle = pageRect(doc).center();
+    const auto gap = [&] { return f.canvas.document().atoms[0].pos - f.canvas.document().atoms[2].pos; };
+    const QPointF spacing = gap();
+    f.canvas.centerOnPage();
+    CHECK(QLineF(documentBounds(f.canvas.document()).center(), middle).length() < 1e-6);
+    CHECK(gap() == spacing);
+    f.undo.undo();
+    CHECK(f.canvas.document() == doc);
+
+    f.canvas.setSelection({2}, {}, {});  // the lone oxygen
+    f.canvas.centerOnPage();
+    CHECK(QLineF(f.canvas.document().atoms[2].pos, middle).length() < 1e-6);
+    CHECK(f.canvas.document().atoms[0].pos == doc.atoms[0].pos);
+}
+
 TEST_CASE("View shows a light grid and rulers, measured at the final size (#219)") {
     Fixture f;
     f.canvas.setTheme(theme("Light"));
@@ -2493,7 +3388,7 @@ TEST_CASE("pages: tabs along the bottom, each with its own drawing and undo hist
     canvas->selectAll();
     QMenu* moveTo = nullptr;
     for (auto* m : w.findChildren<QMenu*>())
-        if (m->title() == "Mo&ve to Page") moveTo = m;
+        if (m->title() == "Mo&ve Selection To") moveTo = m;
     REQUIRE(moveTo);
     emit moveTo->aboutToShow();
     REQUIRE(moveTo->actions().size() == 1);
@@ -2591,6 +3486,34 @@ TEST_CASE("Save after opening an SDF doesn't overwrite it, and never writes MOL 
     CHECK(back.readAll() == library);
     REQUIRE_FALSE(image.isEmpty());
     CHECK_FALSE(QFile::exists(image));
+}
+
+TEST_CASE("About opens bundled third-party license notices (#451)") {
+    App app;
+    MainWindow w;
+    bool opened = false;
+    QTimer::singleShot(0, &w, [&] {
+        auto* about = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+        REQUIRE(about);
+        QPushButton* licenses = nullptr;
+        for (auto* button : about->findChildren<QPushButton*>())
+            if (button->text().contains("Third-party licenses")) licenses = button;
+        REQUIRE(licenses);
+        QTimer::singleShot(0, &w, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            REQUIRE(dialog);
+            auto* text = dialog->findChild<QTextBrowser*>();
+            REQUIRE(text);
+            opened = text->toPlainText().contains("Revvity ChemDraw file library") &&
+                     text->toPlainText().contains("GNU Lesser General Public License") &&
+                     text->toPlainText().contains("nmrshiftdb2 Database License");
+            dialog->accept();
+        });
+        licenses->click();
+    });
+    for (auto* action : w.findChildren<QAction*>())
+        if (action->text() == "&About Penzene") action->trigger();
+    CHECK(opened);
 }
 
 TEST_CASE("another running Penzene's autosave is neither offered nor removed (#318)") {
@@ -2696,6 +3619,12 @@ TEST_CASE("the Shapes flyout has every orbital in every look; one clicked on an 
     CHECK(p.kind == ArrowKind::POrbital);
     CHECK(p.look == OrbitalLook::Shaded);
     CHECK(QLineF(p.from, QPointF(0, 0)).length() < 0.5);  // centred on the nitrogen
+    // A click a little off the atom's centre is still a click: the same size as one dead centre (#431).
+    const double full = QLineF(p.from, p.to).length();
+    canvas->setDocumentSilently(d);
+    QTest::mouseClick(canvas->viewport(), Qt::LeftButton, {}, canvas->mapFromScene(QPointF(2, 2)));
+    REQUIRE(canvas->document().arrows.size() == 1);
+    CHECK(std::abs(QLineF(canvas->document().arrows[0].from, canvas->document().arrows[0].to).length() - full) < 1e-6);
     if (auto shot = qgetenv("PENZENE_ORBITAL_TOOLS_SHOT"); !shot.isEmpty()) {
         for (auto* b : w.findChildren<QToolButton*>("railButton"))
             if (b->text() == "Shapes") b->click();
@@ -2768,4 +3697,159 @@ TEST_CASE("orbital tools are named alike: s orbital, p orbital, lobe, hybrid orb
         if (a->toolTip().contains(", outline (click an atom")) names << a->toolTip().section(',', 0, 0);
     names.sort();
     CHECK(names == QStringList{"hybrid orbital", "lobe", "p orbital", "s orbital"});
+}
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+TEST_CASE("Windows copy offers an Enhanced Metafile for Office (#394)") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->shortcut() == QKeySequence::Copy) a->trigger();
+    const QMimeData* mime = QApplication::clipboard()->mimeData();
+    const QByteArray emf = mime->data("image/x-emf");
+    REQUIRE(emf.size() > qsizetype(sizeof(ENHMETAHEADER)));
+    HENHMETAFILE handle = SetEnhMetaFileBits(UINT(emf.size()), reinterpret_cast<const BYTE*>(emf.constData()));
+    REQUIRE(handle);
+    ENHMETAHEADER header{};
+    REQUIRE(GetEnhMetaFileHeader(handle, sizeof header, &header));
+    CHECK(header.iType == EMR_HEADER);
+    CHECK(header.dSignature == ENHMETA_SIGNATURE);
+    CHECK(header.nBytes == DWORD(emf.size()));
+    CHECK(header.rclBounds.right > header.rclBounds.left);  // something was drawn
+    CHECK(header.rclBounds.bottom > header.rclBounds.top);
+    CHECK(header.rclFrame.right > 0);
+    DeleteEnhMetaFile(handle);
+
+    // What Office asks the clipboard for: CF_ENHMETAFILE, handed over as a metafile handle.
+    // The converter needs Qt's Windows plugin, so this part is skipped offscreen (as on CI).
+    if (QGuiApplication::platformName() != "windows") return;
+    EmfClipboard converter;
+    const QList<FORMATETC> formats = converter.formatsForMime("image/x-emf", mime);
+    REQUIRE(formats.size() == 1);
+    CHECK(formats[0].cfFormat == CF_ENHMETAFILE);
+    CHECK(converter.canConvertFromMime(formats[0], mime));
+    STGMEDIUM medium{};
+    REQUIRE(converter.convertFromMime(formats[0], mime, &medium));
+    CHECK(medium.tymed == TYMED_ENHMF);
+    CHECK(GetEnhMetaFileBits(medium.hEnhMetaFile, 0, nullptr) == UINT(emf.size()));
+    DeleteEnhMetaFile(medium.hEnhMetaFile);
+}
+
+#include "OleServer.h"
+
+// COM without the registry or Office: the object as Word or PowerPoint drives it, in process.
+TEST_CASE("A drawing embedded in Word or PowerPoint opens, draws and saves (#229)") {
+    App app;
+    REQUIRE(SUCCEEDED(OleInitialize(nullptr)));  // offscreen, Qt hasn't
+    const std::vector<Sheet> sheets{{"Page 1", *chem::fromSmiles("c1ccccc1O")}, {"Two", *chem::fromSmiles("CCO")}};
+    IStorage* storage = ole::embedSource(sheets);  // what Copy offers as "Embed Source"
+    REQUIRE(storage);
+    CLSID clsid{};
+    REQUIRE(SUCCEEDED(ReadClassStg(storage, &clsid)));
+    CHECK(IsEqualCLSID(clsid, ole::kClsid));
+
+    MainWindow w;
+    IUnknown* object = ole::newObject(w);
+    IPersistStorage* persist = nullptr;
+    IDataObject* data = nullptr;
+    IOleObject* oleObject = nullptr;
+    REQUIRE(SUCCEEDED(object->QueryInterface(IID_IPersistStorage, reinterpret_cast<void**>(&persist))));
+    REQUIRE(SUCCEEDED(object->QueryInterface(IID_IDataObject, reinterpret_cast<void**>(&data))));
+    REQUIRE(SUCCEEDED(object->QueryInterface(IID_IOleObject, reinterpret_cast<void**>(&oleObject))));
+    object->Release();
+    REQUIRE(persist->Load(storage) == S_OK);
+    REQUIRE(w.sheets().size() == 2);
+    CHECK(w.sheets()[1].name == "Two");
+    CHECK(w.sheets()[0].doc.atoms.size() == 7);
+    CHECK(persist->IsDirty() == S_FALSE);
+    CHECK(oleObject->SetHostNames(L"PowerPoint", L"Talk.pptx") == S_OK);
+    CHECK(w.windowTitle().contains("Talk.pptx"));
+
+    // The picture the container caches: an EMF, and an old-style metafile of the same size.
+    FORMATETC emfFormat{CF_ENHMETAFILE, nullptr, DVASPECT_CONTENT, -1, TYMED_ENHMF};
+    STGMEDIUM medium{};
+    REQUIRE(data->GetData(&emfFormat, &medium) == S_OK);
+    REQUIRE(medium.tymed == TYMED_ENHMF);
+    ENHMETAHEADER header{};
+    REQUIRE(GetEnhMetaFileHeader(medium.hEnhMetaFile, sizeof header, &header));
+    const LONG width = header.rclFrame.right - header.rclFrame.left, height = header.rclFrame.bottom - header.rclFrame.top;
+    CHECK(width > 0);
+    CHECK(height > 0);
+    ReleaseStgMedium(&medium);
+    FORMATETC wmfFormat{CF_METAFILEPICT, nullptr, DVASPECT_CONTENT, -1, TYMED_MFPICT};
+    REQUIRE(data->GetData(&wmfFormat, &medium) == S_OK);
+    REQUIRE(medium.tymed == TYMED_MFPICT);
+    const auto* pict = static_cast<const METAFILEPICT*>(GlobalLock(medium.hMetaFilePict));
+    CHECK(pict->hMF);
+    CHECK(pict->xExt == width);
+    GlobalUnlock(medium.hMetaFilePict);
+    ReleaseStgMedium(&medium);
+    SIZEL size{};
+    REQUIRE(oleObject->GetExtent(DVASPECT_CONTENT, &size) == S_OK);
+    CHECK(size.cx == width);
+    CHECK(size.cy == height);
+    FORMATETC png{CLIPFORMAT(RegisterClipboardFormatW(L"PNG")), nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
+    CHECK(data->QueryGetData(&png) == DV_E_FORMATETC);
+
+    // Saved into the container's storage, as OleSave does, and loaded again: the same pages.
+    CHECK(ole::embedSource({}) == nullptr);
+    IStorage* saved = ole::embedSource({{"Page 1", Document{}}});
+    REQUIRE(saved);
+    REQUIRE(persist->Save(saved, FALSE) == S_OK);
+    CHECK(persist->SaveCompleted(nullptr) == S_OK);
+    MainWindow again;
+    IUnknown* second = ole::newObject(again);
+    IPersistStorage* persist2 = nullptr;
+    REQUIRE(SUCCEEDED(second->QueryInterface(IID_IPersistStorage, reinterpret_cast<void**>(&persist2))));
+    second->Release();
+    REQUIRE(persist2->Load(saved) == S_OK);
+    CHECK(again.sheets() == w.sheets());
+
+    // Insert → Object: an empty drawing, one page.
+    CHECK(persist2->InitNew(saved) == S_OK);
+    CHECK(again.sheets().size() == 1);
+    CHECK(again.sheets()[0].doc.empty());
+
+    for (IUnknown* u : std::initializer_list<IUnknown*>{persist, data, oleObject, persist2, storage, saved}) u->Release();
+    OleUninitialize();
+}
+#endif
+
+TEST_CASE("the predicted shifts view is saved and drawn with its notice (#403)") {
+    App app;
+    Document doc = *chem::fromSmiles("CCO");
+    const QRectF plain = outputBounds(doc);
+    doc.showShifts = true;
+    CHECK(Document::fromJson(doc.toJson())->showShifts);
+    const QRectF shown = outputBounds(doc);
+    CHECK(shown.bottom() > plain.bottom() + 12);  // the nmrshiftdb2 notice (three lines), under the drawing
+    CHECK(shown.width() > plain.width());
+}
+
+TEST_CASE("Open says when a file is missing, not that it isn't a structure (#484)") {
+    App app;
+    MainWindow w;
+    QString shown;
+    QTimer::singleShot(0, &w, [&] {
+        if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+            shown = box->text();
+            box->button(QMessageBox::Ok)->click();
+        }
+    });
+    const QString gone = QDir::tempPath() + "/penzene-gone-488.mol", unmounted = "/no/such/dir/gone.mol";
+    QSettings().setValue("recentFiles", QStringList{gone, unmounted});
+    CHECK_FALSE(w.openFile(unmounted));
+    CHECK(shown.contains("doesn't exist"));
+    // Open Recent forgets a file missing from a folder that is there, and keeps one whose folder isn't (#488).
+    QTimer::singleShot(0, &w, [] { qobject_cast<QMessageBox*>(QApplication::activeModalWidget())->button(QMessageBox::Ok)->click(); });
+    CHECK_FALSE(w.openFile(gone));
+    CHECK(w.recentFiles() == QStringList{unmounted});
+    QSettings().remove("recentFiles");
 }

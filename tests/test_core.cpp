@@ -134,6 +134,67 @@ TEST_CASE(".penz rejects bad arrows; v0.1 files still load") {
     CHECK(old->arrows.empty());
 }
 
+TEST_CASE("a peptide from its one- or three-letter sequence (#503)") {
+    const auto gfls = chem::fromSequence("GFLS");
+    REQUIRE(gfls);
+    CHECK(chem::properties(*gfls)->formula == "C20H30N4O6");
+    for (const char* same : {"Gly-Phe-Leu-Ser", "GLY PHE LEU SER", " G F L S ", "H-Gly-Phe-Leu-Ser-OH", "Gly-L-Phe-Leu-Ser"}) {
+        INFO(same);
+        const auto doc = chem::fromSequence(same);
+        REQUIRE(doc);
+        CHECK(chem::toSmiles(*doc) == chem::toSmiles(*gfls));
+    }
+    CHECK(chem::properties(*chem::fromSequence("Gly"))->formula == "C2H5NO2");  // glycine, not Gly-Leu-Tyr
+    CHECK(chem::properties(*chem::fromSequence("GLY"))->formula == "C17H25N3O5");  // Gly-Leu-Tyr
+    CHECK(chem::toSmiles(*chem::fromSequence("a")) != chem::toSmiles(*chem::fromSequence("A")));  // D- and L-alanine
+    CHECK_FALSE(chem::fromSequence(""));
+    CHECK_FALSE(chem::fromSequence("G1S"));
+    CHECK(chem::toSmiles(*chem::fromSequence("Ala-D-Phe")) == chem::toSmiles(*chem::fromSequence("Af")));  // D-phenylalanine (#570)
+    CHECK(chem::properties(*chem::fromSequence("H-GLY-OH"))->formula == "C2H5NO2");
+    for (const char* bad : {"Gly-Xyz", "Ac-Gly-NH2", "Ala-D-D-Phe", "G-F-L"})  // refused, not read as one-letter codes
+        CHECK_FALSE(chem::fromSequence(bad));
+}
+
+TEST_CASE("a peptide's side chains keep clear of the backbone's N-H (#559)") {
+    for (const char* seq : {"YGGFL", "ACDEFGHIKLMNPQRSTVWY"}) {
+        INFO(seq);
+        const Document d = *chem::fromSequence(seq);
+        const auto info = chem::atomInfo(d);
+        double closest = 1e9;  // from where an N-H's H goes (away from its two bonds) to the nearest atom
+        for (int i = 0; i < int(d.atoms.size()); ++i) {
+            const auto nbs = d.neighbors(i);
+            if (d.atoms[i].z != 7 || nbs.size() != 2 || info[i].hydrogens != 1) continue;
+            QPointF out;
+            for (int n : nbs) out -= unit(d.atoms[n].pos - d.atoms[i].pos);
+            const QPointF h = d.atoms[i].pos + unit(out) * kBondLength;
+            for (int j = 0; j < int(d.atoms.size()); ++j)
+                if (j != i) closest = std::min(closest, len(d.atoms[j].pos - h) / kBondLength);
+        }
+        CHECK(closest > 0.6);
+    }
+}
+
+TEST_CASE("macrocycles and peptides are laid out cleanly (#502)") {
+    // A cyclophane's bridges leave their rings well clear of the ring bonds, not squeezed against one.
+    const Document phane = *chem::fromSmiles("C1Cc2ccc(cc2)CCc2ccc1cc2");  // [2.2]paracyclophane
+    double tightest = 180;  // degrees between a bridge bond and a ring bond at the same atom
+    for (const Bond& b : phane.bonds) {
+        for (int end : {b.a, b.b}) {
+            const int other = end == b.a ? b.b : b.a;
+            if (phane.neighbors(end).size() != 3 || phane.neighbors(other).size() != 2) continue;  // ring atom, bridge CH2
+            for (int n : phane.neighbors(end))
+                if (n != other)
+                    tightest = std::min(tightest, qRadiansToDegrees(std::acos(QPointF::dotProduct(
+                        unit(phane.atoms[other].pos - phane.atoms[end].pos), unit(phane.atoms[n].pos - phane.atoms[end].pos)))));
+        }
+    }
+    CHECK(tightest > 80);
+
+    // A peptide's backbone runs out end to end instead of folding back, where each C=O met the next NH.
+    const Document gfls = *chem::fromSmiles("NCC(=O)NC(Cc1ccccc1)C(=O)NC(CC(C)C)C(=O)NC(CO)C(=O)O");  // Gly-Phe-Leu-Ser
+    CHECK(len(gfls.atoms.front().pos - gfls.atoms.back().pos) / kBondLength > 9);  // N-terminus to the C-terminal OH
+}
+
 TEST_CASE("clean lays out each fragment in place and keeps arrows and text") {
     auto left = chem::fromSmiles("CCO"), right = chem::fromSmiles("CC=O");
     REQUIRE(left);
@@ -204,6 +265,55 @@ TEST_CASE("hotkeys without a canvas: ChemDraw's dipeptide example") {
     CHECK_FALSE(edit::hotkey(doc, {0, -1}, "~").valid());  // not a hotkey
 }
 
+TEST_CASE("chair hotkey on two bonds of one ring fuses cleanly (#417)") {
+    auto clean = [](const Document& doc, bool unitBonds = true) {
+        for (int i = 0; i < int(doc.atoms.size()); ++i) {
+            CHECK(doc.neighbors(i).size() >= 2);  // no dangling bond
+            for (int j = 0; j < i; ++j)           // nothing drawn over or next to another atom
+                if (doc.bondBetween(i, j) < 0) CHECK(len(doc.atoms[i].pos - doc.atoms[j].pos) > 0.45 * kBondLength);
+        }
+        for (const Bond& x : doc.bonds) {
+            if (unitBonds) CHECK(std::abs(len(doc.atoms[x.a].pos - doc.atoms[x.b].pos) - kBondLength) < 0.15 * kBondLength);
+            for (const Bond& y : doc.bonds)
+                if (x.a != y.a && x.a != y.b && x.b != y.a && x.b != y.b)
+                    CHECK(QLineF(doc.atoms[x.a].pos, doc.atoms[x.b].pos)
+                              .intersects(QLineF(doc.atoms[y.a].pos, doc.atoms[y.b].pos)) != QLineF::BoundedIntersection);
+        }
+    };
+    std::vector<QPointF> firstChair[2];
+    for (int k : {0, 1})
+        for (int second = 1; second < 6; ++second) {
+            const QString key = k ? "0" : "9";
+            Document doc;
+            edit::ringAt(doc, {0, 0}, 6, false);
+            edit::hotkey(doc, {-1, 0}, key);
+            INFO(key.toStdString() << " then bond " << second);
+            REQUIRE(doc.atoms.size() == 10);
+            clean(doc);
+            if (second == 1)
+                for (const Atom& a : doc.atoms) firstChair[k].push_back(a.pos);
+            edit::hotkey(doc, {-1, second}, key);
+            CHECK(doc.atoms.size() == 14);
+            clean(doc);
+        }
+    CHECK(firstChair[0] != firstChair[1]);  // 9 and 0 are mirror images
+
+    // A chair fused onto any bond of another chair is just as clean (#449).
+    for (const QString first : {"9", "0"})
+        for (const QString key : {"9", "0"})
+            for (int bond = 1; bond < 6; ++bond) {
+                Document doc;
+                const int a = doc.addAtom({0, 0}), b = doc.addAtom({kBondLength, 0});
+                edit::link(doc, a, b);
+                edit::hotkey(doc, {-1, 0}, first);  // a chair on the single bond
+                INFO(first.toStdString() << " then " << key.toStdString() << " on chair bond " << bond);
+                REQUIRE(doc.atoms.size() == 6);
+                edit::hotkey(doc, {-1, bond}, key);
+                CHECK(doc.atoms.size() == 10);
+                clean(doc, false);  // the template's bonds aren't all one length, and fusing on one carries that on
+            }
+}
+
 TEST_CASE("descriptor table: a row per record, invalid ones kept with the reason (#152)") {
     const std::vector<chem::Record> records{
         {"aspirin", chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O")}, {"broken", std::nullopt}, {"a, \"quoted\" name", chem::fromSmiles("c1ccccc1")}};
@@ -215,6 +325,9 @@ TEST_CASE("descriptor table: a row per record, invalid ones kept with the reason
     CHECK(lines[3].startsWith("3,\"a, \"\"quoted\"\" name\",c1ccccc1,"));
     // Chosen columns, in the order given.
     CHECK(QString::fromStdString(chem::descriptorsCsv(records, {"name", "tpsa"})).startsWith("name,tpsa\naspirin,63.60\nbroken,\n"));
+    // A reaction is a row that says so, not one molecule's numbers (#501).
+    Document scheme = *chem::fromReactionSmiles("CC(=O)O>>CC(=O)OC");
+    CHECK(QString::fromStdString(chem::descriptorsCsv({{"ester", scheme}}, {"name", "error"})) == "name,error\nester,reaction\n");
     // The molecules of a drawing, each its own row.
     Document two = *chem::fromSmiles("CCO.c1ccccc1");
     CHECK(chem::molecules(two).size() == 2);
@@ -354,6 +467,15 @@ TEST_CASE("ChemDraw export keeps a charged abbreviation's charge (#382)") {
     CHECK(cdxml.count("Charge=\"1\"") == 1);
 }
 
+TEST_CASE("a ChemDraw-made file keeps its Boc nickname and OMe fragment labels (#391)") {
+    auto doc = chem::readFile(QString(PENZENE_TEST_DATA) + "/chemdraw-nicknames.cdxml");  // ChemDraw 22
+    REQUIRE(doc);
+    REQUIRE(doc->atoms.size() == 8);  // the ring plus one atom per label
+    CHECK(doc->atoms[6].label == "Boc");
+    CHECK(doc->atoms[7].label == "OMe");
+    CHECK(chem::properties(*doc)->formula == "C12H16O3");
+}
+
 TEST_CASE("explicit hydrogens and carbon/H display options (#97)") {
     auto eth = chem::fromSmiles("CCO");
     REQUIRE(eth);
@@ -373,11 +495,11 @@ TEST_CASE("explicit hydrogens and carbon/H display options (#97)") {
     CHECK(chem::removeHydrogens(wedgedH).atoms.size() == 4);
 
     eth->carbonLabels = Document::CarbonLabels::Terminal;
-    eth->hideImplicitH = true;
-    auto back = Document::fromJson(eth->toJson());
+    QJsonObject old = QJsonDocument::fromJson(eth->toJson()).object();
+    old["hideImplicitH"] = true;  // saved by 1.4: the labels keep their hydrogens now
+    auto back = Document::fromJson(QJsonDocument(old).toJson());
     REQUIRE(back);
     CHECK(back->carbonLabels == Document::CarbonLabels::Terminal);
-    CHECK(back->hideImplicitH);
 }
 
 TEST_CASE("CIP stereo labels, and E/Z read from the drawing (#94)") {
@@ -492,6 +614,79 @@ TEST_CASE("properties panel profile for aspirin (#96)") {
     CHECK_FALSE(chem::profile(Document{}));
 }
 
+TEST_CASE("isotope pattern: aspirin's ions and a chlorine M+2 (#397)") {
+    const Document aspirin = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
+    // Intensity summed per nominal mass above the monoisotopic peak (13C, 2H and 17O sticks apart).
+    auto bins = [](const std::vector<chem::Peak>& peaks) {
+        std::map<int, double> sum;
+        for (const auto& p : peaks) sum[int(std::lround(p.mz - peaks[0].mz))] += p.intensity;
+        return sum;
+    };
+    const auto m = chem::isotopePattern(aspirin, chem::Ion::M);
+    REQUIRE_FALSE(m.empty());
+    CHECK(std::abs(m[0].mz - 180.0417) < 0.0001);  // M+•: the neutral 180.0423 less an electron (#556)
+
+    const auto mh = chem::isotopePattern(aspirin, chem::Ion::MplusH);
+    REQUIRE(mh.size() > 2);
+    CHECK(std::abs(mh[0].mz - 181.0495) < 0.0001);
+    CHECK(mh[0].intensity == 100);
+    // C9H9O4: M+1/M = Σ n·a(M+1)/a(M) over C, H and O.
+    const double theory = 9 * 1.07 / 98.93 + 9 * 0.0115 / 99.9885 + 4 * 0.038 / 99.757;
+    const double ratio = bins(mh)[1] / bins(mh)[0];
+    INFO("M+1/M " << ratio << " theory " << theory);
+    CHECK(std::abs(ratio / theory - 1) < 0.005);
+    for (const auto& p : mh) CHECK(p.intensity >= 0.1);
+
+    const auto mna = chem::isotopePattern(aspirin, chem::Ion::MplusNa);
+    REQUIRE_FALSE(mna.empty());
+    CHECK(std::abs(mna[0].mz - 203.0315) < 0.0001);
+    const auto deprotonated = chem::isotopePattern(aspirin, chem::Ion::MminusH);
+    REQUIRE_FALSE(deprotonated.empty());
+    CHECK(std::abs(deprotonated[0].mz - 179.0350) < 0.0001);
+
+    const auto cl = bins(chem::isotopePattern(*chem::fromSmiles("Clc1ccccc1"), chem::Ion::M));
+    INFO("M+2/M " << cl.at(2) / cl.at(0));
+    CHECK(std::abs(100 * cl.at(2) / cl.at(0) - 32) < 1);
+    // A drawn 13C is that isotope only: one mass unit up, and no more 13C to spread.
+    const auto labelled = chem::isotopePattern(*chem::fromSmiles("[13CH4]"), chem::Ion::M);
+    REQUIRE_FALSE(labelled.empty());
+    CHECK(std::abs(labelled[0].mz - 17.0341) < 0.0001);
+    CHECK(labelled.size() == 1);
+    CHECK(chem::isotopePattern(Document{}, chem::Ion::M).empty());
+    CHECK(chem::isotopePattern(*chem::fromSmiles("[Na+].[Cl-]"), chem::Ion::MminusH).empty());
+}
+
+TEST_CASE("EI ions to look for, from the groups present (#554)") {
+    auto find = [](const std::vector<chem::EiIon>& ions, const QString& formula) {
+        auto it = std::find_if(ions.begin(), ions.end(), [&](const chem::EiIon& i) { return i.formula == formula; });
+        return it == ions.end() ? 0.0 : it->mz;
+    };
+    const auto ester = chem::eiIons(*chem::fromSmiles("COC(=O)Cc1ccccc1"));  // methyl phenylacetate
+    REQUIRE_FALSE(ester.empty());
+    CHECK(ester[0].formula == "C9H10O2+");
+    CHECK(std::abs(find(ester, "C7H7+") - 91.0542) < 1e-4);   // tropylium
+    CHECK(std::abs(find(ester, "C8H7O+") - 119.0491) < 1e-4);  // M − OMe
+    CHECK(find(ester, "C8H7O2+") == 0);                        // its methyl is on O, so no M − 15
+    const auto ketone = chem::eiIons(*chem::fromSmiles("CC(=O)CCCC"));  // 2-hexanone
+    CHECK(std::abs(find(ketone, "C3H6O+") - 58.0413) < 1e-4);  // McLafferty: propene lost
+    CHECK(std::abs(find(ketone, "C2H3O+") - 43.0178) < 1e-4);  // acetyl
+    const auto ethanol = chem::eiIons(*chem::fromSmiles("CCO"));
+    CHECK(find(ethanol, "C7H7+") == 0);
+    CHECK(find(ethanol, "C2H4+") > 0);  // M − H2O
+    CHECK(chem::eiIons(Document{}).empty());
+    CHECK(chem::eiIons(*chem::fromSmiles("CC(=O)[O-]")).empty());
+}
+
+TEST_CASE("the HRMS line for a supporting-information entry (#398)") {
+    const Document aspirin = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
+    CHECK(chem::hrmsLine(aspirin, chem::Ion::MplusH).toStdString() == "HRMS (ESI) m/z: [M+H]+ calcd for C9H9O4 181.0495");
+    CHECK(chem::hrmsLine(aspirin, chem::Ion::MplusNa).toStdString() == "HRMS (ESI) m/z: [M+Na]+ calcd for C9H8NaO4 203.0315");
+    CHECK(chem::hrmsLine(aspirin, chem::Ion::MminusH).toStdString() == "HRMS (ESI) m/z: [M-H]- calcd for C9H7O4 179.0350");
+    CHECK(chem::hrmsLine(aspirin, chem::Ion::M).toStdString() == "HRMS (EI) m/z: [M]+ calcd for C9H8O4 180.0417");
+    CHECK(chem::hrmsLine(*chem::fromSmiles("C[N+](C)(C)C"), chem::Ion::M).toStdString() == "HRMS (ESI) m/z: [M]+ calcd for C4H12N+ 74.0964");
+    CHECK(chem::hrmsLine(Document{}, chem::Ion::MplusH).isEmpty());
+}
+
 TEST_CASE("atom-map numbers survive SMILES, .penz and the ' hotkey (#99)") {
     auto doc = chem::fromSmiles("[CH3:1][OH:2]");
     REQUIRE(doc);
@@ -545,6 +740,11 @@ TEST_CASE("multi-record SDF, .smi and .inchi open as a grid; MOL V3000; InChI (#
     }
     CHECK(chem::readRecords(sdf)[0].name == "aspirin");
     CHECK(chem::readRecords(smi)[1].name == "ethanol");
+    // A reaction SMILES line is a scheme, not an unreadable molecule (#501).
+    const auto rxn = chem::readRecords(write("rxn.smi", "CC(=O)O.OC>>CC(=O)OC ester\n"));
+    REQUIRE(rxn.size() == 1);
+    REQUIRE(rxn[0].doc);
+    CHECK(rxn[0].doc->arrows.size() == 1);
 }
 
 TEST_CASE("reactions: reaction SMILES and RXN, both ways (#101)") {
@@ -661,11 +861,12 @@ TEST_CASE("CDXML export reads back: molecules, wedges, arrows and text (#29)") {
     REQUIRE(back);
     CHECK(chem::toSmiles(*back) == smiles);  // stereo survives
     REQUIRE(back->arrows.size() == 2);
-    CHECK(QLineF(back->arrows[0].from, doc.arrows[0].from).length() < 0.1);
+    const QPointF moved = back->atoms[0].pos - doc.atoms[0].pos;  // onto the page (#443)
+    CHECK(QLineF(back->arrows[0].from - moved, doc.arrows[0].from).length() < 0.1);
     CHECK(std::abs(back->arrows[1].bend - 10) < 0.1);  // the arc comes back on the same side
     REQUIRE(back->texts.size() == 1);
     CHECK(back->texts[0].text == "L-alanine");
-    for (size_t i = 0; i < doc.atoms.size(); ++i) CHECK(QLineF(back->atoms[i].pos, doc.atoms[i].pos).length() < 0.1);
+    for (size_t i = 0; i < doc.atoms.size(); ++i) CHECK(QLineF(back->atoms[i].pos - moved, doc.atoms[i].pos).length() < 0.1);
 
     Document r = *chem::fromSmiles("CC");
     edit::applyLabel(r, 1, "R", true);
@@ -686,6 +887,44 @@ TEST_CASE("CDXML export reads back: molecules, wedges, arrows and text (#29)") {
     CHECK(fromCdx->texts[0].text == "L-alanine");
     CHECK(chem::cdxToCdxml("not a CDX file").isEmpty());
     CHECK(chem::cdxmlToCdx("<not closed").isEmpty());
+}
+
+TEST_CASE("ChemDraw save and reopen keeps custom colours (#426)") {
+    Document d = *chem::fromSmiles("CCO");
+    const QColor red(255, 0, 0), blue(0, 0, 255), green(0, 128, 0), orange(255, 128, 0);
+    for (auto& a : d.atoms)
+        if (a.z == 8) a.color = red;
+    d.bonds[0].color = blue;  // C-C
+    d.texts.push_back({{0, 60}, "note"});
+    d.texts.back().color = green;
+    d.arrows.push_back({{60, 0}, {100, 0}});
+    d.arrows.back().color = orange;
+    d.arrows.push_back({{60, 20}, {100, 20}});  // left as the ink
+    for (const QByteArray& file : {chem::toCdxml(d), chem::toCdx(d)}) {
+        if (file.isEmpty()) continue;  // a build without binary CDX
+        auto back = chem::fromChemDraw(file);
+        REQUIRE(back);
+        int coloured = 0;
+        for (const auto& a : back->atoms) {
+            CHECK(a.color == (a.z == 8 ? red : QColor()));
+            coloured += a.color.isValid();
+        }
+        CHECK(coloured == 1);
+        int blueBonds = 0;
+        for (const auto& b : back->bonds) blueBonds += b.color == blue;
+        CHECK(blueBonds == 1);
+        REQUIRE(back->texts.size() == 1);
+        CHECK(back->texts[0].color == green);
+        REQUIRE(back->arrows.size() == 2);
+        CHECK(back->arrows[0].color == orange);
+        CHECK(!back->arrows[1].color.isValid());
+    }
+    // ChemDraw takes the table's first two entries as the page and the ink: white, then black, then the colours used.
+    CHECK(chem::toCdxml(d).simplified().replace("> <", "><").contains(R"(<colortable><color r="1.0000" g="1.0000" b="1.0000"/><color r="0.0000" g="0.0000" b="0.0000"/><color r="1.0000" g="0.0000" b="0.0000"/>)"));
+    // and colours a text run only when the run names a font from the font table.
+    CHECK(chem::toCdxml(d).contains(R"(<font id="3")"));
+    CHECK(chem::toCdxml(d).contains(R"(<s font="3")"));
+    CHECK(!chem::toCdxml(*chem::fromSmiles("CCO")).contains("colortable"));  // nothing coloured, nothing written
 }
 
 TEST_CASE("a real ChemDraw file survives CDXML → CDX → CDXML (#185)") {
@@ -823,12 +1062,13 @@ TEST_CASE("shapes and lines: saved, exported and read from CDXML (#107)") {
     auto cdx = chem::fromChemDraw(chem::toCdxml(doc));
     REQUIRE(cdx);
     REQUIRE(cdx->arrows.size() == 3);
+    auto box = [](const Arrow& a) { return QRectF(a.from, a.to).normalized(); };
+    const QPointF moved = box(cdx->arrows[0]).topLeft() - box(doc.arrows[0]).topLeft();  // onto the page (#443)
     for (size_t k = 0; k < 3; ++k) {
         INFO(k);
         CHECK(cdx->arrows[k].kind == doc.arrows[k].kind);
         CHECK(cdx->arrows[k].dashed == doc.arrows[k].dashed);
-        CHECK(QRectF(cdx->arrows[k].from, cdx->arrows[k].to).normalized() ==
-              QRectF(doc.arrows[k].from, doc.arrows[k].to).normalized());
+        CHECK(box(cdx->arrows[k]) == box(doc.arrows[k]).translated(moved));
     }
 }
 
@@ -895,6 +1135,42 @@ TEST_CASE("a CDXML file that starts with a byte order mark opens (#244)") {
     CHECK(chem::toSmiles(*doc) == "CC(=O)Oc1ccccc1C(=O)O");
 }
 
+TEST_CASE("a CDXML export sits inside the page, not at its top-left corner (#443)") {
+    const QRectF box = documentBounds(*chem::fromChemDraw(chem::toCdxml(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"))));
+    CHECK(box.center().x() == Catch::Approx(306).margin(1));  // across a US Letter page
+    CHECK(box.top() == Catch::Approx(72).margin(1));          // an inch down
+    Document wide = *chem::fromSmiles("CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC");
+    CHECK(documentBounds(*chem::fromChemDraw(chem::toCdxml(wide))).left() == Catch::Approx(72).margin(1));  // wider than the page
+}
+
+TEST_CASE("separate ions and molecules from SMILES don't overlap") {
+    // Each single-atom fragment's label, drawn alone, keeps clear of the others'.
+    for (const char* smiles : {"[Na+].[Cl-]", "O.O.O", "[Li+].[Al+3].[H-].[H-].[H-].[H-]"}) {
+        INFO(smiles);
+        const auto doc = chem::fromSmiles(smiles);
+        REQUIRE(doc);
+        std::vector<QRect> boxes;
+        for (const Atom& a : doc->atoms) {
+            Document one;
+            one.atoms = {a};
+            QImage img(1600, 400, QImage::Format_ARGB32);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            p.translate(100, 200);
+            p.scale(4, 4);
+            p.translate(-doc->atoms[0].pos);
+            paintDocument(p, one, {Qt::black, Qt::black, 0.6});
+            p.end();
+            QRect ink;
+            for (int y = 0; y < img.height(); ++y)
+                for (int x = 0; x < img.width(); ++x)
+                    if (qGray(img.pixel(x, y)) < 128) ink |= QRect(x, y, 1, 1);
+            for (const QRect& b : boxes) CHECK_FALSE(b.intersects(ink));
+            boxes.push_back(ink);
+        }
+    }
+}
+
 TEST_CASE("arrow heads: even on a tight curve, and a half head has no sliver (#221)") {
     // Ink either side of the head's axis, which runs from where the shaft is 4.8 pt (the head's
     // notch) back from the tip. `side` +1 or -1; samples the head, not the shaft behind it.
@@ -927,6 +1203,158 @@ TEST_CASE("arrow heads: even on a tight curve, and a half head has no sliver (#2
     // A fishhook's single barb is on one side; the other side stays clear of the head.
     const Arrow hook{{0, 0}, {40, 0}, ArrowKind::Fishhook, 12};
     CHECK(std::min(inkBeside(hook, 1), inkBeside(hook, -1)) == 0);
+}
+
+TEST_CASE("a charge sits clear of the bonds around its atom (#494)") {
+    // The box of the charge's own pixels (ink only with it), grown by 0.4 pt, holds no other ink.
+    for (const char* smiles : {"C[N+](C)(C)C", "C[N+](=O)[O-]", "C=[N+]=[N-]", "CC[N+](C)(C)CC", "CC(C)(C)[C+](C)C", "C[n+]1ccccc1"}) {
+        INFO(smiles);
+        auto doc = chem::fromSmiles(smiles);
+        REQUIRE(doc);
+        const auto at = std::find_if(doc->atoms.begin(), doc->atoms.end(), [](const Atom& a) { return a.charge > 0; });
+        REQUIRE(at != doc->atoms.end());
+        const double k = 20;
+        auto render = [&](const Document& d) {
+            QImage img(800, 800, QImage::Format_ARGB32);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            p.translate(400, 400);
+            p.scale(k, k);
+            p.translate(-at->pos);
+            paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+            return img;
+        };
+        const QImage with = render(*doc);
+        Document bare = *doc;
+        bare.atoms[at - doc->atoms.begin()].charge = 0;
+        const QImage without = render(bare);
+        QRect glyph;
+        for (int y = 0; y < 800; ++y)
+            for (int x = 0; x < 800; ++x)
+                if (qGray(with.pixel(x, y)) < 128 && qGray(without.pixel(x, y)) >= 128) glyph |= QRect(x, y, 1, 1);
+        REQUIRE(glyph.isValid());
+        int clash = 0;
+        const QRect near = glyph.adjusted(-8, -8, 8, 8) & with.rect();
+        for (int y = near.top(); y <= near.bottom(); ++y)
+            for (int x = near.left(); x <= near.right(); ++x) clash += qGray(without.pixel(x, y)) < 128;
+        CHECK(clash == 0);
+    }
+}
+
+TEST_CASE("a bond between two labels closer than their clearances isn't drawn over them (#496)") {
+    auto render = [](const Document& d) {
+        QImage img(400, 400, QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter p(&img);
+        p.translate(200, 200);
+        p.scale(20, 20);
+        paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+        return img;
+    };
+    Document d;
+    d.atoms = {{{-1.5, 0}, 10}, {{1.5, 0}, 10}};  // neon: no H either way
+    const QImage alone = render(d);
+    d.bonds.push_back({0, 1});
+    CHECK(render(d) == alone);
+}
+
+TEST_CASE("an aldehyde's or chain-end alkene's double bond sits toward its one neighbour; a ketone's is centred (#542)") {
+    // A zigzag chain from the origin; the last atom is `end`, doubly bonded to the one before it.
+    auto chain = [](int atoms, int end, std::vector<QPointF> extra = {}) {
+        Document d;
+        for (int i = 0; i < atoms; ++i) {
+            Atom a;
+            a.pos = QPointF(i * 12.47, i % 2 ? -7.2 : 0);
+            if (i == atoms - 1) a.z = end;
+            d.atoms.push_back(a);
+            if (i) d.bonds.push_back({i - 1, i, i == atoms - 1 ? 2 : 1});
+        }
+        for (QPointF p : extra) {  // more atoms on the double bond's inner end
+            Atom a;
+            a.pos = p;
+            d.atoms.push_back(a);
+            d.bonds.push_back({atoms - 2, int(d.atoms.size()) - 1});
+        }
+        return d;
+    };
+    auto towardNeighbour = [](const Document& d) {  // the second line on the side of the atom before
+        const Bond& b = d.bonds.back();
+        const QPointF n = perp(unit(d.atoms[b.b].pos - d.atoms[b.a].pos)) * doubleBondSide(d, b);
+        return QPointF::dotProduct(n, d.atoms[0].pos - d.atoms[b.a].pos) > 0;
+    };
+    CHECK(doubleBondSide(chain(3, 8), chain(3, 8).bonds.back()) != 0);  // CC=O
+    CHECK(towardNeighbour(chain(3, 8)));
+    CHECK(towardNeighbour(chain(3, 6)));  // CC=C
+    CHECK(towardNeighbour(chain(4, 8)));  // CCC=O
+    CHECK(doubleBondSide(chain(2, 8), chain(2, 8).bonds.back()) == 0);  // C=O
+    const Document ketone = chain(3, 8, {{12.47, -21.6}});  // CC(C)=O
+    CHECK(doubleBondSide(ketone, ketone.bonds[1]) == 0);
+}
+
+TEST_CASE("a wedge's wide end lies along the bonds beside it, not past them or into a double bond (#509)") {
+    const QPointF b(14.4, 0);
+    const double k = 20;
+    auto render = [&](const Document& d) {
+        QImage img(800, 800, QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter p(&img);
+        p.translate(400, 400);
+        p.scale(k, k);
+        p.translate(-b);
+        paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+        return img;
+    };
+    auto inked = [&](const QImage& img, QPointF at) { return qGray(img.pixel(((at - b) * k + QPointF(400, 400)).toPoint())) < 128; };
+    // The wedge ends at b, whose one other bond turns back 60° (a cyclopropane) or 120° (a chain or
+    // six-membered ring): no ink across that bond's line, either way along it, on both of the wedge's sides.
+    for (double turn : {60.0, 120.0}) {
+        INFO(turn);
+        const QPointF u(-std::cos(qDegreesToRadians(turn)), std::sin(qDegreesToRadians(turn)));
+        Document d;
+        d.atoms = {{QPointF(0, 0)}, {b}, {b + u * 14.4}};
+        d.bonds = {{0, 1, 1, BondStereo::Wedge}, {1, 2}};
+        const QImage img = render(d);
+        const QPointF out(u.y(), -u.x());  // across the b–c bond, away from the wedge's narrow end
+        REQUIRE(QPointF::dotProduct(out, QPointF(0, 0) - b) < 0);
+        int ink = 0;
+        for (double t = -4; t < 4; t += 0.1)
+            for (double s = 0.5; s < 1.5; s += 0.1) ink += inked(img, b + u * t + out * s);
+        CHECK(ink == 0);
+    }
+    // A carboxyl: the wedge meets the C=O's nearer line, and the space between its two lines stays clear.
+    const QPointF u(0.5, std::sqrt(3.0) / 2);
+    Document d;
+    d.atoms = {{QPointF(0, 0)}, {b}, {b + u * 14.4, 8}, {b + QPointF(u.x(), -u.y()) * 14.4, 8}};
+    d.bonds = {{0, 1, 1, BondStereo::Wedge}, {1, 2, 2}, {1, 3}};
+    const QImage img = render(d);
+    int ink = 0;
+    for (double t = 1; t < 4; t += 0.1) ink += inked(img, b + u * t);
+    CHECK(ink == 0);
+}
+
+TEST_CASE("a charge on an atom with one bond sits above it, not across from the bond") {
+    // Straight across from its only bond, a minus reads as another bond (−F–C).
+    auto render = [](const Document& d) {
+        QImage img(400, 400, QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter p(&img);
+        p.translate(200, 200);
+        p.scale(20, 20);
+        paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+        return img;
+    };
+    Document d;
+    d.atoms = {{{0, 0}, 9, -1}, {{kBondLength, 0}}};
+    d.bonds = {{0, 1}};
+    const QImage with = render(d);
+    d.atoms[0].charge = 0;
+    const QImage without = render(d);
+    QRect glyph;
+    for (int y = 0; y < 400; ++y)
+        for (int x = 0; x < 400; ++x)
+            if (qGray(with.pixel(x, y)) < 128 && qGray(without.pixel(x, y)) >= 128) glyph |= QRect(x, y, 1, 1);
+    REQUIRE(glyph.isValid());
+    CHECK(glyph.bottom() < 200);
 }
 
 TEST_CASE(".penz files from every release still open, and save back the same (#117)") {
@@ -1157,27 +1585,29 @@ TEST_CASE("MOL export writes Kekulé bonds, not query bond type 4 (#321)") {
         auto back = chem::fromMolBlock(mol);
         REQUIRE(back);
         CHECK(chem::toSmiles(*back) == "c1ccccc1");
+    }
 }
+
+// Bond (lower atom, higher atom, order) triples, sorted, to compare Kekulé forms.
+static std::vector<std::tuple<int, int, int>> bondOrders(const Document& d) {
+    std::vector<std::tuple<int, int, int>> out;
+    for (const auto& b : d.bonds) out.push_back({std::min(b.a, b.b), std::max(b.a, b.b), b.order});
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 TEST_CASE("Clean keeps bond colours and the drawn Kekulé structure (#322)") {
-}
-
-TEST_CASE("MOL and CDXML imports keep the drawn Kekulé form (#323)") {
-    auto orders = [](const Document& d) {
-        std::vector<std::tuple<int, int, int>> out;
-        for (const auto& b : d.bonds) out.push_back({std::min(b.a, b.b), std::max(b.a, b.b), b.order});
-        std::sort(out.begin(), out.end());
-        return out;
-    };
     for (bool flip : {false, true}) {  // either Kekulé form stays as drawn
         Document d = *chem::fromSmiles("c1ccccc1");
         for (auto& b : d.bonds) b.order = flip ? 3 - b.order : b.order, b.color = QColor("#ff0000");
         const Document c = chem::clean2D(d);
-        CHECK(orders(c) == orders(d));
+        CHECK(bondOrders(c) == bondOrders(d));
         for (const auto& b : c.bonds) CHECK(b.color == QColor("#ff0000"));
+    }
 }
 
+TEST_CASE("MOL and CDXML imports keep the drawn Kekulé form (#323)") {
+    auto orders = bondOrders;
     for (int form : {0, 1}) {  // both Kekulé forms of benzene
         Document d;
         for (int k = 0; k < 6; ++k)
@@ -1197,7 +1627,69 @@ TEST_CASE("MOL and CDXML imports keep the drawn Kekulé form (#323)") {
         auto fromMol = chem::fromMolBlock(mol + "M  END\n");
         REQUIRE(fromMol);
         CHECK(orders(*fromMol) == orders(d));
+    }
 }
+
+TEST_CASE("a racemic (&1) centre keeps its stereo group through .penz, MOL V3000, CDXML and CDX (#389)") {
+    auto doc = chem::fromSmiles("C[C@H](N)C(=O)O |&1:1|");  // alanine, racemic, read from CXSMILES
+    REQUIRE(doc);
+    auto tagged = [](const Document& d) {
+        std::vector<Atom> out;
+        for (const Atom& a : d.atoms)
+            if (a.stereoGroup != StereoGroup::None) out.push_back(a);
+        return out;
+    };
+    auto isAnd1 = [&](const std::optional<Document>& d) {
+        REQUIRE(d);
+        const auto t = tagged(*d);
+        REQUIRE(t.size() == 1);
+        CHECK(t[0].stereoGroup == StereoGroup::And);
+        CHECK(t[0].stereoGroupNumber == 1);
+        CHECK(stereoGroupTag(t[0]) == "&1");
+    };
+    isAnd1(doc);
+    isAnd1(Document::fromJson(doc->toJson()));
+    isAnd1(chem::clean2D(*doc));
+    const std::string mol = chem::toMolBlock(*doc, true);
+    CHECK(mol.find("MDLV30/STERAC1") != std::string::npos);
+    isAnd1(chem::fromMolBlock(mol));
+    CHECK(chem::toMolBlock(*doc).find("V3000") == std::string::npos);  // V2000 stays V2000, without the group
+    const QByteArray cdxml = chem::toCdxml(*doc);
+    CHECK(cdxml.contains(R"(EnhancedStereoType="And")"));
+    isAnd1(chem::fromChemDraw(cdxml));
+    isAnd1(chem::fromChemDraw(chem::toCdx(*doc)));  // binary CDX
+}
+
+TEST_CASE("SMILES keeps stereo groups as CXSMILES, and only when there are some (#402)") {
+    auto doc = chem::fromSmiles("C[C@H](O)[C@@H](C)N |&1:1,3|");
+    REQUIRE(doc);
+    const std::string smiles = chem::toSmiles(*doc);
+    INFO(smiles);
+    CHECK(smiles.find("|&1:") != std::string::npos);
+    auto back = chem::fromSmiles(smiles);
+    REQUIRE(back);
+    int and1 = 0;
+    for (const Atom& a : back->atoms) and1 += stereoGroupTag(a) == "&1";
+    CHECK(and1 == 2);
+    CHECK(chem::toSmiles(*chem::fromSmiles("C[C@H](O)[C@@H](C)N")) == "C[C@H](O)[C@@H](C)N");  // no groups: plain, as before
+    chem::Reaction r;
+    r.reactants.push_back(*doc);
+    r.products.push_back(*doc);
+    CHECK(chem::toReactionSmiles(r).find('|') == std::string::npos);  // no extension mid-reaction
+}
+
+TEST_CASE("a reaction with an invalid molecule gives no reaction SMILES (#427)") {
+    Document pentavalent;  // a carbon with five single bonds
+    const int c = pentavalent.addAtom({0, 0});
+    for (int i = 0; i < 5; ++i) edit::link(pentavalent, c, pentavalent.addAtom({kBondLength * (i + 1), 0}));
+    chem::Reaction r;
+    r.reactants.push_back(pentavalent);
+    r.reactants.push_back(*chem::fromSmiles("C"));
+    r.products.push_back(*chem::fromSmiles("O"));
+    CHECK(chem::toReactionSmiles(r).empty());  // not "C>>O"
+    CHECK(chem::toReactionSmiles(std::vector{r}).empty());
+    r.reactants.erase(r.reactants.begin());
+    CHECK(chem::toReactionSmiles(r) == "C>>O");
 }
 
 TEST_CASE("a typed charged label sets the element and charge (#324)") {
@@ -1260,11 +1752,12 @@ TEST_CASE("orbitals: kind, look and colour survive .penz and CDXML (#204)") {
     auto back = chem::fromChemDraw(chem::toCdxml(*doc));
     REQUIRE(back);
     REQUIRE(back->arrows.size() == 3);
+    const QPointF moved = back->atoms[0].pos - doc->atoms[0].pos;  // onto the page (#443)
     for (int i = 0; i < 3; ++i) {
         CHECK(back->arrows[i].kind == doc->arrows[i].kind);
         CHECK(back->arrows[i].look == doc->arrows[i].look);
         CHECK(back->arrows[i].behind == doc->arrows[i].behind);
-        CHECK(len(back->arrows[i].to - doc->arrows[i].to) < 0.05);
+        CHECK(len(back->arrows[i].to - moved - doc->arrows[i].to) < 0.05);
     }
 }
 
@@ -1338,4 +1831,198 @@ TEST_CASE("a lone abbreviation comes back from ChemDraw as a labelled atom (#384
         CHECK(back->atoms[0].label == d.atoms[0].label);
         CHECK(chem::properties(*back)->formula == chem::properties(d)->formula);
     }
+}
+
+TEST_CASE("HOSE codes match CDK's reference codes (#403)") {
+    auto codesOf = [](const char* smiles) {
+        std::vector<std::string> out;
+        for (const auto& c : chem::hoseCodes(*chem::fromSmiles(smiles), 4)) out.push_back(c.empty() ? "" : c.back());
+        return out;
+    };
+    // CDK's HOSECodeGeneratorTest, 4 spheres: a chain (Br drawn as Y), and indole's rings (& closes one).
+    CHECK(codesOf("CC=CBr") == std::vector<std::string>{"C-4;C(=C/Y/)", "C-3;=CC(Y,//)", "C-3;=CY(C,//)", "Br-1;C(=C/C/)"});
+    CHECK(codesOf("C1(C=CN2)=C2C=CC=C1") ==
+          std::vector<std::string>{"C-3;*C*C*C(*C*N,*C,*C/*C,*&,*&,*&/*&)", "C-3;*C*C(*C*C,*N/*C*&,*C,*&/*C,*&)",
+                                   "C-3;*C*N(*C,*C/*C*&,*C*&/*C,*C)", "N-3;*C*C(*C*C,*C/*C*&,*C,*&/*C,*&)",
+                                   "C-3;*C*C*N(*C*C,*C,*C/*C,*&,*&,*&/*&)", "C-3;*C*C(*C*N,*C/*C*C,*C,*&/*&,*&,*&)",
+                                   "C-3;*C*C(*C,*C/*C*N,*&/*C*&,*C)", "C-3;*C*C(*C,*C/*C*C,*&/*N*&,*C)",
+                                   "C-3;*C*C(*C*C,*C/*C*N,*C,*&/*&,*&,*&)"});
+    CHECK(codesOf("CCO")[0] == "C-4;C(O//)");
+    CHECK(chem::hoseCodes(*chem::fromSmiles("CCO"), 1)[0][0] == "C-4;C(//)");
+}
+
+TEST_CASE("HOSE codes are the same from a drawing and from its MOL block, H drawn or not (#403)") {
+    for (const char* smiles : {"c1ccccc1O", "C[N+](C)(C)CC(=O)[O-]", "CC(=O)Oc1ccccc1C(=O)O", "[H]OC([H])([H])C", "c1cc[nH]c1", "c1ccc2[nH]ccc2c1"}) {
+        auto doc = chem::fromSmiles(smiles);
+        REQUIRE(doc);
+        const auto drawn = chem::hoseCodes(*doc);
+        CHECK(drawn == chem::hoseCodes(chem::toMolBlock(*doc)));
+        const auto withH = chem::hoseCodes(chem::addHydrogens(*doc));
+        REQUIRE(withH.size() >= drawn.size());
+        for (size_t i = 0; i < drawn.size(); ++i)
+            if (doc->atoms[i].z != 1) CHECK(withH[i] == drawn[i]);
+    }
+    Document boc = *chem::fromSmiles("CN");  // an abbreviation: codes for the drawn atoms, of the expanded structure
+    boc.atoms[1].label = "NHBoc";
+    const auto codes = chem::hoseCodes(boc);
+    REQUIRE(codes.size() == 2);
+    CHECK(codes[0][0] == "C-4;N(//)");
+    CHECK(codes[0][1].starts_with("C-4;N(C/"));
+}
+
+TEST_CASE("predicted 13C and 1H shifts: benzene, ethanol (#403)") {
+    auto benzene = chem::predictShifts(*chem::fromSmiles("c1ccccc1"));
+    REQUIRE(benzene.size() == 6);
+    for (const auto& s : benzene) {
+        CHECK(s.carbon == Catch::Approx(128.5).margin(2));
+        CHECK(s.carbonSpheres == 4);
+        CHECK(s.proton == Catch::Approx(7.3).margin(0.3));
+    }
+    auto ethanol = chem::predictShifts(*chem::fromSmiles("CCO"));
+    REQUIRE(ethanol.size() == 3);
+    CHECK(ethanol[0].carbon == Catch::Approx(18).margin(3));  // CH3
+    CHECK(ethanol[1].carbon == Catch::Approx(58).margin(3));  // CH2
+    CHECK(ethanol[0].proton == Catch::Approx(1.2).margin(0.3));
+    CHECK(ethanol[1].proton == Catch::Approx(3.7).margin(0.3));
+    CHECK(ethanol[2].carbonSpheres == 0);  // O: 1H only
+    CHECK(ethanol[2].protonSpheres > 0);
+}
+
+TEST_CASE("predicted spectra: one stick per set of equivalent atoms, for the chosen molecule (#444)") {
+    const Document d = *chem::fromSmiles("CCO.Cc1ccccc1");  // ethanol, then toluene (atoms 3-9)
+    auto counts = [](const std::vector<chem::NmrStick>& sticks) {
+        std::vector<int> out;
+        for (const auto& k : sticks) out.push_back(k.count);
+        return out;
+    };
+    const std::vector<int> toluene{3, 4, 5, 6, 7, 8, 9};
+    const auto carbon = chem::nmrSticks(d, false, toluene);
+    CHECK(counts(carbon) == std::vector<int>{1, 2, 2, 1, 1});  // ipso, ortho, meta, para, CH3 (highest ppm first)
+    for (size_t k = 1; k < carbon.size(); ++k) CHECK(carbon[k - 1].ppm >= carbon[k].ppm);
+    for (const auto& k : carbon)
+        for (int a : k.atoms) CHECK(a >= 3);  // the drawing's own indices, so a stick can light its atoms
+    const auto proton = chem::nmrSticks(d, true, toluene);
+    int hydrogens = 0;
+    for (const auto& k : proton) hydrogens += k.count;
+    CHECK(hydrogens == 8);
+    CHECK(proton.back().count == 3);  // the CH3, furthest upfield
+    auto ethanol = counts(chem::nmrSticks(d, true, {0, 1, 2}));
+    std::sort(ethanol.begin(), ethanol.end());
+    CHECK(ethanol == std::vector<int>{1, 2, 3});  // OH, CH2, CH3
+    QStringList split;  // first order: CH3 by CH2 a triplet, CH2 by CH3 a quartet (OH exchanges), OH a singlet
+    for (const auto& k : chem::nmrSticks(d, true, {0, 1, 2})) split << QString::number(k.count) + k.multiplicity();
+    split.sort();
+    CHECK(split == QStringList{"1s", "2q", "3t"});
+    CHECK(chem::nmrSticks(d, true, {3}).at(0).multiplicity() == "s");  // toluene's CH3: no H next door
+    CHECK(chem::nmrSticks(*chem::fromSmiles("C1CCCCC1"), true).at(0).multiplicity() == "s");  // equivalent H don't split each other
+    const QString h = chem::nmrLine(d, true, {0, 1, 2});  // for the SI (#566)
+    CHECK(h.startsWith("1H NMR (predicted) δ "));
+    CHECK(h.contains(QRegularExpression(R"(\d\.\d\d \(q, 2H\), .*\d\.\d\d \(t, 3H\)\.$)")));
+    CHECK(QRegularExpression(R"(^13C NMR \(predicted\) δ (\d+\.\d, ){4}\d+\.\d\.$)").match(chem::nmrLine(d, false, {3, 4, 5, 6, 7, 8, 9})).hasMatch());
+    CHECK(chem::nmrLine(*chem::fromSmiles("[Na+].[Cl-]"), true).isEmpty());
+    CHECK(chem::nmrSticks(d, true).size() == proton.size() + 3);  // everything
+}
+
+TEST_CASE("predicted shifts follow the bonds, not where the atoms are drawn") {
+    auto doc = *chem::fromSmiles("CCO");
+    const auto before = chem::predictShifts(doc);
+    doc.atoms[1].pos += QPointF(30, -12);  // dragged
+    const auto moved = chem::predictShifts(doc);
+    REQUIRE(moved.size() == before.size());
+    for (size_t i = 0; i < moved.size(); ++i) {
+        CHECK(moved[i].carbon == before[i].carbon);
+        CHECK(moved[i].proton == before[i].proton);
+    }
+    doc.atoms[2].z = 7;  // O -> N: a different molecule, a different answer
+    CHECK(chem::predictShifts(doc)[1].carbon != before[1].carbon);
+}
+
+TEST_CASE("compound numbers keep scheme order, follow their molecules and keep series (#504)") {
+    const double L = kBondLength;
+    Document d;
+    auto add = [&](const char* smiles, QPointF at) {  // a molecule and its number, anchored to its first atom
+        const int first = int(d.atoms.size());
+        d.append(*chem::fromSmiles(smiles), at);
+        d.texts.push_back({at + QPointF(0, 2 * L), "", 1, {}, true, first});
+    };
+    add("CCO", {20 * L, 0});  // added out of order
+    add("c1ccccc1", {0, 0});
+    add("CC", {10 * L, 0});
+    add("CN", {0, 10 * L});  // the next row
+    auto numbers = [&] {
+        QStringList out;
+        for (const Text& t : d.texts) out << t.text;
+        return out;
+    };
+    edit::renumberCompounds(d);
+    CHECK(numbers() == QStringList{"3", "1", "2", "4"});
+    Document again = d;
+    edit::renumberCompounds(again);
+    CHECK(again == d);  // no change, so no phantom undo step
+    add("C", {5 * L, 0});  // a step inserted: the later numbers move up
+    edit::renumberCompounds(d);
+    CHECK(numbers() == QStringList{"4", "1", "3", "5", "2"});
+
+    SECTION("a tall molecule's number sits lower but is in its row") {
+        const int first = int(d.atoms.size());
+        d.append(*chem::fromSmiles("CCCCCCC"), {-10 * L, 0});
+        for (int i = first; i < int(d.atoms.size()); ++i) d.atoms[i].pos = {-10 * L, (i - first - 3) * L};  // upright, centred on the row
+        d.texts.push_back({{-10 * L, 5 * L}, "", 1, {}, true, first});
+        edit::renumberCompounds(d);
+        CHECK(numbers() == QStringList{"5", "2", "4", "6", "3", "1"});
+    }
+    SECTION("2a and 2b keep one number between them") {
+        d.texts[1].text = "7a", d.texts[4].text = "7b";
+        edit::renumberCompounds(d);
+        CHECK(numbers() == QStringList{"3", "1a", "2", "4", "1b"});
+    }
+    SECTION("a number follows its molecule, unless it was moved itself") {
+        Document moved = d;
+        for (int i : edit::moleculeOf(d, d.texts[0].anchor)) moved.atoms[i].pos += QPointF(-30 * L, L);
+        for (int i : edit::moleculeOf(d, d.texts[2].anchor)) moved.atoms[i].pos += QPointF(0, L);  // dragged with its number
+        moved.texts[2].pos += QPointF(0, L);
+        Document after = moved;
+        edit::followNumbers(d, after);
+        CHECK(after.texts[0].pos == d.texts[0].pos + QPointF(-30 * L, L));
+        CHECK(after.texts[2].pos == moved.texts[2].pos);
+        CHECK(after.texts[1].pos == d.texts[1].pos);
+        edit::renumberCompounds(after);
+        CHECK(after.texts[0].text == "1");  // now first in the scheme
+    }
+    SECTION("anchors are renumbered with the atoms, and saved") {
+        const int benzene = d.texts[1].anchor;
+        d.removeAtoms({0, 1, 2});  // ethanol: its number stays, free
+        CHECK(d.texts[0].anchor == -1);
+        CHECK(d.texts[1].anchor == benzene - 3);
+        Document cut = d;
+        cut.removeAtoms({d.texts[1].anchor});  // just its atom: it takes a neighbour of the same molecule
+        REQUIRE(cut.texts[1].anchor >= 0);
+        CHECK(edit::moleculeOf(cut, cut.texts[1].anchor).size() == 5);
+        Document two;
+        two.append(d, {});
+        two.append(d, {});
+        CHECK(two.texts[6].anchor == d.texts[1].anchor + int(d.atoms.size()));
+        const auto back = Document::fromJson(d.toJson());
+        REQUIRE(back);
+        CHECK(back->texts == d.texts);
+        CHECK(chem::toCdxml(d).contains(R"(face="1")"));  // bold in ChemDraw too
+    }
+}
+
+TEST_CASE("a spectrum's legend takes the emptier top corner and the sticks keep clear of it (#444)") {
+    const QRectF plot(0, 0, 400, 200);
+    const QSizeF size(100, 80);
+    auto clear = [&](const Legend& l, const std::vector<QPointF>& sticks) {
+        for (QPointF s : sticks)
+            if (s.x() > l.rect.left() && s.x() < l.rect.right()) CHECK(plot.bottom() - s.y() * l.scale * plot.height() >= l.rect.bottom() + 10 - 1e-9);
+    };
+    const std::vector<QPointF> right{{350, 1}, {380, 0.5}};  // tall sticks on the right: the legend goes left, nothing shrinks
+    Legend l = placeLegend(plot, size, right, 10);
+    CHECK(l.rect.left() == 0);
+    CHECK(l.scale == 1);
+    const std::vector<QPointF> both{{20, 1}, {350, 0.8}};  // under either corner: the one that shrinks them less
+    l = placeLegend(plot, size, both, 10);
+    CHECK(l.rect.right() == 400);
+    CHECK(l.scale == Catch::Approx((200 - 80 - 10) / (0.8 * 200)));
+    clear(l, both);
 }

@@ -11,6 +11,8 @@ namespace chem {
 std::optional<Document> fromSmiles(const std::string& smiles);
 std::optional<Document> fromMolBlock(const std::string& block);
 std::optional<Document> fromInchi(const std::string& inchi);
+// A peptide from its sequence: one-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser).
+std::optional<Document> fromSequence(const QString& sequence);
 // ChemDraw .cdxml (molecules, arrows, text) or binary .cdx (molecules only,
 // where RDKit was built with ChemDraw support).
 std::optional<Document> fromChemDraw(const QByteArray& data);
@@ -52,8 +54,8 @@ struct Reaction {
 };
 std::vector<Reaction> reactionsOf(const Document& doc);    // one per reaction arrow, in reading order
 std::optional<Reaction> reactionOf(const Document& doc);  // the first; nullopt without a reaction arrow
-std::string toReactionSmiles(const Reaction& r);           // reactants>agents>products
-std::string toReactionSmiles(const std::vector<Reaction>& steps);  // one line per step
+std::string toReactionSmiles(const Reaction& r);           // reactants>agents>products; empty if any molecule is invalid
+std::string toReactionSmiles(const std::vector<Reaction>& steps);  // one line per step; empty if any molecule is invalid
 std::string toRxn(const Reaction& r);                      // MDL Rxnfile (V2000)
 std::string toRdf(const std::vector<Reaction>& steps);     // MDL RD file: one Rxnfile per step
 Document layoutReaction(const std::vector<Reaction>& steps);  // the steps left to right, as one scheme
@@ -79,6 +81,23 @@ struct Profile {
     bool veber = true;           // rotatable bonds <= 10 and TPSA <= 140
 };
 std::optional<Profile> profile(const Document& doc);  // nullopt if empty or invalid
+// The mass spectrum's isotope pattern for an ion of everything in `doc` (all fragments, like the
+// formula), from natural abundances; drawn isotopes (13C) count as that isotope only.
+enum class Ion { M, MplusH, MplusNa, MminusH };  // M: M+• of a neutral molecule, else the drawn ion
+struct Peak {
+    double mz, intensity;  // intensity: the tallest is 100
+};
+std::vector<Peak> isotopePattern(const Document& doc, Ion ion);  // by m/z; empty if it can't be worked out
+// The ion's calculated mass as a supporting-information line, e.g. "HRMS (ESI) m/z: [M+H]+ calcd
+// for C9H9O4 181.0495"; [M] of a neutral molecule is EI's M+. Empty if it can't be worked out.
+QString hrmsLine(const Document& doc, Ion ion);
+// The textbook EI ions a chemist looks for, from the groups present (M − 15 for a methyl, m/z 91 for a
+// benzyl, McLafferty…), M⁺• first: candidates to check, not a predicted spectrum.
+struct EiIon {
+    double mz;
+    QString formula, from;  // "C7H7+", "benzyl (tropylium)"
+};
+std::vector<EiIon> eiIons(const Document& doc);
 std::string toInchi(const Document& doc);                   // "" if invalid
 // One CSV row per record: identifiers and descriptors (docs/cli.md defines them). A record that
 // isn't valid chemistry keeps its row, with the reason under "error". columns: a subset, in order.
@@ -126,6 +145,36 @@ bool attach(Document& doc, int atom, const std::string& smilesOrAbbreviation);
 Document expanded(const Document& doc);  // abbreviations drawn out in full
 // Fischer crossings and Haworth rings redrawn with the wedges they mean (chemistry uses this).
 Document projectionsAsWedges(const Document& doc);
+
+// NMR (#403). HOSE codes (Bremser, written as CDK writes them), H-suppressed: codes[atom][s - 1] is
+// the atom's code to s spheres, s = 1…maxSpheres; hydrogens get none. Empty if the MOL block can't be read.
+std::vector<std::vector<std::string>> hoseCodes(const std::string& molBlock, int maxSpheres = 4);
+std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSpheres = 4);
+// Predicted 13C (carbons) and 1H (H-bearing atoms) shifts in ppm, looked up by HOSE code in a table built
+// from nmrshiftdb2 (resources/nmr). spheres: how many spheres matched (4 best, 1 worst); 0 = no prediction.
+struct Shift {
+    int atom = -1;
+    double carbon = 0, proton = 0;
+    int carbonSpheres = 0, protonSpheres = 0;
+    int hydrogens = 0;  // on the atom, drawn or implicit
+    int symmetry = -1;  // equal for atoms the molecule can't tell apart
+    int coupled = 0;    // H on neighbouring carbons outside the atom's own set: n in the n + 1 rule (#552)
+};
+std::vector<Shift> predictShifts(const Document& doc);  // one per atom with a prediction, in atom order
+// A predicted 13C or 1H spectrum as sticks, one per set of equivalent atoms, highest ppm first; count is the
+// carbons or hydrogens under it. `only`: just these atoms (predicted in the whole drawing, as bonded there).
+struct NmrStick {
+    double ppm = 0;
+    int count = 0;
+    std::vector<int> atoms;
+    bool weak = false;  // fewer than three spheres matched
+    int coupled = 0;    // 1H: first order, the stick is a multiplet of coupled + 1 lines
+    QString multiplicity() const { return coupled < 4 ? QString("sdtq"[coupled]) : "m"; }
+};
+std::vector<NmrStick> nmrSticks(const Document& doc, bool proton, const std::vector<int>& only = {});
+// The sticks as a supporting-information line to fill in, e.g. "1H NMR (predicted) δ 3.69 (q, 2H), 1.22 (t, 3H)."
+// Empty without a prediction.
+QString nmrLine(const Document& doc, bool proton, const std::vector<int>& only = {});
 
 std::string symbol(int z);
 std::string elementName(int z);  // "Carbon"

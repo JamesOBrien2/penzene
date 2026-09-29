@@ -1,11 +1,13 @@
 #pragma once
 #include "Chem.h"
+#include "Edit.h"
 #include "Render.h"
 
 #include <QFont>
 #include <QGraphicsView>
 #include <QPainterPath>
 #include <QPicture>
+#include <QPolygonF>
 #include <QSet>
 #include <optional>
 #include <vector>
@@ -17,7 +19,7 @@ class QUndoStack;
 class Canvas : public QGraphicsView {
     Q_OBJECT
 public:
-    enum class Tool { Select, Atom, Bond, Wedge, Hash, Chain, Ring, ChargePlus, ChargeMinus, Erase, Arrow, Text, Fill, Colour };
+    enum class Tool { Select, Rotate3D, Atom, Bond, Wedge, Hash, Chain, Ring, ChargePlus, ChargeMinus, Erase, Arrow, Text, Fill, Colour };
 
     explicit Canvas(QUndoStack* undo, QWidget* parent = nullptr);
 
@@ -31,6 +33,9 @@ public:
     const QSet<int>& selectedTexts() const { return selectedTexts_; }
     void setSelection(QSet<int> atoms, QSet<int> arrows = {}, QSet<int> texts = {});
     Document selectedSubset() const;  // selection (or everything) as a standalone doc
+    // Lit without selecting them, e.g. the atoms behind an NMR stick; whoever sets it clears it on documentChanged.
+    void setHighlight(QSet<int> atoms);
+    const QSet<int>& highlight() const { return highlight_; }
     void deleteSelection();
     void setUndoStack(QUndoStack* undo) { undo_ = undo; }  // each page has its own history
     void insert(Document fragment, const QString& text);  // centred in view, selected
@@ -53,6 +58,7 @@ public:
     enum class Align { Left, HCentre, Right, Top, VCentre, Bottom };
     void alignSelection(Align edge);
     void distributeSelection(bool horizontal);
+    void centerOnPage();  // the selection (or everything) moved to the middle of the page, spacing kept
     // The right-click menu for whatever is at `scenePos` (public so tests can inspect it).
     QMenu* contextMenuAt(QPointF scenePos);
     void moveHotspot(QPointF dir, bool jump);
@@ -62,6 +68,8 @@ public:
     void editText(int text, QPointF pos = {});  // text < 0: new text at pos
     int hotspotAtom() const { return hoverAtom_; }
     int hotspotBond() const { return hoverBond_; }
+    void setHotspot(int atom, int bond = -1);
+    quint64 revision() const { return revision_; }  // counts document changes, for accessibility
     QPointF viewCenter() const;
     void zoomBy(double factor);
     void fitToDocument();
@@ -83,10 +91,19 @@ public:
     void setColour(QColor c) { colour_ = c; }
     QColor colour() const { return colour_; }
     void colourSelection();  // the current colour on the selected atoms, bonds, arrows and text
+    void setArrowHead(double size);  // on the selected arrows, relative to the usual
+    // The lone selected curved arrow bowed more (factor > 1) or less; a negative factor flips its side.
+    void bendArrow(double factor);
+    // A straight arrow, or new text, just right of the selection, or at the hotspot; nothing without either.
+    std::optional<QPointF> nextPlace() const;
+    void addArrowAfter();
+    void addTextAfter();
+    void numberCompounds();  // a bold number under each selected molecule (or every one) that has none (#504)
 
 signals:
     void documentChanged();
     void selectionChanged();
+    void hotspotAtomChanged(int atom);  // under the pointer or the keys; -1 for none
     void toolKey(const QString& key);  // x bond, X chain, j benzene, t text, e arrow, space select
 
 protected:
@@ -101,6 +118,7 @@ protected:
     void contextMenuEvent(QContextMenuEvent* e) override;
     bool event(QEvent* e) override;          // keys: then announce the hotspot
     bool viewportEvent(QEvent* e) override;  // the mouse: likewise
+    void showEvent(QShowEvent* e) override;
 
 private:
     int atomAt(QPointF p) const;
@@ -108,6 +126,7 @@ private:
     int arrowAt(QPointF p) const;
     int textAt(QPointF p) const;
     Arrow draggedArrow() const;
+    Arrow curvedArrow(QPointF from, QPointF to, ArrowKind kind) const;
     int draggedRingSize() const;
     void addDraggedRing(Document& doc) const;
     void refresh();
@@ -116,6 +135,7 @@ private:
     std::vector<QPointF> dragPath() const;
 
     Document doc_;
+    bool fitOnShow_ = false;
     QPicture picture_;
     Theme theme_;
     bool grid_ = false, rulers_ = false;
@@ -133,18 +153,30 @@ private:
 
     QSet<int> selectedAtoms_, selectedArrows_, selectedTexts_;
     int hoverAtom_ = -1, hoverBond_ = -1;
+    QSet<int> highlight_;
+    quint64 revision_ = 0;
+    int announcedAtom_ = -1;
+    bool keyHotspot_ = false;  // G or > is picking: the arrow keys move the hotspot, not the selection
+    edit::Hotspot arrowMark_;      // where > started a curved arrow
+    Document shown_;  // as last drawn: the revision counts real changes
     void announceHotspot();
 
     // Drag state
-    enum class Drag { None, Bond, Chain, Arrow, Ring, Move, Rotate, Rubber, Pan, Scale, Rotate3D } drag_ = Drag::None;
+    enum class Drag { None, Bond, Chain, Arrow, Ring, Move, Rotate, Rubber, Pan, Scale, Rotate3D, Reshape } drag_ = Drag::None;
     std::vector<int> moleculesOfSelection() const;  // whole molecules; all atoms if none selected
     std::optional<chem::Pose3D> pose_;  // during a 3D rotation drag
     // Scale handles around the selection: corners scale, edges stretch along one axis.
     QRectF selectionBox() const;  // empty unless something with extent is selected
     int handleAt(QPointF p) const;  // 0..7 clockwise from the top-left corner, or -1
     int scaleHandle_ = -1;
+    // A lone selected arrow is reshaped instead: handles on its ends and at the top of its curve.
+    int reshapedArrow() const;  // its index, or -1
+    int reshapeHandleAt(QPointF p) const;  // 0 from, 1 to, 2 the curve, or -1
+    int reshaping_ = -1, reshape_ = -1;  // during the drag: the arrow, and its handle
     QRectF scaleBox_;
     QPointF pressPos_, curPos_;
+    QPointF pressRaw_;  // where the mouse went down, before an orbital snaps pressPos_ to its atom
+    QPolygonF lasso_;   // an Alt-drag selection's loop; empty for the rectangle
     bool shift_ = false;  // held during the drag: free bond angle, or move along one axis
     int pressAtom_ = -1;
     Document beforeDrag_;

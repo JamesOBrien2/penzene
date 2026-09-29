@@ -204,6 +204,30 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Stereo Group</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Stereo group</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Absolute</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>And %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Or %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>None</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Clean</source>
         <translation type="unfinished"></translation>
     </message>
@@ -603,6 +627,14 @@
     </message>
     <message>
         <source>An SD file holds molecules, and this page has none.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Mass Spec</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Isotope pattern</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1580,6 +1612,22 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Predicted N&amp;MR Shifts</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>13C and 1H shifts beside each atom, looked up in nmrshiftdb2 by HOSE code</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Show predicted NMR shifts</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hide predicted NMR shifts</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&amp;Aromatic Circles</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1617,6 +1665,10 @@
     </message>
     <message>
         <source>Ctrl+I</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Mass Spec Panel</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1803,6 +1855,18 @@ moves off, so you can keep typing.&lt;/p&gt;
     </message>
     <message>
         <source>Continue</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Predicted shifts in ppm: 13C (1H); ~ marks a weaker match.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Contains information from nmrshiftdb2 (www.nmrshiftdb.org), which is made available here</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>under the nmrshiftdb2 Database License (%1).</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

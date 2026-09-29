@@ -20,6 +20,7 @@ as a grid, as Open does. The paths written are printed one per line.
 | `--format svg\|png\|pdf` | with `--out` (default svg) |
 | `--drawing-style NAME` | `ACS 1996`, `JDP` or `RSC` |
 | `--clean` | lay each structure out afresh |
+| `--peptide` | read inputs that aren't files as peptide sequences: `GFLS` (lower case for D) or `Gly-Phe-Leu-Ser` (`H-`…`-OH` ends and `D-` residues allowed; also for `--descriptors`) |
 | `--version`, `--help` | |
 
 ## Descriptor tables
@@ -54,6 +55,6 @@ Values come from RDKit, as in the Properties panel:
 | `aromatic_rings` | aromatic rings in the smallest set of smallest rings |
 | `lipinski_violations` | how many of MW > 500, logP > 5, HBD > 5, HBA > 10 |
 | `veber` | `true` if rotatable bonds ≤ 10 and TPSA ≤ 140 |
-| `error` | empty, `unreadable` or `not valid chemistry` |
+| `error` | empty, `unreadable`, `not valid chemistry`, or `reaction` for a reaction SMILES line (render it instead) |
 
 On macOS the program is `Penzene.app/Contents/MacOS/penzene`.

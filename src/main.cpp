@@ -1,6 +1,9 @@
 #include "Canvas.h"
 #include "Chem.h"
 #include "MainWindow.h"
+#ifdef Q_OS_WIN
+#include "OleServer.h"
+#endif
 
 #include <QApplication>
 #include <QCommandLineParser>
@@ -10,6 +13,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QSettings>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -18,11 +22,17 @@ namespace {
 
 using chem::Record;
 
-// One input: a SMILES string, a multi-record file (SDF, .smi, .inchi) or any
-// single file Penzene opens.
-std::vector<Record> records(const QString& in) {
+// A mistyped path (it names a structure file that isn't there), not a SMILES string.
+bool missingFile(const QString& in) {
+    static const QRegularExpression file("\\.(smi|sdf|inchi|mol|penz|rxn|rdf|cdxml|cdx)$", QRegularExpression::CaseInsensitiveOption);
+    return !QFileInfo::exists(in) && file.match(in).hasMatch();
+}
+
+// One input: a SMILES string (a peptide sequence with --peptide), a multi-record file (SDF, .smi,
+// .inchi) or any single file Penzene opens.
+std::vector<Record> records(const QString& in, bool peptide) {
     const QFileInfo info(in);
-    if (!info.exists()) return {{"structure", chem::fromSmiles(in.toStdString())}};
+    if (!info.exists()) return {{"structure", peptide ? chem::fromSequence(in) : chem::fromSmiles(in.toStdString())}};
     const QString ext = info.suffix().toLower();
     if (ext == "smi" || ext == "sdf" || ext == "inchi") return chem::readRecords(in);
     return {{info.completeBaseName(), chem::readFile(in)}};
@@ -37,6 +47,7 @@ int render(const QStringList& args) {
     // Not --style: QApplication claims that for widget styles.
     p.addOption({"drawing-style", "ACS 1996 (default), JDP or RSC.", "name"});
     p.addOption({"clean", "Lay out each structure afresh with RDKit."});
+    p.addOption({"peptide", "Read inputs that aren't files as peptide sequences (GFLS or Gly-Phe-Leu-Ser)."});
     p.addPositionalArgument("inputs", "SMILES, .smi, .sdf, .inchi, .mol, .penz or .cdxml");
     if (!p.parse(args)) {
         std::fprintf(stderr, "penzene: %s\n", qPrintable(p.errorText()));
@@ -47,14 +58,34 @@ int render(const QStringList& args) {
     if (!p.isSet("out") && inputs.size() == 2) single = inputs.takeLast();
     if (inputs.isEmpty() || (!p.isSet("out") && single.isEmpty())) {
         std::fprintf(stderr, "usage: penzene --render IN... (OUT.svg|png|pdf | --out DIR) "
-                             "[--format svg|png|pdf] [--drawing-style NAME] [--clean]\n");
+                             "[--format svg|png|pdf] [--drawing-style NAME] [--clean] [--peptide]\n");
+        return 2;
+    }
+    if (p.isSet("drawing-style")) {
+        const auto& styles = drawingStyles();
+        if (std::none_of(styles.begin(), styles.end(), [&](const DrawingStyle& d) { return d.name == p.value("drawing-style"); })) {
+            QStringList names;
+            for (const auto& d : styles) names << d.name;
+            std::fprintf(stderr, "penzene: no drawing style \"%s\"; choose from %s\n", qPrintable(p.value("drawing-style")),
+                         qPrintable(names.join(", ")));
+            return 2;
+        }
+    }
+    const QString format = p.value("format").toLower();
+    if (p.isSet("out") && !QSet<QString>{"svg", "png", "pdf"}.contains(format)) {
+        std::fprintf(stderr, "penzene: no format \"%s\"; choose svg, png or pdf\n", qPrintable(p.value("format")));
         return 2;
     }
     if (p.isSet("out")) QDir().mkpath(p.value("out"));
     int failed = 0;
     QSet<QString> used;
     for (const QString& in : inputs) {
-        std::vector<Record> list = records(in);
+        if (missingFile(in)) {
+            std::fprintf(stderr, "penzene: no such file %s\n", qPrintable(in));
+            ++failed;
+            continue;
+        }
+        std::vector<Record> list = records(in, p.isSet("peptide"));
         if (!single.isEmpty() && QFileInfo::exists(in)) {  // one output file: every record in a grid, as Open lays it out (#320)
             for (const auto& r : list)
                 if (!r.doc) std::fprintf(stderr, "penzene: could not read %s\n", qPrintable(r.name)), ++failed;  // #363
@@ -65,14 +96,17 @@ int render(const QStringList& args) {
             if (path.isEmpty()) {
                 const QString safe = QString(name).replace(QRegularExpression("[^A-Za-z0-9._-]+"), "_");
                 QString stem = safe;
-                for (int k = 2; used.contains(stem); ++k) stem = safe + QString("-%1").arg(k);
-                used.insert(stem);
-                path = QDir(p.value("out")).filePath(stem + "." + p.value("format"));
+                for (int k = 2; used.contains(stem.toLower()); ++k) stem = safe + QString("-%1").arg(k);
+                used.insert(stem.toLower());  // Sample and SAMPLE are one file on macOS and Windows (#493)
+                path = QDir(p.value("out")).filePath(stem + "." + format);
             }
             if (doc && p.isSet("clean")) doc = chem::clean2D(*doc);
             if (doc && p.isSet("drawing-style")) doc->style = drawingStyle(p.value("drawing-style")).name;
             if (!doc || !exportDocument(*doc, path)) {
-                std::fprintf(stderr, "penzene: could not render %s\n", qPrintable(name));
+                if (doc)  // readable: the output is what failed (a missing folder, an extension that isn't svg, png or pdf)
+                    std::fprintf(stderr, "penzene: could not write %s\n", qPrintable(path));
+                else
+                    std::fprintf(stderr, "penzene: could not read %s\n", qPrintable(name));
                 ++failed;
             } else {
                 std::printf("%s\n", qPrintable(path));  // one line per file, for scripts
@@ -88,9 +122,10 @@ int descriptors(const QStringList& args) {
     p.addOption({"descriptors", "Write descriptors as CSV, one row per structure."});
     p.addOption({{"o", "out"}, "CSV file to write (default: standard output).", "file"});
     p.addOption({"columns", "Columns to write, comma-separated, in order (default: all).", "list"});
+    p.addOption({"peptide", "Read inputs that aren't files as peptide sequences (GFLS or Gly-Phe-Leu-Ser)."});
     p.addPositionalArgument("inputs", "SMILES, .smi, .sdf, .inchi, .mol, .penz or .cdxml");
     if (!p.parse(args) || p.positionalArguments().isEmpty()) {
-        std::fprintf(stderr, "usage: penzene --descriptors IN... [--columns a,b,...] [--out FILE.csv]\n");
+        std::fprintf(stderr, "usage: penzene --descriptors IN... [--columns a,b,...] [--out FILE.csv] [--peptide]\n");
         return 2;
     }
     const QStringList columns = p.value("columns").split(',', Qt::SkipEmptyParts);
@@ -101,15 +136,22 @@ int descriptors(const QStringList& args) {
             return 2;
         }
     std::vector<Record> all;
-    for (const QString& in : p.positionalArguments())
-        for (auto& r : records(in)) all.push_back(std::move(r));
+    int missing = 0;
+    for (const QString& in : p.positionalArguments()) {
+        if (missingFile(in)) {
+            std::fprintf(stderr, "penzene: no such file %s\n", qPrintable(in));
+            ++missing;
+            continue;
+        }
+        for (auto& r : records(in, p.isSet("peptide"))) all.push_back(std::move(r));
+    }
     const std::string csv = chem::descriptorsCsv(all, columns);
-    if (!p.isSet("out")) return std::fwrite(csv.data(), 1, csv.size(), stdout) == csv.size() ? 0 : 1;
+    if (!p.isSet("out")) return std::fwrite(csv.data(), 1, csv.size(), stdout) == csv.size() && !missing ? 0 : 1;
     if (!writeWhole(p.value("out"), QByteArray::fromStdString(csv))) {
         std::fprintf(stderr, "penzene: could not write %s\n", qPrintable(p.value("out")));
         return 1;
     }
-    return 0;
+    return missing ? 1 : 0;
 }
 
 }  // namespace
@@ -122,8 +164,8 @@ int main(int argc, char** argv) {
         } else if (!std::strcmp(argv[i], "--help") || !std::strcmp(argv[i], "-h")) {
             std::printf("usage: penzene [FILE]\n"
                         "       penzene --render IN... (OUT.svg|png|pdf | --out DIR) "
-                        "[--format svg|png|pdf] [--drawing-style NAME] [--clean]\n"
-                        "       penzene --descriptors IN... [--columns a,b,...] [--out FILE.csv]\n"
+                        "[--format svg|png|pdf] [--drawing-style NAME] [--clean] [--peptide]\n"
+                        "       penzene --descriptors IN... [--columns a,b,...] [--out FILE.csv] [--peptide]\n"
                         "       penzene --version\n");
             return 0;
         }
@@ -136,7 +178,16 @@ int main(int argc, char** argv) {
     QApplication::setApplicationName("Penzene");
     QApplication::setOrganizationName("Penzene");
     QApplication::setWindowIcon(QIcon(":/logo.svg"));
+    QApplication::setStyle(themedStyle());
     MainWindow::installTranslations(QSettings().value("language").toString());  // Preferences → Language
+#ifdef Q_OS_WIN
+    // Started by OLE to edit a drawing embedded in Word or PowerPoint (#229): shown when asked.
+    if (const QString arg = app.arguments().value(1);
+        !arg.compare("-Embedding", Qt::CaseInsensitive) || !arg.compare("/Embedding", Qt::CaseInsensitive)) {
+        MainWindow w;
+        return ole::serve(w);
+    }
+#endif
     MainWindow w;
     if (argc == 2) w.openFile(QString::fromLocal8Bit(argv[1]));
     w.show();

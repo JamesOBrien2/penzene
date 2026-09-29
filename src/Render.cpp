@@ -18,7 +18,9 @@
 #include <algorithm>
 #include <limits>
 #include <numbers>
+#include <optional>
 #include <tuple>
+#include <utility>
 #include <numeric>
 
 // Presets. Values come from the ChemDraw stationery (.cds) of the same name;
@@ -141,6 +143,63 @@ static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const D
 // below/above when bonds leave neither side free (a middle CH2).
 enum class HSide { Right, Left, Below, Above };
 
+// Which way an atom's charge sits from it (y grows down): none for the usual upper right (after
+// an H on the right), unless a bond or an H above comes within 50° of it (N=O of a nitro, R4N+,
+// =N+=), then the middle of the widest gap that isn't inside a ring, ties to the upper right (#494).
+static std::optional<QPointF> chargeDirection(const Document& doc, int i, int hydrogens, HSide side) {
+    constexpr double upRight = -std::numbers::pi / 4;
+    if (hydrogens && side == HSide::Right) return std::nullopt;
+    std::vector<std::pair<double, int>> taken;  // (angle, neighbour or -1)
+    for (const Bond& b : doc.bonds)
+        if (b.a == i || b.b == i) {
+            const int nb = b.a == i ? b.b : b.a;
+            const QPointF d = doc.atoms[nb].pos - doc.atoms[i].pos;
+            taken.push_back({std::atan2(d.y(), d.x()), nb});
+        }
+    if (hydrogens) taken.push_back({side == HSide::Left ? std::numbers::pi : side == HSide::Below ? std::numbers::pi / 2 : -std::numbers::pi / 2, -1});
+    if (hydrogens > 1 && (side == HSide::Above || side == HSide::Below))  // the H's count, down or up to its right
+        taken.push_back({side == HSide::Above ? -std::numbers::pi / 3 : std::numbers::pi / 3, -1});
+    const auto away = [](double x, double y) { return std::abs(std::remainder(x - y, 2 * std::numbers::pi)); };
+    if (std::all_of(taken.begin(), taken.end(), [&](auto t) { return away(t.first, upRight) > 50 * std::numbers::pi / 180; }))
+        return std::nullopt;
+    if (!massNumber(doc.atoms[i]).isEmpty()) taken.push_back({-3 * std::numbers::pi / 4, -1});
+    // Whether neighbours u and v close a ring of up to 8 through atom i: the gap between them is its inside.
+    const auto ring = [&](int u, int v) {
+        std::vector<int> seen{i, u}, front{u};
+        for (int step = 0; step < 6 && !front.empty(); ++step) {
+            std::vector<int> next;
+            for (int x : front)
+                for (const Bond& b : doc.bonds) {
+                    const int y = b.a == x ? b.b : b.b == x ? b.a : -1;
+                    if (y == v) return true;
+                    if (y >= 0 && std::find(seen.begin(), seen.end(), y) == seen.end()) seen.push_back(y), next.push_back(y);
+                }
+            front = std::move(next);
+        }
+        return false;
+    };
+    std::sort(taken.begin(), taken.end());
+    double best = upRight, score = -1e9;
+    for (size_t k = 0; k < taken.size(); ++k) {
+        const auto [from, u] = taken[k];
+        const auto [to, v] = taken[(k + 1) % taken.size()];
+        const double width = (k + 1 < taken.size() ? to : to + 2 * std::numbers::pi) - from;
+        // As near the upper right as the gap allows, 60° clear of its edges: opposite a lone bond it reads as a bond (−O–N⁺).
+        const double clear = std::min(width / 2, std::numbers::pi / 3);
+        const double at = std::clamp(from + std::fmod(upRight - from + 4 * std::numbers::pi, 2 * std::numbers::pi), from + clear, from + width - clear);
+        const double sc = width - 0.25 * away(at, upRight) - (u >= 0 && v >= 0 && width < std::numbers::pi && ring(u, v) ? 10 : 0);
+        if (sc > score) best = at, score = sc;
+    }
+    return QPointF(std::cos(best), std::sin(best));
+}
+
+// Where a charge `c` in font `sub` is drawn from, its glyph centred just past `clear` along `dir`.
+static QPointF chargeAt(QPointF pos, QPointF dir, double clear, const QString& c, const QFont& sub) {
+    const QFontMetricsF sm(sub);
+    const QRectF glyph(-sm.horizontalAdvance(c) / 2, -sm.capHeight() / 2, sm.horizontalAdvance(c), sm.capHeight());
+    return pos + dir * (clear + exitAlong(glyph, dir) + 0.8) + QPointF(glyph.left(), -glyph.top());
+}
+
 static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HSide side, const DrawingStyle& st) {
     const bool hLeft = side == HSide::Left;
     const auto& a = doc.atoms[i];
@@ -176,10 +235,13 @@ static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HS
     if (a.charge) {
         QString c = QString(a.charge > 0 ? "+" : "−");
         if (std::abs(a.charge) > 1) c.prepend(QString::number(std::abs(a.charge)));
-        drawText(p, c, {right, base - fm.capHeight() * 0.7}, sub);
+        if (const auto d = chargeDirection(doc, i, hydrogens, side))
+            drawText(p, c, chargeAt(a.pos, *d, exitAlong(QRectF(-w / 2, -fm.capHeight() / 2, w, fm.capHeight()), *d), c, sub), sub);
+        else drawText(p, c, {right, base - fm.capHeight() * 0.7}, sub);  // after any H
     }
 }
 
+constexpr double kWedgeReach = 1.3;  // how far a wedge's wide corner may stretch to meet a neighbouring bond
 static void drawBond(QPainter& p, const Document& doc, const Bond& b, const DrawingStyle& st, const std::vector<int>& degree,
                      const std::vector<bool>& labeled, const BondsAt& at, const std::vector<QPointF>& gaps = {}) {
     QPointF pa = doc.atoms[b.a].pos, pb = doc.atoms[b.b].pos;
@@ -193,11 +255,46 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     };
     QPointF a = labeled[b.a] ? pa + d * trim(b.a, d) : pa;
     QPointF e = labeled[b.b] ? pb - d * trim(b.b, -d) : pb;
+    if (QPointF::dotProduct(e - a, d) <= 0) return;  // labels so close that the trimmed ends cross (#496)
 
+    // A wedge's wide end at a bare atom lies along the bonds beside it rather than jutting past them.
+    // Each side runs to the drawn line of the bond nearest it on that side (a double bond's nearer
+    // line, so it doesn't overlap it); a side with no bond of its own follows the other side's bond, inward only.
+    QPointF corner[2] = {e + n * st.wedgeWidth / 2, e - n * st.wedgeWidth / 2};
+    if ((b.stereo == BondStereo::Wedge || b.stereo == BondStereo::Hash) && !labeled[b.b]) {
+        std::optional<QPointF> dir[2];  // each side's bond direction,
+        QPointF on[2];                  // and a point on its nearer line
+        for (int s : {0, 1}) {
+            double back = -2;
+            for (int k : at[b.b]) {
+                const Bond& o = doc.bonds[k];
+                const int nb = o.a == b.b ? o.b : o.a;
+                const QPointF v = unit(doc.atoms[nb].pos - pb);
+                if (nb == b.a || QPointF::dotProduct(v, n) * (s ? -1 : 1) <= 1e-6 || QPointF::dotProduct(v, -d) <= back) continue;
+                back = QPointF::dotProduct(v, -d);
+                QPointF q = perp(v);
+                if (QPointF::dotProduct(q, corner[s] - pb) < 0) q = -q;  // toward this corner
+                double off = o.order == 3 ? gap : 0;
+                if (o.order == 2) {  // centred lines sit gap/2 either side; an offset one, gap to one side
+                    const int side = doubleBondSide(doc, o, at);
+                    const QPointF second = perp(unit(doc.atoms[o.b].pos - doc.atoms[o.a].pos)) * (side >= 0 ? 1 : -1);
+                    off = side == 0 ? gap / 2 : QPointF::dotProduct(second, q) > 0 ? gap : 0;
+                }
+                dir[s] = v, on[s] = pb + q * off;
+            }
+        }
+        for (int s : {0, 1}) {
+            const bool own = bool(dir[s]);
+            const std::optional<QPointF> u = own ? dir[s] : dir[1 - s];
+            const QPointF side = corner[s] - a;
+            if (!u || std::abs(cross(side, *u)) < 1e-9) continue;
+            const double t = cross((own ? on[s] : pb) - a, *u) / cross(side, *u);
+            if (t > 0.5 && t < (own ? kWedgeReach : 1)) corner[s] = a + side * t;
+        }
+    }
     if (b.stereo == BondStereo::Wedge) {
-        QPolygonF tri{a, e + n * st.wedgeWidth / 2, e - n * st.wedgeWidth / 2};
         p.setBrush(p.pen().color());
-        p.drawPolygon(tri);
+        p.drawPolygon(QPolygonF{a, corner[0], e, corner[1]});
         p.setBrush(Qt::NoBrush);
         return;
     }
@@ -206,9 +303,7 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         int count = std::max(3, int(L / st.hashSpacing));
         for (int k = 0; k <= count; ++k) {
             double t = double(k) / count;
-            QPointF c = a + (e - a) * t;
-            double w = st.wedgeWidth / 2 * t;
-            p.drawLine(c + n * w, c - n * w);
+            p.drawLine(a + (corner[0] - a) * t, a + (corner[1] - a) * t);
         }
         return;
     }
@@ -258,9 +353,9 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     if (b.order == 1) {
         line(a, e, true);
     } else if (b.order == 3) {
-        p.drawLine(a, e);
-        p.drawLine(a + n * gap, e + n * gap);
-        p.drawLine(a - n * gap, e - n * gap);
+        line(a, e, true);
+        line(a + n * gap, e + n * gap, true);
+        line(a - n * gap, e - n * gap, true);
     } else {
         // Offset the second line toward the side where the neighbours are
         // (inside the ring); centre it for terminal bonds like C=O.
@@ -304,7 +399,7 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
 
 // ---- arrows and text
 
-constexpr double kHeadLength = 6, kHeadWidth = 2.2, kEquilibriumGap = 1.6;
+constexpr double kHeadWidth = 2.2, kEquilibriumGap = 1.6;
 
 // Quadratic control point: puts the curve's midpoint `bend` to the left of from->to.
 // Points along the arrow. A curve is a circular arc through both ends whose
@@ -404,11 +499,12 @@ static QPen solid(QPen pen) {
     return pen;
 }
 
-static void drawHead(QPainter& p, QPointF tip, QPointF dir, int sides = 0) {
-    QPointF d = unit(dir), n = perp(d), base = tip - d * kHeadLength, notch = tip - d * (kHeadLength * 0.8);
-    QPolygonF head = sides > 0   ? QPolygonF{tip, base + n * kHeadWidth, notch}
-                     : sides < 0 ? QPolygonF{tip, notch, base - n * kHeadWidth}
-                                 : QPolygonF{tip, base + n * kHeadWidth, notch, base - n * kHeadWidth};
+static void drawHead(QPainter& p, QPointF tip, QPointF dir, int sides, double size) {
+    const double length = kHeadLength * size, width = kHeadWidth * size;
+    QPointF d = unit(dir), n = perp(d), base = tip - d * length, notch = tip - d * (length * 0.8);
+    QPolygonF head = sides > 0   ? QPolygonF{tip, base + n * width, notch}
+                     : sides < 0 ? QPolygonF{tip, notch, base - n * width}
+                                 : QPolygonF{tip, base + n * width, notch, base - n * width};
     const QPen shaft = p.pen();
     p.setPen(solid(shaft));
     p.setBrush(shaft.color());
@@ -421,6 +517,9 @@ static QColor mix(const QColor& c, double white) {
     return QColor::fromRgbF(c.redF() + (1 - c.redF()) * white, c.greenF() + (1 - c.greenF()) * white,
                             c.blueF() + (1 - c.blueF()) * white, c.alphaF());
 }
+
+// The Enhanced Metafile engine (Windows copy, #394); GDI has no gradients either.
+constexpr auto kEmfEngine = QPaintEngine::Type(QPaintEngine::User + 1);
 
 // Each phase filled for its look, then outlined.
 static void drawOrbital(QPainter& p, const Arrow& a, const QColor& color, double lineWidth) {
@@ -436,7 +535,7 @@ static void drawOrbital(QPainter& p, const Arrow& a, const QColor& color, double
         } else if (a.look == OrbitalLook::Gradient) {
             const QColor inner = main ? mix(color, 0.75) : QColor(Qt::white), outer = main ? color : mix(color, 0.7);
             const QPointF focus = r.center() + light * 0.3 * radius;
-            if (p.paintEngine() && p.paintEngine()->type() == QPaintEngine::Pdf) {
+            if (p.paintEngine() && (p.paintEngine()->type() == QPaintEngine::Pdf || p.paintEngine()->type() == kEmfEngine)) {
                 // ponytail: Qt writes gradient fills with an uncoloured pattern colour space, which
                 // Apple's PDF renderer (Preview, Keynote, Word on macOS) skips; so PDFs get 16 vector
                 // bands instead. Drop this once Qt writes a plain /Pattern colour space.
@@ -472,20 +571,21 @@ static void drawArrow(QPainter& p, const Arrow& a) {
         return;
     }
     QPointF d = unit(a.to - a.from), n = perp(d);
+    const double headLength = kHeadLength * a.head, headWidth = kHeadWidth * a.head;
     if (a.kind == ArrowKind::Equilibrium) {  // ⇌: two half-headed lines
         QPointF o = n * kEquilibriumGap;
-        p.drawLine(a.from - o, a.to - o - d * kHeadLength * 0.8);
-        drawHead(p, a.to - o, d, -1);
-        p.drawLine(a.to + o, a.from + o + d * kHeadLength * 0.8);
-        drawHead(p, a.from + o, -d, -1);
+        p.drawLine(a.from - o, a.to - o - d * headLength * 0.8);
+        drawHead(p, a.to - o, d, -1, a.head);
+        p.drawLine(a.to + o, a.from + o + d * headLength * 0.8);
+        drawHead(p, a.from + o, -d, -1, a.head);
         return;
     }
     if (a.kind == ArrowKind::Retro) {  // ⇒: open double arrow
-        QPointF o = n * kEquilibriumGap, back = a.to - d * kHeadLength;
+        QPointF o = n * kEquilibriumGap, back = a.to - d * headLength;
         p.drawLine(a.from + o, back + o + d * kEquilibriumGap);
         p.drawLine(a.from - o, back - o + d * kEquilibriumGap);
         p.setPen(solid(p.pen()));
-        p.drawPolyline(QPolygonF{back + n * (kHeadWidth + kEquilibriumGap), a.to, back - n * (kHeadWidth + kEquilibriumGap)});
+        p.drawPolyline(QPolygonF{back + n * (headWidth + kEquilibriumGap), a.to, back - n * (headWidth + kEquilibriumGap)});
         return;
     }
     // Heads follow the tangent at each end; the shaft stops inside them so it
@@ -493,17 +593,17 @@ static void drawArrow(QPainter& p, const Arrow& a) {
     // A head is aimed along the chord it covers, not the tangent at the tip: on a tight curve the
     // tangent turns the head off the shaft, which then leaves through one barb.
     std::vector<QPointF> pts = arrowPoints(a);
-    const QPointF endDir = pts.back() - pointBack(pts, kHeadLength * 0.8);
-    const QPointF startDir = pts.front() - pointBack(std::vector<QPointF>(pts.rbegin(), pts.rend()), kHeadLength * 0.8);
-    trimEnd(pts, kHeadLength * 0.7);
+    const QPointF endDir = pts.back() - pointBack(pts, headLength * 0.8);
+    const QPointF startDir = pts.front() - pointBack(std::vector<QPointF>(pts.rbegin(), pts.rend()), headLength * 0.8);
+    trimEnd(pts, headLength * 0.7);
     if (a.kind == ArrowKind::Resonance) {
         std::reverse(pts.begin(), pts.end());
-        trimEnd(pts, kHeadLength * 0.7);
+        trimEnd(pts, headLength * 0.7);
     }
     p.drawPolyline(pts.data(), int(pts.size()));
     // Fishhook: the barb sits on the outside of the curve.
-    drawHead(p, a.to, endDir, a.kind == ArrowKind::Fishhook ? (a.bend >= 0 ? -1 : 1) : 0);
-    if (a.kind == ArrowKind::Resonance) drawHead(p, a.from, startDir);
+    drawHead(p, a.to, endDir, a.kind == ArrowKind::Fishhook ? (a.bend >= 0 ? -1 : 1) : 0, a.head);
+    if (a.kind == ArrowKind::Resonance) drawHead(p, a.from, startDir, 0, a.head);
 }
 
 // Formula-style text, as chemists type it (and mhchem reads it): digits after a letter or
@@ -548,6 +648,7 @@ std::vector<Script> scripts(const QString& s) {
 // in runs (not per letter) so kerning and spaces match ordinary text.
 QPainterPath textPath(const Text& t, const DrawingStyle& st) {
     QFont f = labelFont(st, t.scale), small = labelFont(st, 0.7 * t.scale);
+    f.setBold(t.compound), small.setBold(t.compound);
     QFontMetricsF fm(f), sm(small);
     const double tab = kTabSpaces * fm.horizontalAdvance(' ');
     QPainterPath path;
@@ -700,12 +801,13 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         const auto& a = doc.atoms[i];
         p.setPen(QPen(info[i].valenceError ? style.error : ink(a.color), lineWidth));
         if (labeled[i]) {
-            drawLabel(p, doc, int(i), doc.hideImplicitH ? 0 : info[i].hydrogens, hSide(int(i)), st);
+            drawLabel(p, doc, int(i), info[i].hydrogens, hSide(int(i)), st);
         } else if (a.charge) {
             QFont sub = labelFont(st, 0.7);
             QString c = QString(a.charge > 0 ? "+" : "−");
             if (std::abs(a.charge) > 1) c.prepend(QString::number(std::abs(a.charge)));
-            drawText(p, c, a.pos + QPointF(2, -3), sub);
+            const auto d = chargeDirection(doc, int(i), 0, HSide::Right);
+            drawText(p, c, d ? chargeAt(a.pos, *d, 2.5, c, sub) : a.pos + QPointF(2, -3), sub);
         }
         if (info[i].valenceError && !labeled[i]) p.drawEllipse(a.pos, 3, 3);
     }
@@ -740,11 +842,14 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         std::vector<double> taken;
         for (int nb : neighbors(doc, bondsAt, int(i)))
             taken.push_back(std::atan2(doc.atoms[nb].pos.y() - a.pos.y(), doc.atoms[nb].pos.x() - a.pos.x()));
-        if (labeled[i] && info[i].hydrogens && !doc.hideImplicitH) {
+        if (labeled[i] && info[i].hydrogens) {
             const HSide s = hSide(int(i));
             taken.push_back(s == HSide::Right ? 0 : s == HSide::Left ? std::numbers::pi : s == HSide::Below ? std::numbers::pi / 2 : -std::numbers::pi / 2);
         }
-        if (a.charge) taken.push_back(-std::numbers::pi / 4);  // up and to the right
+        if (a.charge) {  // its corner
+            const QPointF c = chargeDirection(doc, int(i), labeled[i] ? info[i].hydrogens : 0, hSide(int(i))).value_or(QPointF(1, -1));
+            taken.push_back(std::atan2(c.y(), c.x()));
+        }
         if (doc.showAtomNumbers || a.map) {  // the atom's number keeps its place (#349)
             const QPointF d = numberDirection(int(i));
             taken.push_back(std::atan2(d.y(), d.x()));
@@ -819,17 +924,29 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         p.setPen(QPen(ink(a.color), lineWidth));
         drawText(p, s, at - QPointF(fm.horizontalAdvance(s) / 2, -fm.capHeight() / 2), f);
     }
+    // Beside a stereocentre, clear of its bonds, and past the atom's number (#325); `further` stacks a second mark.
+    auto besideCentre = [&](int i, double further) {
+        if (doc.showAtomNumbers || doc.atoms[i].map) {
+            const double number = (labeled[i] ? 0.8 : 0.4) * kBondLength;
+            return doc.atoms[i].pos + numberDirection(i) * (number + (0.6 + further) * kBondLength);
+        }
+        return doc.atoms[i].pos + doc.awayDirection(i) * ((0.55 + further) * kBondLength);
+    };
+    for (size_t i = 0; i < doc.atoms.size(); ++i) {  // stereo groups, small and upright as ChemDraw sets them: abs, &1, or1
+        const QString s = stereoGroupTag(doc.atoms[i]);
+        if (s.isEmpty()) continue;
+        const QFont f = labelFont(st, 0.6);
+        QFontMetricsF fm(f);
+        p.setPen(QPen(ink(doc.atoms[i].color), lineWidth));
+        drawText(p, s, besideCentre(int(i), 0) - QPointF(fm.horizontalAdvance(s) / 2, -fm.capHeight() / 2), f);
+    }
     if (doc.showStereo) {  // small italic (R)/(E), clear of the atom's bonds or the double bond's second line
         QFont f = labelFont(st, 0.7);
         f.setItalic(true);
-        const double off = 0.55 * kBondLength;
         for (const auto& l : chem::stereoLabels(doc)) {
             QPointF at;
-            if (l.atom >= 0 && (doc.showAtomNumbers || doc.atoms[l.atom].map)) {  // past the atom's number (#325)
-                const double number = (labeled[l.atom] ? 0.8 : 0.4) * kBondLength;
-                at = doc.atoms[l.atom].pos + numberDirection(l.atom) * (number + 0.6 * kBondLength);
-            } else if (l.atom >= 0) {
-                at = doc.atoms[l.atom].pos + doc.awayDirection(l.atom) * off;
+            if (l.atom >= 0) {
+                at = besideCentre(l.atom, doc.atoms[l.atom].stereoGroup != StereoGroup::None ? 0.7 : 0);
             } else {
                 const Bond& b = doc.bonds[l.bond];
                 const QPointF a = doc.atoms[b.a].pos, e = doc.atoms[b.b].pos, n = perp(unit(e - a));
@@ -839,6 +956,55 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             QFontMetricsF fm(f);
             p.setPen(QPen(style.ink, lineWidth));
             drawText(p, s, at - QPointF(fm.horizontalAdvance(s) / 2, -fm.capHeight() / 2), f);
+        }
+    }
+    if (doc.showShifts) {  // predicted 13C (1H) beside each atom (#403), with the notice nmrshiftdb2's licence asks for
+        const auto shifts = chem::predictShifts(doc);
+        QSet<int> labelled;  // stereocentres with an (R)/(S) drawn: past it
+        if (doc.showStereo)
+            for (const auto& l : chem::stereoLabels(doc)) labelled.insert(l.atom);
+        const QFont f = labelFont(st, 0.55);
+        QFontMetricsF fm(f);
+        p.setPen(QPen(style.ink, lineWidth));
+        auto value = [](double v, int spheres, int decimals) { return (spheres < 3 ? "~" : "") + QString::number(v, 'f', decimals); };
+        // The widest gap between the atom's bonds; at a branch or ring fusion, the gap facing out of the molecule.
+        QPointF middle;
+        for (const Atom& a : doc.atoms) middle += a.pos / double(doc.atoms.size());
+        auto shiftDirection = [&](int i) {
+            const auto nbs = neighbors(doc, bondsAt, i);
+            if (nbs.size() < 3) return doc.awayDirection(i);
+            std::vector<double> ang;
+            for (int nb : nbs) ang.push_back(std::atan2(doc.atoms[nb].pos.y() - doc.atoms[i].pos.y(), doc.atoms[nb].pos.x() - doc.atoms[i].pos.x()));
+            std::sort(ang.begin(), ang.end());
+            const QPointF out = doc.atoms[i].pos - middle;
+            QPointF best = doc.awayDirection(i);
+            double bestScore = -1e9;
+            for (size_t k = 0; k < ang.size(); ++k) {
+                const double next = k + 1 < ang.size() ? ang[k + 1] : ang[0] + 2 * std::numbers::pi, mid = (ang[k] + next) / 2;
+                const QPointF d(std::cos(mid), std::sin(mid));
+                const double score = (next - ang[k]) * kBondLength + QPointF::dotProduct(d, out);  // wide, and outward
+                if (score > bestScore) bestScore = score, best = d;
+            }
+            return best;
+        };
+        for (const auto& s : shifts) {
+            QStringList parts;
+            if (s.carbonSpheres) parts << value(s.carbon, s.carbonSpheres, 1);
+            if (s.protonSpheres) parts << "(" + value(s.proton, s.protonSpheres, 2) + ")";
+            const QString text = parts.join(' ');
+            const double further = (doc.atoms[s.atom].stereoGroup != StereoGroup::None ? 0.7 : 0) + (labelled.contains(s.atom) ? 0.9 : 0) +
+                                   (doc.showAtomNumbers || doc.atoms[s.atom].map ? 0.6 : 0);
+            // The text's near edge clear of the atom: pushed out by half its size along the way out.
+            const QPointF d = shiftDirection(s.atom), w(fm.horizontalAdvance(text) / 2, fm.capHeight() / 2);
+            const QPointF centre = doc.atoms[s.atom].pos + d * ((labeled[s.atom] ? 0.6 : 0.3) + further) * kBondLength + QPointF(d.x() * w.x(), d.y() * w.y());
+            drawText(p, text, centre - QPointF(w.x(), -w.y()), f);
+        }
+        if (!shifts.empty()) {
+            QPointF at(documentBounds(doc).left(), documentBounds(doc).bottom() + 1.2 * fm.height());
+            for (const QString& line : QStringList{QObject::tr("Predicted shifts in ppm: 13C (1H); ~ marks a weaker match.")} + nmrshiftdbNotice()) {
+                drawText(p, line, at, f);
+                at.ry() += 1.2 * fm.height();
+            }
         }
     }
     p.restore();
@@ -923,6 +1089,25 @@ static void paintFrame(QPainter& p, const Document& doc, const ExportOptions& o,
     paintDocument(p, doc);
 }
 
+Legend placeLegend(const QRectF& plot, QSizeF size, const std::vector<QPointF>& sticks, double clear) {
+    Legend best;
+    for (bool left : {true, false}) {  // the corner that shrinks the sticks least; left on a tie
+        const QRectF r(left ? plot.left() : plot.right() - size.width(), plot.top(), size.width(), size.height());
+        double scale = 1;
+        for (QPointF s : sticks)
+            if (s.x() > r.left() - 2 && s.x() < r.right() + 2 && s.y() > 0)
+                scale = std::min(scale, std::max(plot.bottom() - r.bottom() - clear, 0.0) / (s.y() * plot.height()));
+        if (left || scale > best.scale) best = {r, scale};
+    }
+    return best;
+}
+
+QStringList nmrshiftdbNotice() {
+    return {QObject::tr("Contains information from nmrshiftdb2 (www.nmrshiftdb.org), which is made available here"),
+            QObject::tr("under the nmrshiftdb2 Database License (%1).")
+                .arg("https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/nmrshiftdb2datalicense.txt")};
+}
+
 QImage renderImage(const Document& doc, const ExportOptions& o) {
     const auto [r, s] = exportFrame(doc, o);
     QImage img((r.size() * s * o.dpi / 72.0).toSize().expandedTo({1, 1}), QImage::Format_ARGB32_Premultiplied);
@@ -934,6 +1119,13 @@ QImage renderImage(const Document& doc, const ExportOptions& o) {
     p.end();
     img.setText("penzene", QString::fromUtf8(doc.toJson()));  // reopens as an editable drawing
     return img;
+}
+
+QByteArray renderPng(const Document& doc, const ExportOptions& o) {
+    QByteArray png;
+    QBuffer buf(&png);
+    if (!buf.open(QIODevice::WriteOnly) || !renderImage(doc, o).save(&buf, "PNG")) return {};
+    return png;
 }
 
 QByteArray renderSvg(const Document& doc, const ExportOptions& o) {
@@ -981,8 +1173,7 @@ bool exportDocument(const Document& doc, const QString& path, const ExportOption
     const QString ext = QFileInfo(path).suffix().toLower();
     QByteArray data;
     if (ext == "png") {
-        QBuffer buf(&data);
-        if (!buf.open(QIODevice::WriteOnly) || !renderImage(doc, o).save(&buf, "PNG")) return false;
+        data = renderPng(doc, o);
     } else if (ext == "svg") {
         data = renderSvg(doc, o);
     } else if (ext == "pdf") {
@@ -1032,3 +1223,160 @@ Chrome chrome(const Theme& t) {
     // The Catppuccin themes keep their own colours.
     return {t.surface.lighter(125), t.text, t.dark ? t.surface.lighter(145) : t.surface.darker(110)};
 }
+
+#ifdef Q_OS_WIN
+// Enhanced Metafile, for Office on Windows (#394). Qt has no EMF paint device, so this engine
+// replays the export as GDI paths into a metafile DC: vector throughout, text as glyph outlines.
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
+namespace {
+constexpr double kTwipsPerPoint = 20;  // MM_TWIPS: 1/1440 inch, y up
+
+// GDI has no alpha: a translucent colour is mixed with white, as it shows on a page.
+COLORREF gdiColor(const QColor& c) {
+    const double a = c.alphaF();
+    auto mixed = [a](int v) { return BYTE(std::lround(v * a + 255 * (1 - a))); };
+    return RGB(mixed(c.red()), mixed(c.green()), mixed(c.blue()));
+}
+
+class EmfEngine : public QPaintEngine {
+public:
+    explicit EmfEngine(HDC dc) : QPaintEngine(AllFeatures), dc_(dc) {}
+    bool begin(QPaintDevice*) override { return true; }
+    bool end() override { return true; }
+    Type type() const override { return kEmfEngine; }
+    void updateState(const QPaintEngineState& s) override {
+        if (s.state() & DirtyPen) pen_ = s.pen();
+        if (s.state() & DirtyBrush) brush_ = s.brush();
+        if (s.state() & DirtyTransform) transform_ = s.transform();
+    }
+    void drawPixmap(const QRectF&, const QPixmap&, const QRectF&) override {}  // the renderer draws none
+    using QPaintEngine::drawPolygon;
+    void drawPolygon(const QPointF* points, int count, PolygonDrawMode mode) override {
+        QPainterPath path;
+        path.setFillRule(mode == WindingMode ? Qt::WindingFill : Qt::OddEvenFill);
+        path.addPolygon(QPolygonF(QList<QPointF>(points, points + count)));
+        if (mode != PolylineMode) {
+            path.closeSubpath();
+            return drawPath(path);
+        }
+        const QBrush brush = std::exchange(brush_, QBrush());
+        drawPath(path);
+        brush_ = brush;
+    }
+    void drawPath(const QPainterPath& path) override {
+        const bool fill = brush_.style() != Qt::NoBrush && brush_.color().alpha() > 0;
+        const bool stroke = pen_.style() != Qt::NoPen && pen_.color().alpha() > 0;
+        if (!fill && !stroke) return;
+        const QPainterPath mapped = transform_.map(path);
+        auto at = [&](int i) {
+            const QPainterPath::Element e = mapped.elementAt(i);
+            return POINT{LONG(std::lround(e.x)), LONG(-std::lround(e.y))};
+        };
+        BeginPath(dc_);
+        POINT start{}, last{};
+        auto closeIfClosed = [&] {
+            if (start.x == last.x && start.y == last.y) CloseFigure(dc_);
+        };
+        for (int i = 0; i < mapped.elementCount(); ++i) {
+            const QPainterPath::Element e = mapped.elementAt(i);
+            if (e.isMoveTo()) {
+                if (i > 0) closeIfClosed();
+                start = last = at(i);
+                MoveToEx(dc_, start.x, start.y, nullptr);
+            } else if (e.isLineTo()) {
+                last = at(i);
+                LineTo(dc_, last.x, last.y);
+            } else if (e.isCurveTo() && i + 2 < mapped.elementCount()) {
+                const POINT curve[3] = {at(i), at(i + 1), at(i + 2)};
+                PolyBezierTo(dc_, curve, 3);
+                last = curve[2];
+                i += 2;
+            }
+        }
+        closeIfClosed();
+        EndPath(dc_);
+        SetPolyFillMode(dc_, path.fillRule() == Qt::WindingFill ? WINDING : ALTERNATE);
+        HGDIOBJ brush = fill ? HGDIOBJ(CreateSolidBrush(gdiColor(brush_.color()))) : GetStockObject(NULL_BRUSH);
+        HGDIOBJ pen = stroke ? HGDIOBJ(gdiPen()) : GetStockObject(NULL_PEN);
+        HGDIOBJ oldBrush = SelectObject(dc_, brush), oldPen = SelectObject(dc_, pen);
+        if (fill && stroke) StrokeAndFillPath(dc_);
+        else if (fill) FillPath(dc_);
+        else StrokePath(dc_);
+        SelectObject(dc_, oldBrush);
+        SelectObject(dc_, oldPen);
+        if (fill) DeleteObject(brush);
+        if (stroke) DeleteObject(pen);
+    }
+
+private:
+    HPEN gdiPen() {
+        const double scale = pen_.isCosmetic() ? 1 : std::sqrt(std::abs(transform_.determinant()));
+        const double width = std::max(1.0, pen_.widthF() * scale);
+        DWORD style = PS_GEOMETRIC | PS_SOLID;
+        std::vector<DWORD> dashes;
+        if (pen_.style() != Qt::SolidLine) {  // Qt's dashes are in pen widths
+            style = PS_GEOMETRIC | PS_USERSTYLE;
+            for (qreal d : pen_.dashPattern()) dashes.push_back(DWORD(std::max(1.0, std::round(d * width))));
+        }
+        style |= pen_.capStyle() == Qt::RoundCap ? PS_ENDCAP_ROUND : pen_.capStyle() == Qt::SquareCap ? PS_ENDCAP_SQUARE : PS_ENDCAP_FLAT;
+        style |= pen_.joinStyle() == Qt::RoundJoin ? PS_JOIN_ROUND : pen_.joinStyle() == Qt::BevelJoin ? PS_JOIN_BEVEL : PS_JOIN_MITER;
+        SetMiterLimit(dc_, FLOAT(pen_.miterLimit()), nullptr);
+        const LOGBRUSH brush{BS_SOLID, gdiColor(pen_.color()), 0};
+        return ExtCreatePen(style, DWORD(std::lround(width)), &brush, DWORD(dashes.size()), dashes.empty() ? nullptr : dashes.data());
+    }
+    HDC dc_;
+    QPen pen_;
+    QBrush brush_;
+    QTransform transform_;
+};
+
+class EmfDevice : public QPaintDevice {
+public:
+    EmfDevice(HDC dc, QSize size) : engine_(dc), size_(size) {}
+    QPaintEngine* paintEngine() const override { return &engine_; }
+
+protected:
+    int metric(PaintDeviceMetric m) const override {
+        switch (m) {
+        case PdmWidth: return size_.width();
+        case PdmHeight: return size_.height();
+        case PdmWidthMM: return qRound(size_.width() * 25.4 / 1440);
+        case PdmHeightMM: return qRound(size_.height() * 25.4 / 1440);
+        case PdmDpiX: case PdmDpiY: case PdmPhysicalDpiX: case PdmPhysicalDpiY: return 1440;
+        case PdmDepth: return 32;
+        case PdmNumColors: return std::numeric_limits<int>::max();
+        default: return QPaintDevice::metric(m);
+        }
+    }
+
+private:
+    mutable EmfEngine engine_;
+    QSize size_;
+};
+}  // namespace
+
+QByteArray renderEmf(const Document& doc, const ExportOptions& o) {
+    const auto [r, s] = exportFrame(doc, o);
+    const QSizeF points = r.size() * s;
+    const RECT frame{0, 0, LONG(std::lround(points.width() * 2540 / 72)), LONG(std::lround(points.height() * 2540 / 72))};  // 0.01 mm
+    HDC dc = CreateEnhMetaFileW(nullptr, nullptr, &frame, L"Penzene\0Structure\0");
+    if (!dc) return {};
+    SetMapMode(dc, MM_TWIPS);
+    SetBkMode(dc, TRANSPARENT);  // dash gaps stay clear
+    {
+        EmfDevice device(dc, (points * kTwipsPerPoint).toSize().expandedTo({1, 1}));
+        QPainter p(&device);
+        paintFrame(p, doc, o, kTwipsPerPoint);
+    }
+    HENHMETAFILE emf = CloseEnhMetaFile(dc);
+    if (!emf) return {};
+    QByteArray bytes(qsizetype(GetEnhMetaFileBits(emf, 0, nullptr)), Qt::Uninitialized);
+    GetEnhMetaFileBits(emf, UINT(bytes.size()), reinterpret_cast<BYTE*>(bytes.data()));
+    DeleteEnhMetaFile(emf);
+    return bytes;
+}
+#endif

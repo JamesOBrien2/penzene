@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(penzene VERSION 1.4.0 LANGUAGES CXX)
+project(penzene VERSION 1.8.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -68,20 +68,36 @@ else()
     target_compile_options(penzene_chemdraw PRIVATE -w)
 endif()
 
+# The NMR shift table (#403; nmrshiftdb2 data, its own licence in resources/nmr), unpacked for rcc.
+file(ARCHIVE_EXTRACT INPUT ${CMAKE_SOURCE_DIR}/resources/nmr/hose.tar.xz DESTINATION ${CMAKE_BINARY_DIR}/nmr)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS resources/nmr/hose.tar.xz)
+qt_add_resources(penzene_core "nmr" PREFIX "/nmr" BASE ${CMAKE_BINARY_DIR}/nmr FILES ${CMAKE_BINARY_DIR}/nmr/hose.tsv)
 target_link_libraries(penzene_core PUBLIC
     Qt6::Gui Qt6::Svg
     RDKit::SmilesParse RDKit::FileParsers RDKit::Depictor RDKit::GraphMol
     RDKit::Descriptors RDKit::RDInchiLib RDKit::CIPLabeler RDKit::DistGeomHelpers)
+# RDKit is DLLs on Windows; without this its headers don't mark data (the isotope table) dllimport.
+if(WIN32)
+    target_compile_definitions(penzene_core PUBLIC RDKIT_DYN_LINK)
+endif()
 # Whole: RDKit's shared ChemDraw library (macOS, Linux) defines the same functions, and a
 # plain archive link would take RDKit's copies instead of these (which carry Penzene's fixes).
 target_link_libraries(penzene_core PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,penzene_chemdraw>")
+if(WIN32)  # the Enhanced Metafile copy (#394)
+    target_link_libraries(penzene_core PRIVATE gdi32)
+endif()
 
 if(PENZENE_APP)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network PrintSupport Test)
 # The app's widgets; tests link this too, so they exercise the same code.
 add_library(penzene_ui STATIC src/Canvas.cpp src/MainWindow.cpp src/Online.cpp src/Templates.cpp src/WhatsNew.cpp)
 target_link_libraries(penzene_ui PUBLIC penzene_core Qt6::Widgets Qt6::Network Qt6::PrintSupport)
+if(WIN32)  # drawings embedded in Word and PowerPoint, edited here (#229)
+    target_sources(penzene_ui PRIVATE src/OleServer.cpp)
+    target_link_libraries(penzene_ui PRIVATE ole32 uuid advapi32 user32 gdi32)
+endif()
 qt_add_resources(penzene_ui "changelog" PREFIX "/" FILES CHANGELOG.md)  # What's New
+qt_add_resources(penzene_ui "licenses" PREFIX "/" FILES THIRD_PARTY_LICENSES.md)
 # The logo (window icon, What's New) and What's New's icons, with the widgets so tests see them too.
 file(GLOB whatsnew_icons RELATIVE ${CMAKE_SOURCE_DIR}/resources ${CMAKE_SOURCE_DIR}/resources/whatsnew/*.svg)
 list(TRANSFORM whatsnew_icons PREPEND resources/)
@@ -119,8 +135,8 @@ endif()
 target_compile_definitions(penzene_ui PUBLIC PENZENE_BUILD="${PENZENE_BUILD}")
 
 set(PENZENE_ICNS resources/penzene.icns)
-set_source_files_properties(${PENZENE_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
-add_executable(penzene WIN32 MACOSX_BUNDLE src/main.cpp ${PENZENE_ICNS} resources/penzene.rc)
+set_source_files_properties(${PENZENE_ICNS} LICENSE THIRD_PARTY_LICENSES.md PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+add_executable(penzene WIN32 MACOSX_BUNDLE src/main.cpp ${PENZENE_ICNS} LICENSE THIRD_PARTY_LICENSES.md resources/penzene.rc)
 target_link_libraries(penzene PRIVATE penzene_ui)
 set_target_properties(penzene PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER io.github.jamesobrien2.penzene
@@ -137,6 +153,7 @@ if(UNIX AND NOT APPLE)  # Linux desktop integration: Flatpak and distribution pa
     install(FILES packaging/linux/${app_id}.metainfo.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo)
     install(FILES packaging/linux/${app_id}.xml DESTINATION ${CMAKE_INSTALL_DATADIR}/mime/packages)  # .penz
     install(FILES resources/logo.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps RENAME ${app_id}.svg)
+    install(FILES LICENSE THIRD_PARTY_LICENSES.md DESTINATION ${CMAKE_INSTALL_DATADIR}/licenses/penzene)
 endif()
 if(PENZENE_TESTS)
 find_package(Catch2 3 REQUIRED)
@@ -160,6 +177,10 @@ add_test(NAME render COMMAND penzene --render ${CMAKE_SOURCE_DIR}/tests/data/asp
          --out ${CMAKE_BINARY_DIR}/render-test --format png --drawing-style RSC --clean)
 set_tests_properties(render PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
                      PASS_REGULAR_EXPRESSION "aspirin\\.png.*structure\\.png")
+# Records named alike but for case get distinct files, as the disk may not tell them apart (#493).
+add_test(NAME render-name-case COMMAND penzene --render ${CMAKE_SOURCE_DIR}/tests/data/case.smi --out ${CMAKE_BINARY_DIR}/render-case)
+set_tests_properties(render-name-case PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "sample\\.svg.*SAMPLE-2\\.svg")
 # One output file from a multi-record file holds every record, as a grid (#320).
 add_test(NAME render-grid COMMAND penzene --render ${CMAKE_SOURCE_DIR}/tests/data/two.smi ${CMAKE_BINARY_DIR}/two.svg)
 add_test(NAME render-grid-check COMMAND penzene --descriptors ${CMAKE_BINARY_DIR}/two.svg --columns name,formula)
@@ -169,6 +190,26 @@ set_tests_properties(render-grid-check PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=of
 # ... and a record it can't read is reported, with a failing exit (#363).
 add_test(NAME render-grid-broken COMMAND penzene --render ${CMAKE_SOURCE_DIR}/tests/data/broken.smi ${CMAKE_BINARY_DIR}/broken.svg)
 set_tests_properties(render-grid-broken PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen WILL_FAIL ON)
+# A misspelt drawing style or format is an error naming the choices, not a silent default.
+add_test(NAME render-bad-style COMMAND penzene --render CCO --out ${CMAKE_BINARY_DIR}/render-bad --drawing-style RCS)
+set_tests_properties(render-bad-style PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "no drawing style \"RCS\"; choose from ACS 1996")
+add_test(NAME render-bad-format COMMAND penzene --render CCO --out ${CMAKE_BINARY_DIR}/render-bad --format jpg)
+set_tests_properties(render-bad-format PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "no format \"jpg\"")
+add_test(NAME render-format-case COMMAND penzene --render CCO --out ${CMAKE_BINARY_DIR}/render-bad --format PNG)  # as before
+set_tests_properties(render-format-case PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "structure\\.png")
+add_test(NAME render-missing-input COMMAND penzene --render ${CMAKE_BINARY_DIR}/nothing-here.mol ${CMAKE_BINARY_DIR}/x.svg)
+set_tests_properties(render-missing-input PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "no such file .*nothing-here\\.mol")
+add_test(NAME descriptors-missing-input COMMAND penzene --descriptors ${CMAKE_BINARY_DIR}/nothing-here.mol)
+set_tests_properties(descriptors-missing-input PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "no such file .*nothing-here\\.mol")
+# ... and an output that can't be written says so, rather than blaming the structure.
+add_test(NAME render-bad-output COMMAND penzene --render CCO ${CMAKE_BINARY_DIR}/no-such-folder/x.svg)
+set_tests_properties(render-bad-output PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "could not write .*no-such-folder")
 if(APPLE)  # Finder offers Penzene for .penz and the structure formats (#332)
     add_test(NAME bundle-document-types COMMAND plutil -extract CFBundleDocumentTypes xml1 -o - $<TARGET_BUNDLE_CONTENT_DIR:penzene>/Info.plist)
     set_tests_properties(bundle-document-types PROPERTIES PASS_REGULAR_EXPRESSION "io\\.github\\.jamesobrien2\\.penzene\\.document.*cdxml")
@@ -178,6 +219,8 @@ add_test(NAME descriptors COMMAND penzene --descriptors "CC(=O)Oc1ccccc1C(=O)O" 
          --columns name,formula,tpsa)
 set_tests_properties(descriptors PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
                      PASS_REGULAR_EXPRESSION "name,formula,tpsa\n\"?structure\"?,C9H8O4,63\\.60\naspirin,C9H8O4,63\\.60")
+add_test(NAME descriptors-peptide COMMAND penzene --descriptors Gly-Phe-Leu-Ser --peptide --columns formula)
+set_tests_properties(descriptors-peptide PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen PASS_REGULAR_EXPRESSION "formula\nC20H30N4O6")
 target_compile_definitions(penzene_tests PRIVATE PENZENE_TEST_DATA="${CMAKE_SOURCE_DIR}/tests/data")
 endif()
 endif()
