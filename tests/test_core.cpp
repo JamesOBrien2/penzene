@@ -205,14 +205,14 @@ TEST_CASE("hotkeys without a canvas: ChemDraw's dipeptide example") {
 }
 
 TEST_CASE("chair hotkey on two bonds of one ring fuses cleanly (#417)") {
-    auto clean = [](const Document& doc) {
+    auto clean = [](const Document& doc, bool unitBonds = true) {
         for (int i = 0; i < int(doc.atoms.size()); ++i) {
             CHECK(doc.neighbors(i).size() >= 2);  // no dangling bond
             for (int j = 0; j < i; ++j)           // nothing drawn over or next to another atom
                 if (doc.bondBetween(i, j) < 0) CHECK(len(doc.atoms[i].pos - doc.atoms[j].pos) > 0.45 * kBondLength);
         }
         for (const Bond& x : doc.bonds) {
-            CHECK(std::abs(len(doc.atoms[x.a].pos - doc.atoms[x.b].pos) - kBondLength) < 0.15 * kBondLength);
+            if (unitBonds) CHECK(std::abs(len(doc.atoms[x.a].pos - doc.atoms[x.b].pos) - kBondLength) < 0.15 * kBondLength);
             for (const Bond& y : doc.bonds)
                 if (x.a != y.a && x.a != y.b && x.b != y.a && x.b != y.b)
                     CHECK(QLineF(doc.atoms[x.a].pos, doc.atoms[x.b].pos)
@@ -236,6 +236,21 @@ TEST_CASE("chair hotkey on two bonds of one ring fuses cleanly (#417)") {
             clean(doc);
         }
     CHECK(firstChair[0] != firstChair[1]);  // 9 and 0 are mirror images
+
+    // A chair fused onto any bond of another chair is just as clean (#449).
+    for (const QString first : {"9", "0"})
+        for (const QString key : {"9", "0"})
+            for (int bond = 1; bond < 6; ++bond) {
+                Document doc;
+                const int a = doc.addAtom({0, 0}), b = doc.addAtom({kBondLength, 0});
+                edit::link(doc, a, b);
+                edit::hotkey(doc, {-1, 0}, first);  // a chair on the single bond
+                INFO(first.toStdString() << " then " << key.toStdString() << " on chair bond " << bond);
+                REQUIRE(doc.atoms.size() == 6);
+                edit::hotkey(doc, {-1, bond}, key);
+                CHECK(doc.atoms.size() == 10);
+                clean(doc, false);  // the template's bonds aren't all one length, and fusing on one carries that on
+            }
 }
 
 TEST_CASE("descriptor table: a row per record, invalid ones kept with the reason (#152)") {

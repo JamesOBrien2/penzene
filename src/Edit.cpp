@@ -3,6 +3,7 @@
 #include "Geometry.h"
 
 #include <QHash>
+#include <QLineF>
 #include <QRegularExpression>
 #include <algorithm>
 
@@ -141,10 +142,33 @@ void chairOnBond(Document& doc, int bond, int edge) {
         QPointF p = chair[(first + step * k + 6) % 6];
         return QPointF(p.x(), p.y() * step);
     };
-    const QPointF d = pb - pa, td = t(1) - t(0);
-    const double turn = qRadiansToDegrees(std::atan2(d.y(), d.x()) - std::atan2(td.y(), td.x()));
-    std::vector<QPointF> verts;
-    for (int k = 0; k < 6; ++k) verts.push_back(pa + rotated(t(k) - t(0), turn) * (len(d) / len(td)));
+    auto build = [&](QPointF from, QPointF to) {
+        const QPointF d = to - from, td = t(1) - t(0);
+        const double turn = qRadiansToDegrees(std::atan2(d.y(), d.x()) - std::atan2(td.y(), td.x()));
+        std::vector<QPointF> verts;
+        for (int k = 0; k < 6; ++k) verts.push_back(from + rotated(t(k) - t(0), turn) * (len(d) / len(td)));
+        return verts;
+    };
+    // The far side of the bond too, for when the neighbours don't say which side is free (a bond of
+    // a chair has atoms on both): keep the first that crosses or crowds nothing already drawn (#449).
+    auto clashes = [&](const std::vector<QPointF>& verts) {
+        auto same = [](QPointF x, QPointF y) { return len(x - y) < 1e-6; };
+        int n = 0;
+        for (int k = 2; k < 6; ++k)  // 0 and 1 are the bond's own atoms
+            for (const Atom& a : doc.atoms)
+                n += len(a.pos - verts[k]) < 0.45 * kBondLength;
+        for (int k = 1; k < 6; ++k) {  // the edges after the bond
+            const QPointF u = verts[k], v = verts[(k + 1) % 6];
+            for (const Bond& o : doc.bonds) {
+                const QPointF x = doc.atoms[o.a].pos, y = doc.atoms[o.b].pos;
+                n += !same(x, u) && !same(x, v) && !same(y, u) && !same(y, v) &&
+                     QLineF(u, v).intersects(QLineF(x, y), nullptr) == QLineF::BoundedIntersection;
+            }
+        }
+        return n;
+    };
+    auto verts = build(pa, pb), other = build(pb, pa);
+    if (clashes(other) < clashes(verts)) verts = other;
     addRing(doc, verts, false);
 }
 
