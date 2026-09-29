@@ -495,6 +495,15 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     notice->setStyleSheet("font-size: 10px;");
     nmrLayout->addWidget(nucleus_);
     nmrLayout->addWidget(nmr_, 1);
+    auto* copyNmr = new QPushButton(tr("Copy SI Line"));
+    copyNmr->setToolTip(tr("The predicted shifts as a supporting-information line, to replace with measured ones"));
+    connect(copyNmr, &QPushButton::clicked, this, [this] {
+        const QSet<int>& selected = canvas_->selection();
+        const QString line = chem::nmrLine(canvas_->document(), nucleus_->currentIndex() == 1, std::vector<int>(selected.begin(), selected.end()));
+        if (line.isEmpty()) return statusBar()->showMessage(tr("No predicted shifts to copy"), 4000);  // the clipboard kept
+        QGuiApplication::clipboard()->setText(line);
+    });
+    nmrLayout->addWidget(copyNmr);
     nmrLayout->addWidget(notice);
     nmrCard->setMinimumWidth(300);
     nmrDock_->setWidget(nmrCard);
