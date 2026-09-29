@@ -43,6 +43,7 @@
 #include <QLineEdit>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QInputDialog>
 #include <QTimer>
 #include <QCheckBox>
 #include <QTreeWidget>
@@ -2079,6 +2080,56 @@ TEST_CASE("keyboard: G picks atoms one by one, > draws a curved arrow, no mouse 
     const QPointF c0 = f.doc().atoms[0].pos;
     key(Qt::Key_Right);
     CHECK(QLineF(f.doc().atoms[0].pos, c0 + QPointF(1, 0)).length() < 1e-9);
+}
+
+TEST_CASE("keyboard: bend and flip a curved arrow, and place an arrow or text after the selection (#549)") {
+    Fixture f;
+    f.canvas.setDocumentSilently(*chem::fromSmiles("CC=O"));
+    f.canvas.setTool(Canvas::Tool::Select);  // as the window does when the canvas asks for it
+    auto key = [&](int k, Qt::KeyboardModifiers m = {}) { QTest::keyClick(f.canvas.viewport(), Qt::Key(k), m); };
+    auto toward = [](QPointF v) {
+        return std::abs(v.x()) > std::abs(v.y()) ? (v.x() > 0 ? Qt::Key_Right : Qt::Key_Left) : (v.y() > 0 ? Qt::Key_Down : Qt::Key_Up);
+    };
+    f.canvas.setHotspot(-1, 1);
+    QTest::keyClick(f.canvas.viewport(), '>');
+    key(toward(f.doc().atoms[2].pos - f.doc().atoms[1].pos));
+    QTest::keyClick(f.canvas.viewport(), '>');
+    REQUIRE(f.doc().arrows.size() == 1);
+    CHECK(f.canvas.selectedArrows() == QSet<int>{0});  // the new arrow, ready to reshape
+    const Arrow drawn = f.doc().arrows[0];
+    key(toward(f.doc().atoms[1].pos - f.doc().atoms[2].pos));  // the hotspot goes on, the arrow stays put
+    CHECK(f.canvas.hotspotBond() == 1);
+    CHECK(f.doc().arrows[0] == drawn);
+
+    key(Qt::Key_Up, Qt::AltModifier);
+    CHECK(std::abs(f.doc().arrows[0].bend / drawn.bend - 1.25) < 1e-9);
+    key(Qt::Key_Down, Qt::AltModifier);
+    CHECK(std::abs(f.doc().arrows[0].bend - drawn.bend) < 1e-9);
+    f.canvas.bendArrow(-1);  // Arrange → Flip Curved Arrow
+    CHECK(std::abs(f.doc().arrows[0].bend + drawn.bend) < 1e-9);
+
+    // After the molecule: a reaction arrow, then text at the new arrow's right.
+    f.canvas.setSelection({0, 1, 2});
+    double right = -1e9;
+    for (const Atom& a : f.doc().atoms) right = std::max(right, a.pos.x());
+    f.canvas.addArrowAfter();
+    REQUIRE(f.doc().arrows.size() == 2);
+    const Arrow& after = f.doc().arrows[1];
+    CHECK(after.from.x() > right);
+    CHECK(after.bend == 0);
+    CHECK(std::abs(QLineF(after.from, after.to).length() - 3 * kBondLength) < 1e-9);
+    CHECK(f.canvas.selectedArrows() == QSet<int>{1});
+    QTimer::singleShot(0, [] {
+        if (auto* d = qobject_cast<QInputDialog*>(QApplication::activeModalWidget())) d->setTextValue("heat"), d->accept();
+    });
+    f.canvas.addTextAfter();
+    REQUIRE(f.doc().texts.size() == 1);
+    CHECK(f.doc().texts[0].text == "heat");
+    CHECK(f.doc().texts[0].pos.x() > f.doc().arrows[1].to.x());
+
+    key(Qt::Key_Escape);
+    f.canvas.setHotspot(-1);
+    CHECK_FALSE(f.canvas.nextPlace());  // nothing to place it by
 }
 
 TEST_CASE("update check: parsing GitHub's answer, comparing versions, off by default (#115)") {

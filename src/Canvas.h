@@ -89,6 +89,12 @@ public:
     QColor colour() const { return colour_; }
     void colourSelection();  // the current colour on the selected atoms, bonds, arrows and text
     void setArrowHead(double size);  // on the selected arrows, relative to the usual
+    // The lone selected curved arrow bowed more (factor > 1) or less; a negative factor flips its side.
+    void bendArrow(double factor);
+    // A straight arrow, or new text, just right of the selection, or at the hotspot; nothing without either.
+    std::optional<QPointF> nextPlace() const;
+    void addArrowAfter();
+    void addTextAfter();
 
 signals:
     void documentChanged();
