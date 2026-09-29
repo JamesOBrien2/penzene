@@ -2038,6 +2038,17 @@ std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSphe
 
 std::vector<Shift> predictShifts(const Document& doc) {
     static const ShiftTable table;
+    // Shifts follow the bonding, not where atoms are drawn, so dragging an atom reuses the last answer.
+    std::string key;
+    for (const Atom& a : doc.atoms)
+        key += std::to_string(a.z) + ',' + std::to_string(a.charge) + ',' + std::to_string(a.radicals) + ',' +
+               std::to_string(a.isotope) + ',' + a.label.toStdString() + ';';
+    for (const Bond& b : doc.bonds)
+        key += std::to_string(b.a) + '-' + std::to_string(b.b) + ',' + std::to_string(b.order) + ',' +
+               std::to_string(int(b.stereo)) + ';';
+    static thread_local std::string lastKey;
+    static thread_local std::vector<Shift> last;
+    if (!last.empty() && key == lastKey) return last;
     std::vector<Shift> out;
     const auto codes = hoseCodes(doc, 4);
     const auto info = atomInfo(doc);
@@ -2057,6 +2068,7 @@ std::vector<Shift> predictShifts(const Document& doc) {
         if (hydrogens[i] && doc.atoms[i].z != 1) look(1, s.proton, s.protonSpheres);
         if (s.carbonSpheres || s.protonSpheres) out.push_back(s);
     }
+    lastKey = key, last = out;
     return out;
 }
 
