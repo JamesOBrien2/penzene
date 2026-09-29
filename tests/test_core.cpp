@@ -1065,6 +1065,23 @@ TEST_CASE("a charge sits clear of the bonds around its atom (#494)") {
     }
 }
 
+TEST_CASE("a bond between two labels closer than their clearances isn't drawn over them (#496)") {
+    auto render = [](const Document& d) {
+        QImage img(400, 400, QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter p(&img);
+        p.translate(200, 200);
+        p.scale(20, 20);
+        paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+        return img;
+    };
+    Document d;
+    d.atoms = {{{-1.5, 0}, 10}, {{1.5, 0}, 10}};  // neon: no H either way
+    const QImage alone = render(d);
+    d.bonds.push_back({0, 1});
+    CHECK(render(d) == alone);
+}
+
 TEST_CASE(".penz files from every release still open, and save back the same (#117)") {
     const QStringList files = QDir(QString(PENZENE_TEST_DATA) + "/penz").entryList({"v*.penz"});
     CHECK(files.size() >= 8);  // v0.1.0 to v0.8.0, plus one per later release
