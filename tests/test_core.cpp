@@ -1909,6 +1909,10 @@ TEST_CASE("compound numbers keep scheme order, follow their molecules and keep s
         d.removeAtoms({0, 1, 2});  // ethanol: its number stays, free
         CHECK(d.texts[0].anchor == -1);
         CHECK(d.texts[1].anchor == benzene - 3);
+        Document cut = d;
+        cut.removeAtoms({d.texts[1].anchor});  // just its atom: it takes a neighbour of the same molecule
+        REQUIRE(cut.texts[1].anchor >= 0);
+        CHECK(edit::moleculeOf(cut, cut.texts[1].anchor).size() == 5);
         Document two;
         two.append(d, {});
         two.append(d, {});

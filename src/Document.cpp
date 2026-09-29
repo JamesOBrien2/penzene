@@ -342,6 +342,15 @@ void Document::removeAtom(int atom) {
 void Document::removeAtoms(const std::vector<int>& drop) {
     std::vector<int> remap(atoms.size(), 0);
     for (int i : drop) remap[i] = -1;
+    for (auto& t : texts) {  // a compound number whose atom goes takes the nearest of its molecule's that stays
+        std::vector<int> todo{t.anchor};
+        for (size_t k = 0; t.anchor >= 0 && remap[t.anchor] < 0 && k < todo.size(); ++k)
+            for (int nb : neighbors(todo[k]))
+                if (std::find(todo.begin(), todo.end(), nb) == todo.end()) {
+                    todo.push_back(nb);
+                    if (remap[nb] == 0 && remap[t.anchor] < 0) t.anchor = nb;
+                }
+    }
     std::vector<Atom> kept;
     for (size_t i = 0; i < atoms.size(); ++i)
         if (remap[i] != -1) remap[i] = int(kept.size()), kept.push_back(atoms[i]);
