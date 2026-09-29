@@ -1759,6 +1759,39 @@ void MainWindow::buildTools() {
         p.drawLine(QPointF(-2, -4), QPointF(-2, 4));
     });
     add(eraser, tr("Eraser (click an atom, bond, arrow or text)"), tool(T::Erase));
+    // Colour tool: paints atoms, bonds, arrows and text. Clicking the swatch opens the
+    // colours (CPK first); picking one chooses the tool.
+    auto colour = std::make_shared<QColor>(canvas_->colour());
+    const IconMaker colourIcon = paintedIcon([colour](QPainter& p, QColor ink) {
+        p.setPen(QPen(ink, 1));
+        p.setBrush(*colour);
+        p.drawRoundedRect(QRectF(5, 5, 14, 14), 3, 3);
+    });
+    auto* colourTool = add(colourIcon, tr("Colour: click the swatch to pick a colour, then click atoms, bonds, arrows "
+                                          "or text to paint them (again to clear)"),
+                           tool(T::Colour));
+    for (auto* b : palette->findChildren<QToolButton*>())
+        if (b->defaultAction() == colourTool) {
+            b->setPopupMode(QToolButton::InstantPopup);
+            b->setStyleSheet("QToolButton::menu-indicator { image: none; width: 0; }");
+            // CPK (Jmol) colours; sulfur darkened from #FFFF30 so it reads on white paper.
+            b->setMenu(colourMenu(b,
+                                  {Qt::black, QColor(0x30, 0x50, 0xF8), QColor(0xFF, 0x0D, 0x0D), QColor(0xD4, 0xB0, 0x00),
+                                   QColor(0xFF, 0x80, 0x00), QColor(0x90, 0xE0, 0x50), QColor(0x1F, 0xF0, 0x1F),
+                                   QColor(0xA6, 0x29, 0x29), QColor(0x94, 0x00, 0x94), QColor(0xE0, 0x66, 0x33),
+                                   QColor(0x90, 0x90, 0x90), QColor(0xFF, 0xB5, 0xB5)},
+                                  [this] { return canvas_->colour(); },
+                                  [=, this](QColor c) {
+                                      *colour = c;
+                                      canvas_->setColour(c);
+                                      canvas_->setTool(T::Colour);
+                                      colourTool->setChecked(true);
+                                      colourTool->setIcon(colourIcon());
+                                  },
+                                  {tr("Carbon"), tr("Nitrogen"), tr("Oxygen"), tr("Sulfur"), tr("Phosphorus"),
+                                   tr("Fluorine"), tr("Chlorine"), tr("Bromine"), tr("Iodine"), tr("Iron"),
+                                   tr("Carbon (grey)"), tr("Boron")}));
+        }
     const QPointF bondPts[] = {{0, 0}, {0.87, -0.5}};
     auto bondIcon = [&](int order, BondStereo st = BondStereo::None) {
         return docIcon(chainDoc({std::begin(bondPts), std::end(bondPts)}, order, st));
@@ -1876,40 +1909,6 @@ void MainWindow::buildTools() {
     };
     add(charge(true), tr("Positive charge: click an atom to add +1"), tool(T::ChargePlus));
     add(charge(false), tr("Negative charge: click an atom to add −1"), tool(T::ChargeMinus));
-    // Colour tool: paints atoms, bonds, arrows and text. Clicking the swatch opens the
-    // colours (CPK first); picking one chooses the tool.
-    auto colour = std::make_shared<QColor>(canvas_->colour());
-    const IconMaker colourIcon = paintedIcon([colour](QPainter& p, QColor ink) {
-        p.setPen(QPen(ink, 1));
-        p.setBrush(*colour);
-        p.drawRoundedRect(QRectF(5, 5, 14, 14), 3, 3);
-    });
-    auto* colourTool = add(colourIcon, tr("Colour: click the swatch to pick a colour, then click atoms, bonds, arrows "
-                                          "or text to paint them (again to clear)"),
-                           tool(T::Colour));
-    for (auto* b : palette->findChildren<QToolButton*>())
-        if (b->defaultAction() == colourTool) {
-            b->setPopupMode(QToolButton::InstantPopup);
-            b->setStyleSheet("QToolButton::menu-indicator { image: none; width: 0; }");
-            // CPK (Jmol) colours; sulfur darkened from #FFFF30 so it reads on white paper.
-            b->setMenu(colourMenu(b,
-                                  {Qt::black, QColor(0x30, 0x50, 0xF8), QColor(0xFF, 0x0D, 0x0D), QColor(0xD4, 0xB0, 0x00),
-                                   QColor(0xFF, 0x80, 0x00), QColor(0x90, 0xE0, 0x50), QColor(0x1F, 0xF0, 0x1F),
-                                   QColor(0xA6, 0x29, 0x29), QColor(0x94, 0x00, 0x94), QColor(0xE0, 0x66, 0x33),
-                                   QColor(0x90, 0x90, 0x90), QColor(0xFF, 0xB5, 0xB5)},
-                                  [this] { return canvas_->colour(); },
-                                  [=, this](QColor c) {
-                                      *colour = c;
-                                      canvas_->setColour(c);
-                                      canvas_->setTool(T::Colour);
-                                      colourTool->setChecked(true);
-                                      colourTool->setIcon(colourIcon());
-                                  },
-                                  {tr("Carbon"), tr("Nitrogen"), tr("Oxygen"), tr("Sulfur"), tr("Phosphorus"),
-                                   tr("Fluorine"), tr("Chlorine"), tr("Bromine"), tr("Iodine"), tr("Iron"),
-                                   tr("Carbon (grey)"), tr("Boron")}));
-        }
-
     startGroup(tr("Arrows"), docIcon(arrowDoc(ArrowKind::Reaction)));
     auto arrow = [this](ArrowKind k, bool curved, bool dashed = false, bool crossed = false) {
         return [this, k, curved, dashed, crossed] {

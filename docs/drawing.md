@@ -2,9 +2,9 @@
 
 ## Tools and the hotspot
 
-The rail on the left holds the tools in six groups: **Select** (select, eraser), **Bonds** (single,
-double, triple, wedge, hash, interaction, partial, chain), **Rings**, **Atoms** (element, charges,
-colour), **Arrows**, and **Shapes** (lines, boxes, ellipses, text). Click a group to open its tools
+The rail on the left holds the tools in six groups: **Select** (select, rotate in 3D, eraser, colour), **Bonds** (single,
+double, triple, wedge, hash, interaction, partial, chain), **Rings**, **Atoms** (element,
+charges), **Arrows**, and **Shapes** (lines, boxes, ellipses, text). Click a group to open its tools
 beside the rail. They stay open, so you can keep several on screen and drag each by its title or
 any bare part of it, or drag a corner to resize it (the tools reflow to fit); close one with its **✕**. Clicking a group also
 picks the tool you last used from it. Hover over a tool to see its key.
