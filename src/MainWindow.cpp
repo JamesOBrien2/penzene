@@ -266,6 +266,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     templateDock_->setObjectName("templates");
     templates_ = new QTreeWidget;
     templates_->setHeaderHidden(true);
+    templates_->setAccessibleName(tr("Templates"));
     templates_->setIconSize({56, 40});
     templates_->setContextMenuPolicy(Qt::CustomContextMenu);
     auto* templateCard = new QFrame;

@@ -2618,6 +2618,107 @@ TEST_CASE("accessibility: the hotspot is announced to screen readers (#112)") {
     CHECK(f.canvas.accessibleDescription() == "Hotspot: single bond, C1 to O2");
 }
 
+TEST_CASE("accessibility: the drawing's atoms, bonds, arrows and text can be read, found and selected (#536)") {
+    Fixture f;
+    Document d = *chem::fromSmiles("CCO");
+    Arrow curved{d.atoms[2].pos + QPointF(0, -8), (d.atoms[0].pos + d.atoms[1].pos) / 2};
+    curved.bend = 6, curved.fromAt = {2, -1}, curved.toAt = {0, 1};
+    d.arrows = {curved, Arrow{{0, 40}, {60, 40}}};
+    d.texts.push_back({{0, 70}, "heat"});
+    f.canvas.setDocumentSilently(d);
+    QAccessibleInterface* canvas = QAccessible::queryAccessibleInterface(&f.canvas);
+    REQUIRE(canvas);
+    auto find = [&](const QString& name) -> QAccessibleInterface* {
+        for (int i = 0; i < canvas->childCount(); ++i)
+            if (auto* c = canvas->child(i); c && c->text(QAccessible::Name) == name) return c;
+        return nullptr;
+    };
+    auto press = [](QAccessibleInterface* c) { c->actionInterface()->doAction(QAccessibleActionInterface::pressAction()); };
+
+    QAccessibleInterface* o = find("atom O3, 1 bond");
+    REQUIRE(o);
+    CHECK(o->parent() == canvas);
+    CHECK(canvas->child(canvas->indexOfChild(o)) == o);
+    const QPoint onScreen = f.canvas.viewport()->mapToGlobal(f.at(f.doc().atoms[2].pos));
+    CHECK(o->rect().contains(onScreen));
+    CHECK(canvas->childAt(onScreen.x(), onScreen.y()) == o);
+    press(o);
+    CHECK(f.canvas.selection() == QSet<int>{2});
+    CHECK(o->state().selected);
+    CHECK(o->state().focused);  // the hotspot: a hotkey now builds from the O
+    f.key("n");
+    CHECK(f.doc().atoms[2].z == 7);
+
+    REQUIRE(find("single bond, C2 to N3"));
+    press(find("single bond, C2 to N3"));
+    CHECK(f.canvas.selection() == QSet<int>{1, 2});
+    REQUIRE(find("curved arrow, from N3 to the C1–C2 bond"));
+    press(find("reaction arrow"));
+    CHECK(f.canvas.selectedArrows() == QSet<int>{1});
+    press(find("text: heat"));
+    CHECK(f.canvas.selectedTexts() == QSet<int>{0});
+
+    // A part stays as the pointer moves, stops being valid when the drawing changes, and is then dropped.
+    QAccessibleInterface* n = find("atom N3, 1 bond");
+    REQUIRE(n);
+    f.hover(f.doc().atoms[0].pos);
+    f.canvas.setTheme(Theme{});
+    CHECK(n->isValid());
+    const QAccessible::Id id = QAccessible::uniqueId(n);
+    const int before = canvas->childCount();
+    f.canvas.setSelection({2});
+    f.canvas.deleteSelection();
+    CHECK_FALSE(n->isValid());
+    CHECK(canvas->childCount() == before - 2);  // the N and its bond
+    CHECK(QAccessible::accessibleInterface(id) == nullptr);
+    CHECK_FALSE(find("atom N3, 1 bond"));
+}
+
+TEST_CASE("accessibility: every control is named, in the window, its closed flyouts and its dialogs (#536)") {
+    App app;
+    MainWindow w;
+    w.resize(1100, 750);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("CCO"));
+    canvas->selectAll();
+    QStringList unnamed;
+    auto walk = [&](QWidget* top, const QString& where) {
+        for (QWidget* c : top->findChildren<QWidget*>()) {
+            if (c->focusPolicy() == Qt::NoFocus && !qobject_cast<QAbstractButton*>(c) || qobject_cast<QLabel*>(c)) continue;  // not a control
+            if (c->objectName().startsWith("qt_") || qobject_cast<QAbstractScrollArea*>(c->parentWidget())) continue;  // Qt's own parts
+            bool inside = false;  // a combo box's list or a spin box's editor: read as the box
+            for (QWidget* p = c->parentWidget(); p; p = p->parentWidget()) inside |= qobject_cast<QComboBox*>(p) || qobject_cast<QAbstractSpinBox*>(p);
+            if (inside) continue;
+            if (auto* ai = QAccessible::queryAccessibleInterface(c); ai && ai->text(QAccessible::Name).trimmed().isEmpty())
+                unnamed << where + ": " + c->metaObject()->className() + " " + c->objectName() + " " + c->toolTip();
+        }
+    };
+    walk(&w, "window");
+    auto dialog = [&](const QString& what, const std::function<void()>& open) {
+        QTimer::singleShot(0, &w, [&, what] {
+            if (QWidget* modal = QApplication::activeModalWidget()) {
+                walk(modal, what);
+                if (auto* d = qobject_cast<QDialog*>(modal)) d->reject();
+                else modal->close();
+            }
+        });
+        open();
+        QApplication::processEvents();
+    };
+    // Every dialog a menu opens ("…"), except the system's own file, print and colour pickers.
+    for (QAction* a : w.findChildren<QAction*>()) {
+        const QString text = a->text();
+        if (text.endsWith(u'…') && a->isEnabled() && !text.contains("Open") && !text.contains("Save") && !text.contains("Print") &&
+            !text.contains("Export") && !text.contains("Colour"))
+            dialog(text, [a] { a->trigger(); });
+    }
+    dialog("atom properties", [&] { canvas->editAtomProperties(0); });
+    dialog("text", [&] { canvas->editText(-1, {}); });
+    INFO(unnamed.join("\n").toStdString());
+    CHECK(unnamed.isEmpty());
+}
+
 TEST_CASE("accessibility: an edit at the hotspot is announced too (#244)") {
     Fixture f;
     f.canvas.setDocumentSilently(*chem::fromSmiles("CC"));

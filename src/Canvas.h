@@ -64,6 +64,8 @@ public:
     void editText(int text, QPointF pos = {});  // text < 0: new text at pos
     int hotspotAtom() const { return hoverAtom_; }
     int hotspotBond() const { return hoverBond_; }
+    void setHotspot(int atom, int bond = -1);
+    quint64 revision() const { return revision_; }  // counts document changes, for accessibility
     QPointF viewCenter() const;
     void zoomBy(double factor);
     void fitToDocument();
@@ -136,6 +138,8 @@ private:
 
     QSet<int> selectedAtoms_, selectedArrows_, selectedTexts_;
     int hoverAtom_ = -1, hoverBond_ = -1;
+    quint64 revision_ = 0;
+    Document shown_;  // as last drawn: the revision counts real changes
     void announceHotspot();
 
     // Drag state

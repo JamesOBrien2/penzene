@@ -3,6 +3,8 @@
 #include "Edit.h"
 #include "Geometry.h"
 
+#include <QAccessible>
+#include <QAccessibleWidget>
 #include <QImage>
 #include <QNativeGestureEvent>
 #include <QInputDialog>
@@ -23,6 +25,7 @@
 #include <QPainterPath>
 #include <QPicture>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QScrollBar>
 #include <QUndoStack>
@@ -72,7 +75,217 @@ int bestToward(int count, QPointF dir, double minDot, F vectorOf) {
 
 // ---------------------------------------------------------------- canvas
 
+// How screen readers hear the drawing's parts: "O3", "atom O3, 2 bonds", "double bond, C1 to O3".
+static QString atomName(const Document& doc, int i) {
+    const Atom& a = doc.atoms[i];
+    return (a.label.isEmpty() ? QString::fromStdString(chem::symbol(a.z)) : a.label) + QString::number(i + 1);
+}
+
+static QString describeAtom(const Document& doc, int i) {
+    const int n = int(doc.neighbors(i).size());
+    return n == 1 ? Canvas::tr("atom %1, 1 bond").arg(atomName(doc, i))
+                  : Canvas::tr("atom %1, %2 bonds").arg(atomName(doc, i)).arg(n);
+}
+
+static QString describeBond(const Document& doc, int i) {
+    const Bond& b = doc.bonds[i];
+    const QString order = b.order == 3 ? Canvas::tr("triple") : b.order == 2 ? Canvas::tr("double") : Canvas::tr("single");
+    return Canvas::tr("%1 bond, %2 to %3").arg(order, atomName(doc, b.a), atomName(doc, b.b));
+}
+
+static QString describeArrow(const Document& doc, int i) {
+    const Arrow& a = doc.arrows[i];
+    QString what;
+    switch (a.kind) {
+    case ArrowKind::Reaction: what = a.bend ? Canvas::tr("curved arrow") : Canvas::tr("reaction arrow"); break;
+    case ArrowKind::Equilibrium: what = Canvas::tr("equilibrium arrow"); break;
+    case ArrowKind::Resonance: what = Canvas::tr("resonance arrow"); break;
+    case ArrowKind::Retro: what = Canvas::tr("retrosynthesis arrow"); break;
+    case ArrowKind::Fishhook: what = Canvas::tr("fishhook arrow"); break;
+    case ArrowKind::Line: what = Canvas::tr("line"); break;
+    case ArrowKind::Box: case ArrowKind::RoundedBox: what = Canvas::tr("box"); break;
+    case ArrowKind::Ellipse: what = Canvas::tr("ellipse"); break;
+    default: what = Canvas::tr("orbital"); break;
+    }
+    auto end = [&](std::array<int, 2> at) {
+        return at[1] >= 0 ? Canvas::tr("the %1–%2 bond").arg(atomName(doc, at[0]), atomName(doc, at[1])) : atomName(doc, at[0]);
+    };
+    if (a.fromAt[0] >= 0 && a.toAt[0] >= 0) return Canvas::tr("%1, from %2 to %3").arg(what, end(a.fromAt), end(a.toAt));
+    if (a.fromAt[0] >= 0) return Canvas::tr("%1, from %2").arg(what, end(a.fromAt));
+    if (a.toAt[0] >= 0) return Canvas::tr("%1, to %2").arg(what, end(a.toAt));
+    return what;
+}
+
+// The drawing's atoms, bonds, arrows and text as the canvas's accessible children (#536), after its
+// own widgets, so screen readers and automation tools can find, read and select them without a mouse.
+namespace {
+enum class Part { Atom, Bond, Arrow, Text };
+
+class CanvasPart : public QAccessibleInterface, public QAccessibleActionInterface {
+public:
+    CanvasPart(Canvas* c, Part part, int index) : canvas_(c), part_(part), index_(index), revision_(c->revision()) {}
+    // A part lasts until the document changes: the canvas then drops it and makes new ones.
+    bool isValid() const override { return canvas_ && canvas_->revision() == revision_; }
+    QObject* object() const override { return nullptr; }
+    QWindow* window() const override { return canvas_ ? canvas_->window()->windowHandle() : nullptr; }
+    QAccessibleInterface* parent() const override { return QAccessible::queryAccessibleInterface(canvas_.data()); }
+    QAccessibleInterface* child(int) const override { return nullptr; }
+    int childCount() const override { return 0; }
+    int indexOfChild(const QAccessibleInterface*) const override { return -1; }
+    QAccessibleInterface* childAt(int, int) const override { return nullptr; }
+    QAccessible::Role role() const override { return part_ == Part::Text ? QAccessible::StaticText : QAccessible::Graphic; }
+    void setText(QAccessible::Text, const QString&) override {}
+    QString text(QAccessible::Text t) const override {
+        if (t != QAccessible::Name || !isValid()) return {};
+        const Document& doc = canvas_->document();
+        switch (part_) {
+        case Part::Atom: return describeAtom(doc, index_);
+        case Part::Bond: return describeBond(doc, index_);
+        case Part::Arrow: return describeArrow(doc, index_);
+        case Part::Text: return Canvas::tr("text: %1").arg(doc.texts[index_].text);
+        }
+        return {};
+    }
+    QRect rect() const override {
+        if (!isValid()) return {};
+        const Document& doc = canvas_->document();
+        QRectF r;
+        switch (part_) {
+        case Part::Atom: {
+            const QPointF c = doc.atoms[index_].pos, half(0.3 * kBondLength, 0.3 * kBondLength);
+            r = QRectF(c - half, c + half);
+            break;
+        }
+        case Part::Bond: r = QRectF(doc.atoms[doc.bonds[index_].a].pos, doc.atoms[doc.bonds[index_].b].pos).normalized().adjusted(-1, -1, 1, 1); break;
+        case Part::Arrow: r = arrowPath(doc.arrows[index_]).boundingRect().adjusted(-1, -1, 1, 1); break;
+        case Part::Text: r = textPath(doc.texts[index_], documentStyle(doc)).boundingRect(); break;
+        }
+        const QRect onView = canvas_->mapFromScene(r).boundingRect();
+        return QRect(canvas_->viewport()->mapToGlobal(onView.topLeft()), onView.size());
+    }
+    QAccessible::State state() const override {
+        QAccessible::State s;
+        if (!isValid()) {
+            s.invalid = true;
+            return s;
+        }
+        s.selectable = true;
+        s.focusable = part_ == Part::Atom || part_ == Part::Bond;
+        const Document& doc = canvas_->document();
+        switch (part_) {
+        case Part::Atom:
+            s.selected = canvas_->selection().contains(index_);
+            s.focused = canvas_->hotspotAtom() == index_;
+            break;
+        case Part::Bond:
+            s.selected = canvas_->selection().contains(doc.bonds[index_].a) && canvas_->selection().contains(doc.bonds[index_].b);
+            s.focused = canvas_->hotspotBond() == index_;
+            break;
+        case Part::Arrow: s.selected = canvas_->selectedArrows().contains(index_); break;
+        case Part::Text: s.selected = canvas_->selectedTexts().contains(index_); break;
+        }
+        return s;
+    }
+    void* interface_cast(QAccessible::InterfaceType t) override {
+        return t == QAccessible::ActionInterface ? static_cast<QAccessibleActionInterface*>(this) : nullptr;
+    }
+    // Press selects just this part; SetFocus puts the hotspot on an atom or bond, for the hotkeys.
+    QStringList actionNames() const override {
+        return part_ == Part::Atom || part_ == Part::Bond ? QStringList{pressAction(), setFocusAction()} : QStringList{pressAction()};
+    }
+    QStringList keyBindingsForAction(const QString&) const override { return {}; }
+    void doAction(const QString& name) override {
+        if (!isValid()) return;
+        const Document& doc = canvas_->document();
+        if (name == setFocusAction() || name == pressAction()) {
+            if (part_ == Part::Atom) canvas_->setHotspot(index_);
+            if (part_ == Part::Bond) canvas_->setHotspot(-1, index_);
+        }
+        if (name != pressAction()) return;
+        switch (part_) {
+        case Part::Atom: canvas_->setSelection({index_}); break;
+        case Part::Bond: canvas_->setSelection({doc.bonds[index_].a, doc.bonds[index_].b}); break;
+        case Part::Arrow: canvas_->setSelection({}, {index_}); break;
+        case Part::Text: canvas_->setSelection({}, {}, {index_}); break;
+        }
+    }
+
+private:
+    QPointer<Canvas> canvas_;
+    Part part_;
+    int index_;
+    quint64 revision_;
+};
+
+class CanvasAccessible : public QAccessibleWidget {
+public:
+    explicit CanvasAccessible(Canvas* c) : QAccessibleWidget(c, QAccessible::Canvas) {}
+    ~CanvasAccessible() override { clear(); }
+    int childCount() const override {
+        sync();
+        return QAccessibleWidget::childCount() + int(ids_.size());
+    }
+    QAccessibleInterface* child(int i) const override {
+        const int widgets = QAccessibleWidget::childCount();
+        if (i < widgets) return QAccessibleWidget::child(i);
+        sync();
+        i -= widgets;
+        if (i >= int(ids_.size())) return nullptr;
+        if (!ids_[i]) {
+            const Document& doc = canvas()->document();
+            int k = i;
+            Part part = Part::Atom;
+            for (int n : {int(doc.atoms.size()), int(doc.bonds.size()), int(doc.arrows.size())}) {
+                if (k < n) break;
+                k -= n, part = Part(int(part) + 1);
+            }
+            ids_[i] = QAccessible::registerAccessibleInterface(new CanvasPart(canvas(), part, k));
+        }
+        return QAccessible::accessibleInterface(ids_[i]);
+    }
+    int indexOfChild(const QAccessibleInterface* c) const override {
+        if (const int i = QAccessibleWidget::indexOfChild(c); i >= 0) return i;
+        sync();
+        for (size_t i = 0; i < ids_.size(); ++i)
+            if (ids_[i] && QAccessible::accessibleInterface(ids_[i]) == c) return QAccessibleWidget::childCount() + int(i);
+        return -1;
+    }
+    QAccessibleInterface* childAt(int x, int y) const override {  // the smallest part there: an atom over its bonds and arrows
+        QAccessibleInterface* best = nullptr;
+        for (int i = QAccessibleWidget::childCount(); i < childCount(); ++i)
+            if (auto* c = child(i); c && c->rect().contains(x, y) && (!best || area(c) < area(best))) best = c;
+        return best ? best : QAccessibleWidget::childAt(x, y);
+    }
+
+private:
+    Canvas* canvas() const { return static_cast<Canvas*>(widget()); }
+    static qint64 area(QAccessibleInterface* c) { return qint64(c->rect().width()) * c->rect().height(); }
+    int parts() const {
+        const Document& doc = canvas()->document();
+        return int(doc.atoms.size() + doc.bonds.size() + doc.arrows.size() + doc.texts.size());
+    }
+    void sync() const {  // after a document change, the old parts go and new ones are made as asked for
+        if (revision_ == canvas()->revision()) return;
+        clear();
+        revision_ = canvas()->revision();
+        ids_.assign(parts(), 0);
+    }
+    void clear() const {
+        for (QAccessible::Id id : ids_)
+            if (id) QAccessible::deleteAccessibleInterface(id);
+        ids_.clear();
+    }
+    mutable std::vector<QAccessible::Id> ids_;
+    mutable quint64 revision_ = ~quint64(0);
+};
+}  // namespace
+
 Canvas::Canvas(QUndoStack* undo, QWidget* parent) : QGraphicsView(parent), undo_(undo) {
+    static const bool accessible = (QAccessible::installFactory([](const QString&, QObject* o) -> QAccessibleInterface* {
+        auto* c = qobject_cast<Canvas*>(o);
+        return c ? new CanvasAccessible(c) : nullptr;
+    }), true);
+    Q_UNUSED(accessible);
     setScene(new QGraphicsScene(-5000, -5000, 10000, 10000, this));
     setMouseTracking(true);
     setAccessibleName(tr("Drawing"));
@@ -221,6 +434,13 @@ void Canvas::fit(const Document& part) {
 
 // Cache the drawing as a QPicture; hover/selection repaints just replay it.
 void Canvas::refresh() {
+    if (!(doc_ == shown_)) {  // not for a hover or a theme: accessibility tools keep the parts they hold
+        shown_ = doc_, ++revision_;
+        if (QAccessible::isActive()) {
+            QAccessibleEvent reorder(this, QAccessible::ObjectReorder);
+            QAccessible::updateAccessibility(&reorder);
+        }
+    }
     picture_ = QPicture();
     QPainter p(&picture_);
     paintDocument(p, doc_, {theme_.ink, theme_.error});
@@ -285,23 +505,18 @@ bool Canvas::viewportEvent(QEvent* e) {
     return done;
 }
 
+void Canvas::setHotspot(int atom, int bond) {
+    hoverAtom_ = atom, hoverBond_ = atom >= 0 ? -1 : bond;
+    announceHotspot();
+    viewport()->update();
+}
+
 void Canvas::announceHotspot() {
-    auto name = [this](int i) {
-        const Atom& a = doc_.atoms[i];
-        return (a.label.isEmpty() ? QString::fromStdString(chem::symbol(a.z)) : a.label) + QString::number(i + 1);
-    };
     QString text;
     if (hoverAtom_ >= 0 && hoverAtom_ < int(doc_.atoms.size()))
-    {
-        const int n = int(doc_.neighbors(hoverAtom_).size());
-        text = n == 1 ? tr("Hotspot: atom %1, 1 bond").arg(name(hoverAtom_))
-                      : tr("Hotspot: atom %1, %2 bonds").arg(name(hoverAtom_)).arg(n);
-    }
-    else if (hoverBond_ >= 0 && hoverBond_ < int(doc_.bonds.size())) {
-        const Bond& b = doc_.bonds[hoverBond_];
-        const QString order = b.order == 3 ? tr("triple") : b.order == 2 ? tr("double") : tr("single");
-        text = tr("Hotspot: %1 bond, %2 to %3").arg(order, name(b.a), name(b.b));
-    }
+        text = tr("Hotspot: %1").arg(describeAtom(doc_, hoverAtom_));
+    else if (hoverBond_ >= 0 && hoverBond_ < int(doc_.bonds.size()))
+        text = tr("Hotspot: %1").arg(describeBond(doc_, hoverBond_));
     if (text != accessibleDescription()) setAccessibleDescription(text);  // also after an edit in place
 }
 
@@ -1409,6 +1624,7 @@ void Canvas::editText(int i, QPointF pos) {
         f.setPixelSize(16);
         edit->setFont(f);
         edit->setTabStopDistance(kTabSpaces * QFontMetricsF(f).horizontalAdvance(' '));
+        edit->setAccessibleName(tr("Text"));  // QInputDialog's label isn't its buddy in plain-text mode
     }
     if (dialog.exec() != QDialog::Accepted) return;
     // Keep leading spaces and tabs; they are deliberate indentation.
