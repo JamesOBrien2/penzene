@@ -72,7 +72,7 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
 
 ## Selecting and arranging
 
-- Drag to select; double-click selects a whole molecule. Drag a selection to move it, and drop an
+- Drag to select, or Alt+drag from empty space to draw a loop round what you want; double-click selects a whole molecule. Drag a selection to move it, and drop an
   atom on another to merge them.
 - The arrow keys nudge a selection (Shift for 10 points). Ctrl+arrow duplicates it across the next
   reaction arrow.

@@ -384,7 +384,8 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
     p->setBrush(Qt::NoBrush);
     if (drag_ == Drag::Rubber) {
         p->setPen(QPen(line, 0, Qt::DashLine));
-        p->drawRect(QRectF(pressPos_, curPos_).normalized());
+        if (lasso_.isEmpty()) p->drawRect(QRectF(pressPos_, curPos_).normalized());
+        else p->drawPolygon(lasso_);
     } else if (drag_ == Drag::Bond || drag_ == Drag::Chain) {
         p->setPen(QPen(line, 0.8));
         for (size_t k = 1; k < preview_.size(); ++k) p->drawLine(preview_[k - 1], preview_[k]);
@@ -538,6 +539,7 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
         } else {
             if (!shift) selectedAtoms_.clear(), selectedArrows_.clear(), selectedTexts_.clear();
             drag_ = Drag::Rubber;
+            lasso_ = e->modifiers() & Qt::AltModifier ? QPolygonF{pressPos_} : QPolygonF();  // Alt: a freehand loop
         }
         break;
     }
@@ -633,6 +635,7 @@ void Canvas::mouseMoveEvent(QMouseEvent* e) {
         refresh();
         return;
     }
+    if (drag_ == Drag::Rubber && !lasso_.isEmpty()) lasso_ << curPos_;
     if (drag_ == Drag::Bond || drag_ == Drag::Chain) preview_ = dragPath();
     if (drag_ == Drag::None) {
         // The hotspot sticks until the cursor reaches another atom or bond, so
@@ -699,7 +702,10 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
         }
         return;
     } else if (drag == Drag::Rubber) {
-        QRectF r = QRectF(pressPos_, curPos_).normalized();
+        QPainterPath r;
+        r.setFillRule(Qt::WindingFill);  // a loop that crosses itself takes in both lobes
+        if (lasso_.isEmpty()) r.addRect(QRectF(pressPos_, curPos_).normalized());
+        else r.addPolygon(lasso_), r.closeSubpath();
         for (int i = 0; i < int(doc_.atoms.size()); ++i)
             if (r.contains(doc_.atoms[i].pos)) selectedAtoms_.insert(i);
         for (int i = 0; i < int(doc_.arrows.size()); ++i)

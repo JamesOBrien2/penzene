@@ -181,6 +181,23 @@ TEST_CASE("select and delete, charges") {
     CHECK(f.canvas.document().atoms.size() == 2);
 }
 
+TEST_CASE("Alt-drag on empty space selects what a freehand loop takes in (#499)") {
+    Fixture f;
+    Document d;  // any rectangle round atoms 0 and 2 takes in atom 1 too
+    d.atoms = {{{0, 0}}, {{30, 10}}, {{40, 40}}};
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Select);
+    const std::vector<QPointF> loop{{-8, 0}, {0, -8}, {48, 40}, {40, 48}};  // a band along the diagonal
+    QTest::mousePress(f.canvas.viewport(), Qt::LeftButton, Qt::AltModifier, f.at(loop[0]));
+    for (QPointF p : loop) {
+        QMouseEvent move(QEvent::MouseMove, f.at(p), f.canvas.viewport()->mapToGlobal(f.at(p)), Qt::NoButton, Qt::LeftButton,
+                         Qt::AltModifier);
+        QApplication::sendEvent(f.canvas.viewport(), &move);
+    }
+    QTest::mouseRelease(f.canvas.viewport(), Qt::LeftButton, Qt::AltModifier, f.at(loop.back()));
+    CHECK(f.canvas.selection() == QSet<int>{0, 2});
+}
+
 TEST_CASE("insert centres the fragment and selects it") {
     Fixture f;
     auto frag = chem::fromSmiles("CCO");
