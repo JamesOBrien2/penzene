@@ -1080,7 +1080,7 @@ bool MainWindow::save() {
 
 bool MainWindow::saveAs() {
     const QString v3000 = tr("MDL Molfile V3000 (*.mol)");
-    const QString penz1 = tr("Penzene 1 (single page) (*.penz)");  // what Penzene 1.x opens (#404)
+    const QString penz1 = tr("Penzene 1.x (*.penz)");  // version 1, which Penzene 1.x opens (#404)
     QString filter;
     QString path = QFileDialog::getSaveFileName(this, tr("Save As"), path_,
                                                 tr("Penzene document (*.penz);;") + penz1 + tr(";;MDL Molfile (*.mol);;") + v3000 +

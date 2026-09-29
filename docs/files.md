@@ -46,7 +46,7 @@ Version 1, which Penzene 1.x writes, is one page's drawing with the format, vers
 beside its atoms: `{"format": "penzene", "version": 1, "atoms": [...], "bonds": [...], ...}`. Its
 other pages (Penzene 1.2 on) follow in its `pages` array, each a version 1 document of its own.
 The clipboard and the drawing inside exported SVG, PNG and PDF files are still version 1.
-Penzene 1.x can't open version 2, so Save As offers **Penzene 1 (single page)**: a
+Penzene 1.x can't open version 2, so Save As offers **Penzene 1.x**: a
 version 1 file, which those versions open (before 1.2, the first page only).
 
 ### Versions
