@@ -138,7 +138,7 @@ TEST_CASE("a peptide from its one- or three-letter sequence (#503)") {
     const auto gfls = chem::fromSequence("GFLS");
     REQUIRE(gfls);
     CHECK(chem::properties(*gfls)->formula == "C20H30N4O6");
-    for (const char* same : {"Gly-Phe-Leu-Ser", "GLY PHE LEU SER", " G F L S "}) {
+    for (const char* same : {"Gly-Phe-Leu-Ser", "GLY PHE LEU SER", " G F L S ", "H-Gly-Phe-Leu-Ser-OH", "Gly-L-Phe-Leu-Ser"}) {
         INFO(same);
         const auto doc = chem::fromSequence(same);
         REQUIRE(doc);
@@ -149,6 +149,10 @@ TEST_CASE("a peptide from its one- or three-letter sequence (#503)") {
     CHECK(chem::toSmiles(*chem::fromSequence("a")) != chem::toSmiles(*chem::fromSequence("A")));  // D- and L-alanine
     CHECK_FALSE(chem::fromSequence(""));
     CHECK_FALSE(chem::fromSequence("G1S"));
+    CHECK(chem::toSmiles(*chem::fromSequence("Ala-D-Phe")) == chem::toSmiles(*chem::fromSequence("Af")));  // D-phenylalanine (#570)
+    CHECK(chem::properties(*chem::fromSequence("H-GLY-OH"))->formula == "C2H5NO2");
+    for (const char* bad : {"Gly-Xyz", "Ac-Gly-NH2", "Ala-D-D-Phe", "G-F-L"})  // refused, not read as one-letter codes
+        CHECK_FALSE(chem::fromSequence(bad));
 }
 
 TEST_CASE("a peptide's side chains keep clear of the backbone's N-H (#559)") {

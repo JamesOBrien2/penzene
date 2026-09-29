@@ -411,16 +411,22 @@ std::optional<Document> fromSequence(const QString& sequence) {
         {"ala", 'A'}, {"arg", 'R'}, {"asn", 'N'}, {"asp", 'D'}, {"cys", 'C'}, {"gln", 'Q'}, {"glu", 'E'},
         {"gly", 'G'}, {"his", 'H'}, {"ile", 'I'}, {"leu", 'L'}, {"lys", 'K'}, {"met", 'M'}, {"phe", 'F'},
         {"pro", 'P'}, {"ser", 'S'}, {"thr", 'T'}, {"trp", 'W'}, {"tyr", 'Y'}, {"val", 'V'}};
-    // Three-letter codes: Gly-Phe or GLY PHE; a lone one only as written (Gly), since GLY is also Gly-Leu-Tyr.
-    const QStringList words = sequence.split(QRegularExpression("[\\s-]+"), Qt::SkipEmptyParts);
-    const bool three = !words.isEmpty() && std::all_of(words.begin(), words.end(), [&](const QString& w) {
-        return codes.contains(w.toLower()) && (words.size() > 1 || w == w.left(1).toUpper() + w.mid(1).toLower());
-    });
+    // Three-letter codes: Gly-Phe or GLY PHE, with H-…-OH free ends and D- or L- before a residue; a lone
+    // unhyphenated one only as written (Gly), since GLY is also Gly-Leu-Tyr.
+    QStringList words = sequence.split(QRegularExpression("[\\s-]+"), Qt::SkipEmptyParts);
+    const bool hyphens = sequence.contains('-');
+    if (hyphens && words.size() > 1 && words.first() == "H") words.removeFirst();
+    if (hyphens && words.size() > 1 && words.last() == "OH") words.removeLast();
     QString letters;
-    if (three)
-        for (const QString& w : words) letters += codes[w.toLower()];
-    else
-        letters = words.join("");  // one-letter, lower case for D residues
+    bool three = !words.isEmpty();
+    for (int i = 0; i < words.size() && three; ++i) {
+        const QString w = words[i].toLower();
+        const bool prefix = (words[i] == "D" || words[i] == "L") && i + 1 < words.size() && codes.contains(words[i + 1].toLower());
+        three = prefix || (codes.contains(w) && (hyphens || words.size() > 1 || words[i] == words[i].left(1).toUpper() + w.mid(1)));
+        if (three && !prefix) letters += i > 0 && words[i - 1] == "D" ? codes[w].toLower() : codes[w];
+    }
+    if (!three && hyphens) return std::nullopt;  // Ala-X-Phe: refused, not read as one-letter codes
+    if (!three) letters = sequence.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts).join("");  // one-letter, lower case for D
     if (letters.isEmpty()) return std::nullopt;
     std::unique_ptr<RWMol> mol;
     try {
