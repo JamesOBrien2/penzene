@@ -7,7 +7,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 ## 1.8.0 (2026-09-29)
 
 - **Mass spec for the SI**: copy an HRMS line ("[M+H]+ calcd for C9H9O4 181.0495"), export the isotope pattern as CSV, and list the EI ions to look for (#398, #554). <!-- icon: chart-bar -->
-- **Peptides**: File → Import → Peptide Sequence… (and `--peptide`) draws `GFLS` or `Gly-Phe-Leu-Ser` with a straight backbone and side chains clear of each N–H (#503, #502, #559). <!-- icon: hexagons -->
+- **Peptides**: File → Import → Peptide Sequence… (and `--peptide`) draws `GFLS`, `Gly-Phe-Leu-Ser` or `H-Gly-D-Phe-OH` with a straight backbone and side chains clear of each N–H (#503, #502, #559, #570). <!-- icon: hexagons -->
 - **Screen readers and the keyboard**: every atom, bond, arrow and text can be read and pressed; `G` picks atoms one by one, `>` … `>` draws a curved arrow and Alt+↑/↓ bends it (#536, #541, #549). <!-- icon: sparkles -->
 - Arrange → Add Arrow / Add Text After Selection place them without the mouse; Arrange → Flip Curved Arrow turns one over (#549).
 - Macrocycles are laid out more cleanly: cyclophane bridges stand clear of their rings (#502).
