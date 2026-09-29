@@ -1029,6 +1029,42 @@ TEST_CASE("arrow heads: even on a tight curve, and a half head has no sliver (#2
     CHECK(std::min(inkBeside(hook, 1), inkBeside(hook, -1)) == 0);
 }
 
+TEST_CASE("a charge sits clear of the bonds around its atom (#494)") {
+    // The box of the charge's own pixels (ink only with it), grown by 0.4 pt, holds no other ink.
+    for (const char* smiles : {"C[N+](C)(C)C", "C[N+](=O)[O-]", "C=[N+]=[N-]", "CC[N+](C)(C)CC", "CC(C)(C)[C+](C)C", "C[n+]1ccccc1"}) {
+        INFO(smiles);
+        auto doc = chem::fromSmiles(smiles);
+        REQUIRE(doc);
+        const auto at = std::find_if(doc->atoms.begin(), doc->atoms.end(), [](const Atom& a) { return a.charge > 0; });
+        REQUIRE(at != doc->atoms.end());
+        const double k = 20;
+        auto render = [&](const Document& d) {
+            QImage img(800, 800, QImage::Format_ARGB32);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            p.translate(400, 400);
+            p.scale(k, k);
+            p.translate(-at->pos);
+            paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+            return img;
+        };
+        const QImage with = render(*doc);
+        Document bare = *doc;
+        bare.atoms[at - doc->atoms.begin()].charge = 0;
+        const QImage without = render(bare);
+        QRect glyph;
+        for (int y = 0; y < 800; ++y)
+            for (int x = 0; x < 800; ++x)
+                if (qGray(with.pixel(x, y)) < 128 && qGray(without.pixel(x, y)) >= 128) glyph |= QRect(x, y, 1, 1);
+        REQUIRE(glyph.isValid());
+        int clash = 0;
+        const QRect near = glyph.adjusted(-8, -8, 8, 8) & with.rect();
+        for (int y = near.top(); y <= near.bottom(); ++y)
+            for (int x = near.left(); x <= near.right(); ++x) clash += qGray(without.pixel(x, y)) < 128;
+        CHECK(clash == 0);
+    }
+}
+
 TEST_CASE(".penz files from every release still open, and save back the same (#117)") {
     const QStringList files = QDir(QString(PENZENE_TEST_DATA) + "/penz").entryList({"v*.penz"});
     CHECK(files.size() >= 8);  // v0.1.0 to v0.8.0, plus one per later release

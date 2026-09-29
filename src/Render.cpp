@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <limits>
 #include <numbers>
+#include <optional>
 #include <tuple>
 #include <utility>
 #include <numeric>
@@ -142,6 +143,60 @@ static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const D
 // below/above when bonds leave neither side free (a middle CH2).
 enum class HSide { Right, Left, Below, Above };
 
+// Which way an atom's charge sits from it (y grows down): none for the usual upper right (after
+// an H on the right), unless a bond or an H above comes within 50° of it (N=O of a nitro, R4N+,
+// =N+=), then the middle of the widest gap that isn't inside a ring, ties to the upper right (#494).
+static std::optional<QPointF> chargeDirection(const Document& doc, int i, int hydrogens, HSide side) {
+    constexpr double upRight = -std::numbers::pi / 4;
+    if (hydrogens && side == HSide::Right) return std::nullopt;
+    std::vector<std::pair<double, int>> taken;  // (angle, neighbour or -1)
+    for (const Bond& b : doc.bonds)
+        if (b.a == i || b.b == i) {
+            const int nb = b.a == i ? b.b : b.a;
+            const QPointF d = doc.atoms[nb].pos - doc.atoms[i].pos;
+            taken.push_back({std::atan2(d.y(), d.x()), nb});
+        }
+    if (hydrogens) taken.push_back({side == HSide::Left ? std::numbers::pi : side == HSide::Below ? std::numbers::pi / 2 : -std::numbers::pi / 2, -1});
+    if (hydrogens > 1 && (side == HSide::Above || side == HSide::Below))  // the H's count, down or up to its right
+        taken.push_back({side == HSide::Above ? -std::numbers::pi / 3 : std::numbers::pi / 3, -1});
+    const auto away = [](double x, double y) { return std::abs(std::remainder(x - y, 2 * std::numbers::pi)); };
+    if (std::all_of(taken.begin(), taken.end(), [&](auto t) { return away(t.first, upRight) > 50 * std::numbers::pi / 180; }))
+        return std::nullopt;
+    if (!massNumber(doc.atoms[i]).isEmpty()) taken.push_back({-3 * std::numbers::pi / 4, -1});
+    // Whether neighbours u and v close a ring of up to 8 through atom i: the gap between them is its inside.
+    const auto ring = [&](int u, int v) {
+        std::vector<int> seen{i, u}, front{u};
+        for (int step = 0; step < 6 && !front.empty(); ++step) {
+            std::vector<int> next;
+            for (int x : front)
+                for (const Bond& b : doc.bonds) {
+                    const int y = b.a == x ? b.b : b.b == x ? b.a : -1;
+                    if (y == v) return true;
+                    if (y >= 0 && std::find(seen.begin(), seen.end(), y) == seen.end()) seen.push_back(y), next.push_back(y);
+                }
+            front = std::move(next);
+        }
+        return false;
+    };
+    std::sort(taken.begin(), taken.end());
+    double best = upRight, score = -1e9;
+    for (size_t k = 0; k < taken.size(); ++k) {
+        const auto [from, u] = taken[k];
+        const auto [to, v] = taken[(k + 1) % taken.size()];
+        const double width = (k + 1 < taken.size() ? to : to + 2 * std::numbers::pi) - from, mid = from + width / 2;
+        const double sc = width - 0.25 * away(mid, upRight) - (u >= 0 && v >= 0 && width < std::numbers::pi && ring(u, v) ? 10 : 0);
+        if (sc > score) best = mid, score = sc;
+    }
+    return QPointF(std::cos(best), std::sin(best));
+}
+
+// Where a charge `c` in font `sub` is drawn from, its glyph centred just past `clear` along `dir`.
+static QPointF chargeAt(QPointF pos, QPointF dir, double clear, const QString& c, const QFont& sub) {
+    const QFontMetricsF sm(sub);
+    const QRectF glyph(-sm.horizontalAdvance(c) / 2, -sm.capHeight() / 2, sm.horizontalAdvance(c), sm.capHeight());
+    return pos + dir * (clear + exitAlong(glyph, dir) + 0.8) + QPointF(glyph.left(), -glyph.top());
+}
+
 static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HSide side, const DrawingStyle& st) {
     const bool hLeft = side == HSide::Left;
     const auto& a = doc.atoms[i];
@@ -177,7 +232,9 @@ static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HS
     if (a.charge) {
         QString c = QString(a.charge > 0 ? "+" : "−");
         if (std::abs(a.charge) > 1) c.prepend(QString::number(std::abs(a.charge)));
-        drawText(p, c, {right, base - fm.capHeight() * 0.7}, sub);
+        if (const auto d = chargeDirection(doc, i, hydrogens, side))
+            drawText(p, c, chargeAt(a.pos, *d, exitAlong(QRectF(-w / 2, -fm.capHeight() / 2, w, fm.capHeight()), *d), c, sub), sub);
+        else drawText(p, c, {right, base - fm.capHeight() * 0.7}, sub);  // after any H
     }
 }
 
@@ -709,7 +766,8 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             QFont sub = labelFont(st, 0.7);
             QString c = QString(a.charge > 0 ? "+" : "−");
             if (std::abs(a.charge) > 1) c.prepend(QString::number(std::abs(a.charge)));
-            drawText(p, c, a.pos + QPointF(2, -3), sub);
+            const auto d = chargeDirection(doc, int(i), 0, HSide::Right);
+            drawText(p, c, d ? chargeAt(a.pos, *d, 2.5, c, sub) : a.pos + QPointF(2, -3), sub);
         }
         if (info[i].valenceError && !labeled[i]) p.drawEllipse(a.pos, 3, 3);
     }
@@ -748,7 +806,10 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             const HSide s = hSide(int(i));
             taken.push_back(s == HSide::Right ? 0 : s == HSide::Left ? std::numbers::pi : s == HSide::Below ? std::numbers::pi / 2 : -std::numbers::pi / 2);
         }
-        if (a.charge) taken.push_back(-std::numbers::pi / 4);  // up and to the right
+        if (a.charge) {  // its corner
+            const QPointF c = chargeDirection(doc, int(i), labeled[i] ? info[i].hydrogens : 0, hSide(int(i))).value_or(QPointF(1, -1));
+            taken.push_back(std::atan2(c.y(), c.x()));
+        }
         if (doc.showAtomNumbers || a.map) {  // the atom's number keeps its place (#349)
             const QPointF d = numberDirection(int(i));
             taken.push_back(std::atan2(d.y(), d.x()));

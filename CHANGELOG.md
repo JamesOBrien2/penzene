@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- A charge no longer sits on a bond: when a bond leaves an atom toward the upper right (R₄N⁺, a nitro group, =N⁺=), its charge moves to the widest gap between the bonds instead (#494).
 - Opening a file that has been moved or deleted says it doesn't exist, instead of that it isn't a structure file, and Open Recent drops it (unless its whole folder is missing, as on a drive that isn't plugged in).
 - Python: `read` of a missing file raises `FileNotFoundError` (still a `ValueError`, so existing `except ValueError` keeps working), and an unknown `style` names the styles it accepts.
 - Quitting on macOS no longer aborts inside Qt: the ChemDraw clipboard converter is left for Qt to delete, as it expects.
