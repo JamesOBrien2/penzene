@@ -995,6 +995,34 @@ TEST_CASE("a CDXML file that starts with a byte order mark opens (#244)") {
     CHECK(chem::toSmiles(*doc) == "CC(=O)Oc1ccccc1C(=O)O");
 }
 
+TEST_CASE("separate ions and molecules from SMILES don't overlap") {
+    // Each single-atom fragment's label, drawn alone, keeps clear of the others'.
+    for (const char* smiles : {"[Na+].[Cl-]", "O.O.O", "[Li+].[Al+3].[H-].[H-].[H-].[H-]"}) {
+        INFO(smiles);
+        const auto doc = chem::fromSmiles(smiles);
+        REQUIRE(doc);
+        std::vector<QRect> boxes;
+        for (const Atom& a : doc->atoms) {
+            Document one;
+            one.atoms = {a};
+            QImage img(1600, 400, QImage::Format_ARGB32);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            p.translate(100, 200);
+            p.scale(4, 4);
+            p.translate(-doc->atoms[0].pos);
+            paintDocument(p, one, {Qt::black, Qt::black, 0.6});
+            p.end();
+            QRect ink;
+            for (int y = 0; y < img.height(); ++y)
+                for (int x = 0; x < img.width(); ++x)
+                    if (qGray(img.pixel(x, y)) < 128) ink |= QRect(x, y, 1, 1);
+            for (const QRect& b : boxes) CHECK_FALSE(b.intersects(ink));
+            boxes.push_back(ink);
+        }
+    }
+}
+
 TEST_CASE("arrow heads: even on a tight curve, and a half head has no sliver (#221)") {
     // Ink either side of the head's axis, which runs from where the shaft is 4.8 pt (the head's
     // notch) back from the tip. `side` +1 or -1; samples the head, not the shaft behind it.

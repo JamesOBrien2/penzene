@@ -283,6 +283,30 @@ static void layout(RWMol& mol) {
     params.canonOrient = true;
     params.useRingTemplates = true;
     RDDepict::compute2DCoords(mol, params);
+    // RDKit packs separate fragments by their atoms alone, so the labels of ions and small
+    // molecules run into each other (Na⁺Cl⁻, 3 H₂O): line them up left to right instead.
+    std::vector<std::vector<int>> frags;
+    if (RDKit::MolOps::getMolFrags(mol, frags) < 2) return;
+    auto& conf = mol.getConformer();
+    double x = 0;
+    for (const auto& f : frags) {  // in SMILES order
+        double lo = 1e9, hi = -1e9, top = 1e9, bottom = -1e9;
+        for (int i : f) {
+            const auto* a = mol.getAtomWithIdx(i);
+            const auto& p = conf.getAtomPos(i);
+            // ponytail: a label's extent guessed at 0.65 Å a character, its first letter centred on the atom.
+            int chars = 0;
+            if (a->getAtomicNum() != 6 || a->getFormalCharge() || !a->getDegree()) {
+                const int h = int(a->getTotalNumHs()), q = std::abs(a->getFormalCharge());
+                chars = int(a->getSymbol().size()) + (h ? 1 + (h > 1) : 0) + (q ? 1 + (q > 1) : 0);
+            }
+            lo = std::min(lo, p.x - (chars ? 0.35 : 0));
+            hi = std::max(hi, p.x + (chars ? 0.65 * chars - 0.3 : 0));
+            top = std::min(top, p.y), bottom = std::max(bottom, p.y);
+        }
+        for (int i : f) conf.getAtomPos(i) += RDGeom::Point3D(x - lo, -(top + bottom) / 2, 0);
+        x += hi - lo + 0.6;
+    }
 }
 
 // scale 0: normalise whatever bond length the source used to ours.
