@@ -23,6 +23,7 @@
 #include <GraphMol/new_canon.h>
 #include <GraphMol/SmilesParse/SmilesParse.h>
 #include <GraphMol/SmilesParse/SmilesWrite.h>
+#include <GraphMol/Substruct/SubstructMatch.h>
 
 #include <QDateTime>
 #include <QFile>
@@ -276,12 +277,24 @@ static bool perceive(RWMol& mol, bool aromatic = true) {
     return true;
 }
 
-// ponytail: RDKit depictor + ring templates. CoordGen looks nicer for macrocycles,
-// but its preferCoordGen switch is a global the Windows DLL doesn't export.
+// What RDKit's own depictor crowds (#502): a macrocycle (a cyclophane's bridge crossed a ring)
+// or a peptide (each C=O ran into the next NH). CoordGen lays these out cleanly, but turns and
+// crowds everyday molecules, so it's only for them.
+static bool forCoordGen(RWMol& mol) {
+    if (!mol.getRingInfo()->isInitialized()) RDKit::MolOps::fastFindRings(mol);
+    for (const auto& ring : mol.getRingInfo()->atomRings())
+        if (ring.size() >= 9) return true;
+    static const std::unique_ptr<RWMol> peptideBond(RDKit::SmartsToMol("[CX4][CX3](=O)[NX3][CX4]"));
+    return RDKit::SubstructMatch(mol, *peptideBond).size() >= 2;  // a tripeptide or longer
+}
+
+// RDKit's depictor with its ring templates, or CoordGen (through it) where that does better.
 static void layout(RWMol& mol) {
     RDDepict::Compute2DCoordParameters params;
     params.canonOrient = true;
     params.useRingTemplates = true;
+    RDDepict::preferCoordGen = true;  // honoured only where forceRDKit is off
+    params.forceRDKit = !forCoordGen(mol);
     RDDepict::compute2DCoords(mol, params);
     // RDKit packs separate fragments by their atoms alone, so the labels of ions and small
     // molecules run into each other (Na⁺Cl⁻, 3 H₂O): line them up left to right instead.
