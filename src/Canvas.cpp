@@ -156,7 +156,6 @@ void Canvas::selectAll() {
 // Drops every item not in the given sets.
 static Document keepOnly(const Document& doc, const QSet<int>& atoms, const QSet<int>& arrows, const QSet<int>& texts) {
     Document out = doc;
-    out.page.clear();  // a selection exports as just the drawing
     std::vector<int> drop;
     for (int i = 0; i < int(doc.atoms.size()); ++i)
         if (!atoms.contains(i)) drop.push_back(i);
@@ -171,7 +170,9 @@ static Document keepOnly(const Document& doc, const QSet<int>& atoms, const QSet
 
 Document Canvas::selectedSubset() const {
     if (selectedAtoms_.isEmpty() && selectedArrows_.isEmpty() && selectedTexts_.isEmpty()) return doc_;
-    return keepOnly(doc_, selectedAtoms_, selectedArrows_, selectedTexts_);
+    Document out = keepOnly(doc_, selectedAtoms_, selectedArrows_, selectedTexts_);
+    out.page.clear();  // a selection exports as just the drawing; Delete keeps the page (#492)
+    return out;
 }
 
 void Canvas::deleteSelection() {

@@ -1528,6 +1528,9 @@ TEST_CASE("page mode: shown, saved, exported at page size (#105)") {
     CHECK(std::abs(img.height() - 684) <= 1);
     canvas->selectAll();
     CHECK(canvas->selectedSubset().page.isEmpty());  // a selection exports just the drawing
+    canvas->setSelection({0});
+    canvas->deleteSelection();
+    CHECK(canvas->document().page == "ACS single column");  // but deleting from it keeps the page (#492)
     if (auto out = qgetenv("PENZENE_PAGE_SHOT"); !out.isEmpty()) {
         w.resize(900, 900);
         w.show();
