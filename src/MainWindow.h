@@ -77,6 +77,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* e) override;
+    void resizeEvent(QResizeEvent* e) override;
     void dragEnterEvent(QDragEnterEvent* e) override;  // a file from Finder or Explorer
     void dropEvent(QDropEvent* e) override;            // opens, as File → Open does
     bool eventFilter(QObject* watched, QEvent* e) override;
