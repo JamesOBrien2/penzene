@@ -138,7 +138,7 @@ TEST_CASE("a peptide from its one- or three-letter sequence (#503)") {
     const auto gfls = chem::fromSequence("GFLS");
     REQUIRE(gfls);
     CHECK(chem::properties(*gfls)->formula == "C20H30N4O6");
-    for (const char* same : {"Gly-Phe-Leu-Ser", "GLY PHE LEU SER", " G F L S "}) {
+    for (const char* same : {"Gly-Phe-Leu-Ser", "GLY PHE LEU SER", " G F L S ", "H-Gly-Phe-Leu-Ser-OH", "Gly-L-Phe-Leu-Ser"}) {
         INFO(same);
         const auto doc = chem::fromSequence(same);
         REQUIRE(doc);
@@ -149,6 +149,10 @@ TEST_CASE("a peptide from its one- or three-letter sequence (#503)") {
     CHECK(chem::toSmiles(*chem::fromSequence("a")) != chem::toSmiles(*chem::fromSequence("A")));  // D- and L-alanine
     CHECK_FALSE(chem::fromSequence(""));
     CHECK_FALSE(chem::fromSequence("G1S"));
+    CHECK(chem::toSmiles(*chem::fromSequence("Ala-D-Phe")) == chem::toSmiles(*chem::fromSequence("Af")));  // D-phenylalanine (#570)
+    CHECK(chem::properties(*chem::fromSequence("H-GLY-OH"))->formula == "C2H5NO2");
+    for (const char* bad : {"Gly-Xyz", "Ac-Gly-NH2", "Ala-D-D-Phe", "G-F-L"})  // refused, not read as one-letter codes
+        CHECK_FALSE(chem::fromSequence(bad));
 }
 
 TEST_CASE("a peptide's side chains keep clear of the backbone's N-H (#559)") {
@@ -1838,6 +1842,41 @@ TEST_CASE("predicted 13C and 1H shifts: benzene, ethanol (#403)") {
     CHECK(ethanol[2].protonSpheres > 0);
 }
 
+TEST_CASE("predicted spectra: one stick per set of equivalent atoms, for the chosen molecule (#444)") {
+    const Document d = *chem::fromSmiles("CCO.Cc1ccccc1");  // ethanol, then toluene (atoms 3-9)
+    auto counts = [](const std::vector<chem::NmrStick>& sticks) {
+        std::vector<int> out;
+        for (const auto& k : sticks) out.push_back(k.count);
+        return out;
+    };
+    const std::vector<int> toluene{3, 4, 5, 6, 7, 8, 9};
+    const auto carbon = chem::nmrSticks(d, false, toluene);
+    CHECK(counts(carbon) == std::vector<int>{1, 2, 2, 1, 1});  // ipso, ortho, meta, para, CH3 (highest ppm first)
+    for (size_t k = 1; k < carbon.size(); ++k) CHECK(carbon[k - 1].ppm >= carbon[k].ppm);
+    for (const auto& k : carbon)
+        for (int a : k.atoms) CHECK(a >= 3);  // the drawing's own indices, so a stick can light its atoms
+    const auto proton = chem::nmrSticks(d, true, toluene);
+    int hydrogens = 0;
+    for (const auto& k : proton) hydrogens += k.count;
+    CHECK(hydrogens == 8);
+    CHECK(proton.back().count == 3);  // the CH3, furthest upfield
+    auto ethanol = counts(chem::nmrSticks(d, true, {0, 1, 2}));
+    std::sort(ethanol.begin(), ethanol.end());
+    CHECK(ethanol == std::vector<int>{1, 2, 3});  // OH, CH2, CH3
+    QStringList split;  // first order: CH3 by CH2 a triplet, CH2 by CH3 a quartet (OH exchanges), OH a singlet
+    for (const auto& k : chem::nmrSticks(d, true, {0, 1, 2})) split << QString::number(k.count) + k.multiplicity();
+    split.sort();
+    CHECK(split == QStringList{"1s", "2q", "3t"});
+    CHECK(chem::nmrSticks(d, true, {3}).at(0).multiplicity() == "s");  // toluene's CH3: no H next door
+    CHECK(chem::nmrSticks(*chem::fromSmiles("C1CCCCC1"), true).at(0).multiplicity() == "s");  // equivalent H don't split each other
+    const QString h = chem::nmrLine(d, true, {0, 1, 2});  // for the SI (#566)
+    CHECK(h.startsWith("1H NMR (predicted) δ "));
+    CHECK(h.contains(QRegularExpression(R"(\d\.\d\d \(q, 2H\), .*\d\.\d\d \(t, 3H\)\.$)")));
+    CHECK(QRegularExpression(R"(^13C NMR \(predicted\) δ (\d+\.\d, ){4}\d+\.\d\.$)").match(chem::nmrLine(d, false, {3, 4, 5, 6, 7, 8, 9})).hasMatch());
+    CHECK(chem::nmrLine(*chem::fromSmiles("[Na+].[Cl-]"), true).isEmpty());
+    CHECK(chem::nmrSticks(d, true).size() == proton.size() + 3);  // everything
+}
+
 TEST_CASE("predicted shifts follow the bonds, not where the atoms are drawn") {
     auto doc = *chem::fromSmiles("CCO");
     const auto before = chem::predictShifts(doc);
@@ -1922,4 +1961,22 @@ TEST_CASE("compound numbers keep scheme order, follow their molecules and keep s
         CHECK(back->texts == d.texts);
         CHECK(chem::toCdxml(d).contains(R"(face="1")"));  // bold in ChemDraw too
     }
+}
+
+TEST_CASE("a spectrum's legend takes the emptier top corner and the sticks keep clear of it (#444)") {
+    const QRectF plot(0, 0, 400, 200);
+    const QSizeF size(100, 80);
+    auto clear = [&](const Legend& l, const std::vector<QPointF>& sticks) {
+        for (QPointF s : sticks)
+            if (s.x() > l.rect.left() && s.x() < l.rect.right()) CHECK(plot.bottom() - s.y() * l.scale * plot.height() >= l.rect.bottom() + 10 - 1e-9);
+    };
+    const std::vector<QPointF> right{{350, 1}, {380, 0.5}};  // tall sticks on the right: the legend goes left, nothing shrinks
+    Legend l = placeLegend(plot, size, right, 10);
+    CHECK(l.rect.left() == 0);
+    CHECK(l.scale == 1);
+    const std::vector<QPointF> both{{20, 1}, {350, 0.8}};  // under either corner: the one that shrinks them less
+    l = placeLegend(plot, size, both, 10);
+    CHECK(l.rect.right() == 400);
+    CHECK(l.scale == Catch::Approx((200 - 80 - 10) / (0.8 * 200)));
+    clear(l, both);
 }

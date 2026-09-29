@@ -1554,6 +1554,71 @@ TEST_CASE("Arrange → Number Compounds numbers each molecule once, in scheme or
     }
 }
 
+TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the canvas (#444)") {
+    App app;
+    MainWindow w;
+    w.resize(1100, 700);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("CCO.Cc1ccccc1"));  // ethanol 0-2, toluene 3-9
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "&NMR Panel") a->trigger();
+    QApplication::processEvents();
+    auto* dock = w.findChild<QDockWidget*>("nmr");
+    REQUIRE(dock);
+    REQUIRE(dock->isVisible());
+    QWidget* view = nullptr;
+    for (auto* c : dock->findChildren<QWidget*>())
+        if (c->accessibleName() == "Predicted spectrum") view = c;
+    REQUIRE(view);
+    CHECK(view->accessibleDescription().split("; ").size() == 5);  // one molecule: the largest, toluene
+    canvas->setSelection({1});
+    CHECK(view->accessibleDescription().split("; ").size() == 2);  // the selected one, all of it: ethanol
+    canvas->setSelection({0, 1, 4});
+    CHECK(view->accessibleDescription().split("; ").size() == 2);  // the one with most of the selection
+    canvas->setSelection({3, 4, 5, 6, 7, 8, 9});
+    CHECK(view->accessibleDescription().split("; ").size() == 5);
+    CHECK(view->accessibleDescription().contains("2 C: C7, C9"));  // the two meta carbons, one stick
+    view->setFocus();
+    QTest::keyClick(view, Qt::Key_Right);
+    CHECK(view->accessibleDescription().startsWith("δ 13"));  // the ipso carbon first, as a spectrum reads
+    CHECK(canvas->highlight() == QSet<int>{4});
+    if (auto out = qEnvironmentVariable("PENZENE_NMR_SHOT"); !out.isEmpty()) w.grab().save(out);
+    QTest::keyClick(view, Qt::Key_Right);
+    CHECK(canvas->highlight().size() == 2);
+    QEvent leave(QEvent::Leave);
+    QApplication::sendEvent(view, &leave);  // the pointer gone: every stick is read again
+    CHECK(view->accessibleDescription().split("; ").size() == 5);
+    QTest::keyClick(view, Qt::Key_Right);
+    QTest::keyClick(view, Qt::Key_Left);
+    CHECK(canvas->highlight() == QSet<int>{4});
+    dock->findChild<QPushButton*>()->click();
+    CHECK(QGuiApplication::clipboard()->text().startsWith("13C NMR (predicted) δ 13"));  // toluene's, not ethanol's
+    CHECK(QGuiApplication::clipboard()->text().count(", ") == 4);
+    canvas->setHotspot(5);  // and the other way: an ortho carbon under the pointer marks its stick
+    CHECK(canvas->highlight() == QSet<int>{5, 9});
+    CHECK(view->accessibleDescription().startsWith("δ 12"));
+    canvas->setHotspot(-1);
+    CHECK(canvas->highlight().isEmpty());
+    dock->findChild<QComboBox*>()->setCurrentIndex(1);  // 1H
+    CHECK(canvas->highlight().isEmpty());
+    CHECK(view->accessibleDescription().split("; ").last().contains("3 H, s: C4"));  // the methyl, furthest upfield
+    QTest::keyClick(view, Qt::Key_Right);
+    CHECK_FALSE(canvas->highlight().isEmpty());
+    canvas->commit(*chem::fromSmiles("CCO"), "Replace");  // an edit (or undo) that drops atoms: nothing stale stays lit
+    CHECK(canvas->highlight().isEmpty());
+    CHECK(view->accessibleDescription().contains("3 H, t: C1"));  // first order (#552)
+    if (auto out = qEnvironmentVariable("PENZENE_NMR_SHOT"); !out.isEmpty()) w.grab().save(QString(out).replace(".png", "-1h.png"));
+    QTest::keyClick(view, Qt::Key_Right);
+    REQUIRE_FALSE(canvas->highlight().isEmpty());
+    for (int i : canvas->highlight()) CHECK(i < 3);
+    canvas->commit(*chem::fromSmiles("[Na+].[Cl-]"), "Replace");
+    dock->findChild<QPushButton*>()->click();  // nothing predicted: the clipboard keeps what it had
+    CHECK(QGuiApplication::clipboard()->text().startsWith("13C NMR"));
+    dock->hide();
+    CHECK(canvas->highlight().isEmpty());
+}
+
 TEST_CASE("PubChem name lookup: URL and response parsing (#28)") {
     CHECK(pubchem::nameToSmilesUrl(" acetylsalicylic acid ").toString(QUrl::FullyEncoded) ==
           "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/acetylsalicylic%20acid/property/SMILES/JSON");
@@ -2464,7 +2529,7 @@ TEST_CASE("White and teal theme; tools on a rail whose groups open beside it (#2
     // Properties and Templates are in the View menu, not the palette.
     CHECK(w.findChild<QDockWidget*>("properties"));
     CHECK(w.findChild<QDockWidget*>("templates"));
-    CHECK(w.findChildren<QFrame*>("panelCard").size() == 3);
+    CHECK(w.findChildren<QFrame*>("panelCard").size() == 4);  // Properties, Templates, Mass Spec, NMR
     for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
         for (auto* b : f->findChildren<QToolButton*>()) CHECK(b->toolButtonStyle() != Qt::ToolButtonTextOnly);
 }

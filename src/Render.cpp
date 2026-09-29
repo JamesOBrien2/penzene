@@ -1001,10 +1001,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         }
         if (!shifts.empty()) {
             QPointF at(documentBounds(doc).left(), documentBounds(doc).bottom() + 1.2 * fm.height());
-            for (const QString& line : {QObject::tr("Predicted shifts in ppm: 13C (1H); ~ marks a weaker match."),
-                                        QObject::tr("Contains information from nmrshiftdb2 (www.nmrshiftdb.org), which is made available here"),
-                                        QObject::tr("under the nmrshiftdb2 Database License (%1).")
-                                            .arg("https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/nmrshiftdb2datalicense.txt")}) {
+            for (const QString& line : QStringList{QObject::tr("Predicted shifts in ppm: 13C (1H); ~ marks a weaker match.")} + nmrshiftdbNotice()) {
                 drawText(p, line, at, f);
                 at.ry() += 1.2 * fm.height();
             }
@@ -1090,6 +1087,25 @@ static void paintFrame(QPainter& p, const Document& doc, const ExportOptions& o,
     p.translate(-r.topLeft());
     if (o.background.alpha()) p.fillRect(r, o.background);
     paintDocument(p, doc);
+}
+
+Legend placeLegend(const QRectF& plot, QSizeF size, const std::vector<QPointF>& sticks, double clear) {
+    Legend best;
+    for (bool left : {true, false}) {  // the corner that shrinks the sticks least; left on a tie
+        const QRectF r(left ? plot.left() : plot.right() - size.width(), plot.top(), size.width(), size.height());
+        double scale = 1;
+        for (QPointF s : sticks)
+            if (s.x() > r.left() - 2 && s.x() < r.right() + 2 && s.y() > 0)
+                scale = std::min(scale, std::max(plot.bottom() - r.bottom() - clear, 0.0) / (s.y() * plot.height()));
+        if (left || scale > best.scale) best = {r, scale};
+    }
+    return best;
+}
+
+QStringList nmrshiftdbNotice() {
+    return {QObject::tr("Contains information from nmrshiftdb2 (www.nmrshiftdb.org), which is made available here"),
+            QObject::tr("under the nmrshiftdb2 Database License (%1).")
+                .arg("https://nmrshiftdb.nmr.uni-koeln.de/nmrshiftdbhtml/nmrshiftdb2datalicense.txt")};
 }
 
 QImage renderImage(const Document& doc, const ExportOptions& o) {
