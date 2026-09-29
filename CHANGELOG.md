@@ -9,6 +9,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - **Predicted NMR spectrum**: View → NMR Panel shows the ¹³C or ¹H spectrum of the selected molecule, with the molecule in its corner: one stick per set of equivalent atoms, ¹H split first order (s, d, t, q); point at a stick (or press Left and Right) to light its atoms, or at an atom to find its stick (#444, #552). <!-- icon: nmr-spectrum -->
 - **Compound numbers**: Arrange → Number Compounds puts a bold number under each molecule; they follow their molecules and renumber in scheme order as you edit, and 2a, 2b keep sharing a number (#504). <!-- icon: list-numbers -->
 - The NMR panel copies the prediction as a supporting-information line: "1H NMR (predicted) δ 3.69 (q, 2H), 1.22 (t, 3H)." (#566).
+- A molecule RDKit can't read no longer hides the predicted shifts of the others on the page (#575).
 
 ## 1.8.0 (2026-09-29)
 
