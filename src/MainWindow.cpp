@@ -1216,7 +1216,7 @@ void MainWindow::importSmiles() {
 void MainWindow::importSequence() {
     bool ok = false;
     const QString s = QInputDialog::getText(this, tr("Import Peptide Sequence"),
-                                            tr("One-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser):"),
+                                            tr("One-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser, H-Gly-D-Phe-OH):"),
                                             QLineEdit::Normal, {}, &ok);
     if (!ok || s.trimmed().isEmpty()) return;
     if (auto doc = chem::fromSequence(s)) canvas_->insert(*doc, tr("Import %1").arg(s.trimmed()));
