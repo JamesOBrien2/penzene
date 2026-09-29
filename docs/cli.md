@@ -54,6 +54,6 @@ Values come from RDKit, as in the Properties panel:
 | `aromatic_rings` | aromatic rings in the smallest set of smallest rings |
 | `lipinski_violations` | how many of MW > 500, logP > 5, HBD > 5, HBA > 10 |
 | `veber` | `true` if rotatable bonds ≤ 10 and TPSA ≤ 140 |
-| `error` | empty, `unreadable` or `not valid chemistry` |
+| `error` | empty, `unreadable`, `not valid chemistry`, or `reaction` for a reaction SMILES line (render it instead) |
 
 On macOS the program is `Penzene.app/Contents/MacOS/penzene`.

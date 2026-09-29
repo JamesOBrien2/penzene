@@ -102,7 +102,7 @@ int render(const QStringList& args) {
                 if (doc)  // readable: the output is what failed (a missing folder, an extension that isn't svg, png or pdf)
                     std::fprintf(stderr, "penzene: could not write %s\n", qPrintable(path));
                 else
-                    std::fprintf(stderr, "penzene: could not render %s\n", qPrintable(name));
+                    std::fprintf(stderr, "penzene: could not read %s\n", qPrintable(name));
                 ++failed;
             } else {
                 std::printf("%s\n", qPrintable(path));  // one line per file, for scripts

@@ -769,7 +769,9 @@ std::vector<Record> readRecords(const QString& path) {
             const QStringList cols = part.split(QRegularExpression("\\s+"));
             if (out.empty() && cols[0].compare("SMILES", Qt::CaseInsensitive) == 0) continue;  // a header row (#329)
             const std::string first = cols[0].toStdString();
-            out.push_back({cols.size() > 1 ? cols[1] : n, ext == "inchi" ? fromInchi(first) : fromSmiles(first)});
+            out.push_back({cols.size() > 1 ? cols[1] : n, ext == "inchi"                        ? fromInchi(first)
+                                                          : first.find('>') != std::string::npos ? fromReactionSmiles(first)
+                                                                                                 : fromSmiles(first)});
         }
     }
     return out;
@@ -1474,9 +1476,10 @@ std::string descriptorsCsv(const std::vector<Record>& records, const QStringList
     int id = 0;
     for (const auto& r : records) {
         QHash<QString, QString> v{{"id", QString::number(++id)}, {"name", r.name}};
-        const auto p = r.doc ? profile(*r.doc) : std::nullopt;
+        const bool reaction = r.doc && !r.doc->arrows.empty();  // its molecules' descriptors don't add up to one row
+        const auto p = r.doc && !reaction ? profile(*r.doc) : std::nullopt;
         if (!p) {
-            v["error"] = r.doc ? "not valid chemistry" : "unreadable";
+            v["error"] = reaction ? "reaction" : r.doc ? "not valid chemistry" : "unreadable";
         } else {
             const Document& d = *r.doc;
             auto num = [](double x, int places) { return QString::number(x, 'f', places); };
