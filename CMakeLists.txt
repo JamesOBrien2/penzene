@@ -182,6 +182,26 @@ set_tests_properties(render-grid-check PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=of
 # ... and a record it can't read is reported, with a failing exit (#363).
 add_test(NAME render-grid-broken COMMAND penzene --render ${CMAKE_SOURCE_DIR}/tests/data/broken.smi ${CMAKE_BINARY_DIR}/broken.svg)
 set_tests_properties(render-grid-broken PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen WILL_FAIL ON)
+# A misspelt drawing style or format is an error naming the choices, not a silent default.
+add_test(NAME render-bad-style COMMAND penzene --render CCO --out ${CMAKE_BINARY_DIR}/render-bad --drawing-style RCS)
+set_tests_properties(render-bad-style PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "no drawing style \"RCS\"; choose from ACS 1996")
+add_test(NAME render-bad-format COMMAND penzene --render CCO --out ${CMAKE_BINARY_DIR}/render-bad --format jpg)
+set_tests_properties(render-bad-format PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "no format \"jpg\"")
+add_test(NAME render-format-case COMMAND penzene --render CCO --out ${CMAKE_BINARY_DIR}/render-bad --format PNG)  # as before
+set_tests_properties(render-format-case PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "structure\\.png")
+add_test(NAME render-missing-input COMMAND penzene --render ${CMAKE_BINARY_DIR}/nothing-here.mol ${CMAKE_BINARY_DIR}/x.svg)
+set_tests_properties(render-missing-input PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "no such file .*nothing-here\\.mol")
+add_test(NAME descriptors-missing-input COMMAND penzene --descriptors ${CMAKE_BINARY_DIR}/nothing-here.mol)
+set_tests_properties(descriptors-missing-input PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "no such file .*nothing-here\\.mol")
+# ... and an output that can't be written says so, rather than blaming the structure.
+add_test(NAME render-bad-output COMMAND penzene --render CCO ${CMAKE_BINARY_DIR}/no-such-folder/x.svg)
+set_tests_properties(render-bad-output PROPERTIES ENVIRONMENT QT_QPA_PLATFORM=offscreen
+                     PASS_REGULAR_EXPRESSION "could not write .*no-such-folder")
 if(APPLE)  # Finder offers Penzene for .penz and the structure formats (#332)
     add_test(NAME bundle-document-types COMMAND plutil -extract CFBundleDocumentTypes xml1 -o - $<TARGET_BUNDLE_CONTENT_DIR:penzene>/Info.plist)
     set_tests_properties(bundle-document-types PROPERTIES PASS_REGULAR_EXPRESSION "io\\.github\\.jamesobrien2\\.penzene\\.document.*cdxml")

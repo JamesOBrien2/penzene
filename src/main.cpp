@@ -10,6 +10,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QSettings>
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -17,6 +18,12 @@
 namespace {
 
 using chem::Record;
+
+// A mistyped path (it names a structure file that isn't there), not a SMILES string.
+bool missingFile(const QString& in) {
+    static const QRegularExpression file("\\.(smi|sdf|inchi|mol|penz|rxn|rdf|cdxml|cdx)$", QRegularExpression::CaseInsensitiveOption);
+    return !QFileInfo::exists(in) && file.match(in).hasMatch();
+}
 
 // One input: a SMILES string, a multi-record file (SDF, .smi, .inchi) or any
 // single file Penzene opens.
@@ -50,10 +57,30 @@ int render(const QStringList& args) {
                              "[--format svg|png|pdf] [--drawing-style NAME] [--clean]\n");
         return 2;
     }
+    if (p.isSet("drawing-style")) {
+        const auto& styles = drawingStyles();
+        if (std::none_of(styles.begin(), styles.end(), [&](const DrawingStyle& d) { return d.name == p.value("drawing-style"); })) {
+            QStringList names;
+            for (const auto& d : styles) names << d.name;
+            std::fprintf(stderr, "penzene: no drawing style \"%s\"; choose from %s\n", qPrintable(p.value("drawing-style")),
+                         qPrintable(names.join(", ")));
+            return 2;
+        }
+    }
+    const QString format = p.value("format").toLower();
+    if (p.isSet("out") && !QSet<QString>{"svg", "png", "pdf"}.contains(format)) {
+        std::fprintf(stderr, "penzene: no format \"%s\"; choose svg, png or pdf\n", qPrintable(p.value("format")));
+        return 2;
+    }
     if (p.isSet("out")) QDir().mkpath(p.value("out"));
     int failed = 0;
     QSet<QString> used;
     for (const QString& in : inputs) {
+        if (missingFile(in)) {
+            std::fprintf(stderr, "penzene: no such file %s\n", qPrintable(in));
+            ++failed;
+            continue;
+        }
         std::vector<Record> list = records(in);
         if (!single.isEmpty() && QFileInfo::exists(in)) {  // one output file: every record in a grid, as Open lays it out (#320)
             for (const auto& r : list)
@@ -67,12 +94,15 @@ int render(const QStringList& args) {
                 QString stem = safe;
                 for (int k = 2; used.contains(stem); ++k) stem = safe + QString("-%1").arg(k);
                 used.insert(stem);
-                path = QDir(p.value("out")).filePath(stem + "." + p.value("format"));
+                path = QDir(p.value("out")).filePath(stem + "." + format);
             }
             if (doc && p.isSet("clean")) doc = chem::clean2D(*doc);
             if (doc && p.isSet("drawing-style")) doc->style = drawingStyle(p.value("drawing-style")).name;
             if (!doc || !exportDocument(*doc, path)) {
-                std::fprintf(stderr, "penzene: could not render %s\n", qPrintable(name));
+                if (doc)  // readable: the output is what failed (a missing folder, an extension that isn't svg, png or pdf)
+                    std::fprintf(stderr, "penzene: could not write %s\n", qPrintable(path));
+                else
+                    std::fprintf(stderr, "penzene: could not render %s\n", qPrintable(name));
                 ++failed;
             } else {
                 std::printf("%s\n", qPrintable(path));  // one line per file, for scripts
@@ -101,15 +131,22 @@ int descriptors(const QStringList& args) {
             return 2;
         }
     std::vector<Record> all;
-    for (const QString& in : p.positionalArguments())
+    int missing = 0;
+    for (const QString& in : p.positionalArguments()) {
+        if (missingFile(in)) {
+            std::fprintf(stderr, "penzene: no such file %s\n", qPrintable(in));
+            ++missing;
+            continue;
+        }
         for (auto& r : records(in)) all.push_back(std::move(r));
+    }
     const std::string csv = chem::descriptorsCsv(all, columns);
-    if (!p.isSet("out")) return std::fwrite(csv.data(), 1, csv.size(), stdout) == csv.size() ? 0 : 1;
+    if (!p.isSet("out")) return std::fwrite(csv.data(), 1, csv.size(), stdout) == csv.size() && !missing ? 0 : 1;
     if (!writeWhole(p.value("out"), QByteArray::fromStdString(csv))) {
         std::fprintf(stderr, "penzene: could not write %s\n", qPrintable(p.value("out")));
         return 1;
     }
-    return 0;
+    return missing ? 1 : 0;
 }
 
 }  // namespace
