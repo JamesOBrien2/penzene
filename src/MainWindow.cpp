@@ -664,7 +664,16 @@ bool MainWindow::openFile(const QString& path) {
         sheets = {{tr("Page 1"), *doc}};
     }
     if (sheets.empty()) {
-        QMessageBox::warning(this, tr("Open"), tr("%1 is not a structure file I can read.").arg(path));
+        const QFileInfo info(path);
+        if (!info.exists() && info.dir().exists()) {  // gone from its folder, not on a drive that isn't mounted (#488)
+            QStringList files = recentFiles();
+            files.removeAll(info.absoluteFilePath());
+            QSettings().setValue("recentFiles", files);
+        }
+        QMessageBox::warning(this, tr("Open"),
+                             !info.exists()       ? tr("%1 doesn't exist. It may have been moved or deleted.").arg(path)
+                             : !info.isReadable() ? tr("%1 can't be opened for reading.").arg(path)
+                                                  : tr("%1 is not a structure file I can read.").arg(path));
         return false;
     }
     setPages(sheets);
