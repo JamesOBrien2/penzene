@@ -57,6 +57,8 @@
 #include <QWidgetAction>
 #include <QUndoStack>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/reporters/catch_reporter_event_listener.hpp>
+#include <catch2/reporters/catch_reporter_registrars.hpp>
 
 // Drives the real canvas with synthetic mouse events (QT_QPA_PLATFORM=offscreen).
 struct App {  // base class so the QApplication exists before any widget member
@@ -69,6 +71,14 @@ struct App {  // base class so the QApplication exists before any widget member
         QStandardPaths::setTestModeEnabled(true);  // and their app data (autosave)
     }
 };
+
+// Catch2 runs the tests in a random order, and rendering needs the application's fonts,
+// so it exists before the first test rather than when some test first asks for it.
+struct AppFirst : Catch::EventListenerBase {
+    using EventListenerBase::EventListenerBase;
+    void testRunStarting(const Catch::TestRunInfo&) override { App(); }
+};
+CATCH_REGISTER_LISTENER(AppFirst)
 
 struct Fixture : App {
     Fixture() {
