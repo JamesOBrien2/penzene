@@ -3,6 +3,7 @@
 #include <QPointF>
 #include <QColor>
 #include <QString>
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -77,6 +78,9 @@ struct Arrow {
     OrbitalLook look = OrbitalLook::Outline;  // orbitals only
     bool behind = false;  // under the molecule (Send to Back), not over it
     bool crossed = false;  // "no reaction": an ✕ across the middle (ChemDraw's NoGo)
+    // What a curved arrow's end starts or ends on, and moves with: one atom, a bond's two, or none (-1).
+    std::array<int, 2> fromAt{-1, -1}, toAt{-1, -1};
+    double head = 1;  // arrowhead size, relative to the usual
     bool operator==(const Arrow&) const = default;
 };
 

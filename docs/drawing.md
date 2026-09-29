@@ -91,7 +91,11 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
 ## Arrows, text, shapes and colour
 
 - Arrows: reaction, no reaction (crossed), equilibrium, resonance, retrosynthesis, and curved (electron pair) and fishhook
-  (single electron) arrows. Click a curved arrow again to flip its curve.
+  (single electron) arrows. Click a curved arrow again to flip its curve. While you draw a curved arrow, the atom
+  or bond under each end lights up and the end settles on it; the arrow then moves with it when the structure is
+  moved, turned or cleaned up.
+- Select a single arrow to reshape it: drag either end, or drag the round handle at the top of a curve to make
+  it deeper, shallower or bow the other way. Format → Arrowhead Size sets the heads of the selected arrows.
 - Text: formulas get subscripts automatically (H2O → H₂O), and a charge at the end of a formula
   is set as a superscript (NH4+ → NH₄⁺, Cu2+ → Cu²⁺, [Fe(CN)6]3- → [Fe(CN)₆]³⁻). Where the digits
   could be either, mark the charge with ^: SO4^2- → SO₄²⁻.

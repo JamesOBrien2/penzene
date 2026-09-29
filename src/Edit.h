@@ -14,6 +14,14 @@ constexpr double kMergeRadius = 0.3 * kBondLength;  // closer than this is the s
 QPointF freeDirection(const Document& doc, int atom, int newOrder = 1);
 QPointF snapped(QPointF from, QPointF to);  // unit vector rounded to 30°
 int atomNear(const Document& doc, QPointF p, double r, int skip = -1);
+// What a curved arrow's end at p rests on (Arrow::fromAt): an atom or its electron pair, else a bond.
+std::array<int, 2> anchorAt(const Document& doc, QPointF p);
+// Where that end settles: a bond's middle, or just off an atom on the side it was drawn (toward
+// `other` when drawn on the atom itself).
+QPointF snapToAnchor(const Document& doc, std::array<int, 2> at, QPointF p, QPointF other);
+// Arrow ends in `after` follow the atoms they rest on as they moved from `before`; an arrow
+// moved off its atoms takes whatever it now rests on.
+void followAnchors(const Document& before, Document& after);
 int atomAtOrNew(Document& doc, QPointF p, int z = 6);
 void link(Document& doc, int a, int b, int order = 1, BondStereo stereo = BondStereo::None);
 std::vector<int> addRing(Document& doc, const std::vector<QPointF>& verts, bool aromatic);
