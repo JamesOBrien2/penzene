@@ -3952,6 +3952,11 @@ TEST_CASE("Arrange → Group: grouped objects select, arrange and save as one (#
     CHECK(canvas->selectedTexts() == QSet<int>{0});  // one member takes the group
     click(doc.atoms[1].pos, Qt::ControlModifier);
     CHECK(canvas->selection() == QSet<int>{1});  // Ctrl/Cmd: into the group, just the one
+    canvas->setSelection({0, 1, 2});
+    const QPoint on = canvas->mapFromScene(doc.atoms[1].pos);
+    QTest::mousePress(canvas->viewport(), Qt::LeftButton, Qt::ControlModifier | Qt::AltModifier, on);
+    CHECK(canvas->selection() == QSet<int>{0, 1, 2});  // Ctrl+Alt: a snapped rotation of the whole selection
+    QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, Qt::ControlModifier | Qt::AltModifier, on);
 
     canvas->setSelection({});
     const QPointF offset = doc.texts[0].pos - doc.atoms[0].pos;

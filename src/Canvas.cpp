@@ -818,7 +818,8 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
             if (threeD && atoms.isEmpty()) { drag_ = Drag::None; break; }
             bool already = selectedAtoms_.contains(atoms) && selectedArrows_.contains(arrows) &&
                            selectedTexts_.contains(texts);
-            const bool one = e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier);  // into a group: just this (#410)
+            const bool one = e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier) &&
+                             !(e->modifiers() & Qt::AltModifier);  // into a group: just this (#410); Ctrl+Alt snaps a rotation
             if (shift) selectedAtoms_ |= atoms, selectedArrows_ |= arrows, selectedTexts_ |= texts;
             else if (!already || one) selectedAtoms_ = atoms, selectedArrows_ = arrows, selectedTexts_ = texts;
             if (!one) selectGroups();
