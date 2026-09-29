@@ -1,5 +1,6 @@
 #pragma once
 #include "Chem.h"
+#include "Edit.h"
 #include "Render.h"
 
 #include <QFont>
@@ -114,6 +115,7 @@ private:
     int arrowAt(QPointF p) const;
     int textAt(QPointF p) const;
     Arrow draggedArrow() const;
+    Arrow curvedArrow(QPointF from, QPointF to, ArrowKind kind) const;
     int draggedRingSize() const;
     void addDraggedRing(Document& doc) const;
     void refresh();
@@ -141,6 +143,8 @@ private:
     QSet<int> selectedAtoms_, selectedArrows_, selectedTexts_;
     int hoverAtom_ = -1, hoverBond_ = -1;
     quint64 revision_ = 0;
+    bool keyHotspot_ = false;  // G or > is picking: the arrow keys move the hotspot, not the selection
+    edit::Hotspot arrowMark_;      // where > started a curved arrow
     Document shown_;  // as last drawn: the revision counts real changes
     void announceHotspot();
 

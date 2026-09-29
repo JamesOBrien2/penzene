@@ -444,6 +444,7 @@ void Canvas::fit(const Document& part) {
 void Canvas::refresh() {
     if (!(doc_ == shown_)) {  // not for a hover or a theme: accessibility tools keep the parts they hold
         shown_ = doc_, ++revision_;
+        keyHotspot_ = false, arrowMark_ = {};  // indices may have gone stale
         if (QAccessible::isActive()) {
             QAccessibleEvent reorder(this, QAccessible::ObjectReorder);
             QAccessible::updateAccessibility(&reorder);
@@ -525,6 +526,8 @@ void Canvas::announceHotspot() {
         text = tr("Hotspot: %1").arg(describeAtom(doc_, hoverAtom_));
     else if (hoverBond_ >= 0 && hoverBond_ < int(doc_.bonds.size()))
         text = tr("Hotspot: %1").arg(describeBond(doc_, hoverBond_));
+    if (arrowMark_.valid() && !text.isEmpty())
+        text += tr("; curved arrow from %1").arg(arrowMark_.atom >= 0 ? describeAtom(doc_, arrowMark_.atom) : describeBond(doc_, arrowMark_.bond));
     if (text != accessibleDescription()) setAccessibleDescription(text);  // also after an edit in place
 }
 
@@ -699,23 +702,31 @@ Arrow Canvas::draggedArrow() const {
             const double side = std::max(std::abs(v.x()), std::abs(v.y()));
             a.to = pressPos_ + QPointF(v.x() < 0 ? -side : side, v.y() < 0 ? -side : side);
         }
-    } else if (arrowCurved_) {  // ends settle on the atoms and bonds under them, and stay there (#498)
-        a.fromAt = anchorAt(doc_, pressPos_), a.toAt = anchorAt(doc_, curPos_);
-        a.from = snapToAnchor(doc_, a.fromAt, pressPos_, curPos_);
-        a.to = snapToAnchor(doc_, a.toAt, curPos_, a.from);
-        a.bend = std::max(0.3 * len(a.to - a.from), 0.35 * kBondLength);  // a short hop still arcs clear of the bond
-        auto room = [&](double bend) {  // from the top of the curve to the nearest atom
-            const QPointF top = (a.from + a.to) / 2 - perp(unit(a.to - a.from)) * bend;
-            double r = 1e9;
-            for (const Atom& atom : doc_.atoms) r = std::min(r, len(atom.pos - top));
-            return r;
-        };
-        if ((a.fromAt[0] >= 0 || a.toAt[0] >= 0) && room(-a.bend) > room(a.bend)) a.bend = -a.bend;  // bow away from the structure
+    } else if (arrowCurved_) {
+        a = curvedArrow(pressPos_, curPos_, arrowKind_);
+        a.dashed = arrowDashed_, a.crossed = arrowCrossed_, a.look = arrowLook_;
     } else {
         QPointF v = curPos_ - pressPos_;
         double deg = std::round(qRadiansToDegrees(std::atan2(v.y(), v.x())) / 15) * 15;
         a.to = pressPos_ + dirAt(deg) * len(v);
     }
+    return a;
+}
+
+// Its ends settle on the atoms and bonds under them, and stay there (#498).
+Arrow Canvas::curvedArrow(QPointF from, QPointF to, ArrowKind kind) const {
+    Arrow a{from, to, kind};
+    a.fromAt = anchorAt(doc_, from), a.toAt = anchorAt(doc_, to);
+    a.from = snapToAnchor(doc_, a.fromAt, from, to);
+    a.to = snapToAnchor(doc_, a.toAt, to, a.from);
+    a.bend = std::max(0.3 * len(a.to - a.from), 0.35 * kBondLength);  // a short hop still arcs clear of the bond
+    auto room = [&](double bend) {  // from the top of the curve to the nearest atom
+        const QPointF top = (a.from + a.to) / 2 - perp(unit(a.to - a.from)) * bend;
+        double r = 1e9;
+        for (const Atom& atom : doc_.atoms) r = std::min(r, len(atom.pos - top));
+        return r;
+    };
+    if ((a.fromAt[0] >= 0 || a.toAt[0] >= 0) && room(-a.bend) > room(a.bend)) a.bend = -a.bend;  // bow away from the structure
     return a;
 }
 
@@ -760,6 +771,7 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
         return;
     }
     if (e->button() != Qt::LeftButton) return;
+    keyHotspot_ = false, arrowMark_ = {};
     pressPos_ = curPos_ = pressRaw_ = mapToScene(e->pos());
     pressAtom_ = atomAt(pressPos_);
     int bond = pressAtom_ < 0 ? bondAt(pressPos_) : -1;
@@ -1648,6 +1660,13 @@ void Canvas::editText(int i, QPointF pos) {
 void Canvas::keyPressEvent(QKeyEvent* e) {
     const int key = e->key();
     const bool arrow = key == Qt::Key_Left || key == Qt::Key_Right || key == Qt::Key_Up || key == Qt::Key_Down;
+    const bool plainArrow = arrow && !(e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier | Qt::AltModifier));
+    const bool modifier = key == Qt::Key_Shift || key == Qt::Key_Control || key == Qt::Key_Meta || key == Qt::Key_Alt;
+    if (!plainArrow && !modifier && e->text() != "G" && e->text() != ">" && key != Qt::Key_Escape)
+        keyHotspot_ = false, arrowMark_ = {};
+    // Picking by key (G, >): the arrows go on moving the hotspot rather than nudging what's picked.
+    if (plainArrow && keyHotspot_ && (hoverAtom_ >= 0 || hoverBond_ >= 0))
+        return moveHotspot(arrowDirection(key), e->modifiers() & Qt::ShiftModifier);
     if (arrow && (e->modifiers() & Qt::AltModifier) && (e->modifiers() & Qt::ShiftModifier)) {  // out of the page
         if (key == Qt::Key_Left || key == Qt::Key_Right) rotate3D(0, key == Qt::Key_Left ? -15 : 15);
         else rotate3D(key == Qt::Key_Up ? -15 : 15, 0);
@@ -1667,7 +1686,8 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
     if (arrow && (e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier)))
         return duplicateSelection(arrowDirection(key));
     if (key == Qt::Key_Escape) {
-        hoverAtom_ = hoverBond_ = -1;
+        hoverAtom_ = hoverBond_ = -1, arrowMark_ = {};
+        if (std::exchange(keyHotspot_, false)) return viewport()->update();  // what was picked stays selected
         return setSelection({});
     }
     if (key == Qt::Key_Delete || key == Qt::Key_Backspace) {
@@ -1712,6 +1732,27 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
         hoverAtom_ = hoverBond_ = -1;
         emit toolKey(" ");  // the Select tool, as ChemDraw's marquee
         return setSelection(molecule);
+    }
+    if (t == "G" && (hoverAtom_ >= 0 || hoverBond_ >= 0)) {  // the hotspot's atom or bond added to the selection
+        QSet<int> atoms = selectedAtoms_;
+        if (hoverAtom_ >= 0) atoms.insert(hoverAtom_);
+        else atoms << doc_.bonds[hoverBond_].a << doc_.bonds[hoverBond_].b;
+        keyHotspot_ = true;
+        emit toolKey(" ");
+        return setSelection(atoms, selectedArrows_, selectedTexts_);
+    }
+    if (t == ">" && (hoverAtom_ >= 0 || hoverBond_ >= 0)) {  // a curved arrow: > at its start, > again at its end
+        const Hotspot here{hoverAtom_, hoverBond_};
+        if (!arrowMark_.valid()) {
+            arrowMark_ = here, keyHotspot_ = true;
+            return announceHotspot();
+        }
+        if (here.atom == arrowMark_.atom && here.bond == arrowMark_.bond) return;
+        auto at = [&](Hotspot h) {
+            return h.atom >= 0 ? doc_.atoms[h.atom].pos : (doc_.atoms[doc_.bonds[h.bond].a].pos + doc_.atoms[doc_.bonds[h.bond].b].pos) / 2;
+        };
+        next.arrows.push_back(curvedArrow(at(arrowMark_), at(here), arrowCurved_ && !isShape(arrowKind_) ? arrowKind_ : ArrowKind::Reaction));
+        return commit(next, tr("Arrow"));
     }
     if (t == "g" && (hoverAtom_ >= 0 || hoverBond_ >= 0)) {  // grab: the hotspot's atom or bond, selected
         const QSet<int> atoms = hoverAtom_ >= 0 ? QSet<int>{hoverAtom_} : QSet<int>{doc_.bonds[hoverBond_].a, doc_.bonds[hoverBond_].b};
