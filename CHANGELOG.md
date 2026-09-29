@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Peptide side chains keep clear of the backbone's N–H labels (#559).
 - File → Import → Peptide Sequence… (and `--peptide` on the command line) draws a peptide from `GFLS` or `Gly-Phe-Leu-Ser` (#503).
 - Alt+↑/↓ bends the selected curved arrow and Arrange → Flip Curved Arrow turns it over; Arrange → Add Arrow / Add Text After Selection place them without the mouse (#549).
 - The Mass Spec panel copies an HRMS line for the supporting information ("[M+H]+ calcd for C9H9O4 181.0495") and exports the isotope pattern as CSV (#398).

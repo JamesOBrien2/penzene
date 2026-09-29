@@ -151,6 +151,25 @@ TEST_CASE("a peptide from its one- or three-letter sequence (#503)") {
     CHECK_FALSE(chem::fromSequence("G1S"));
 }
 
+TEST_CASE("a peptide's side chains keep clear of the backbone's N-H (#559)") {
+    for (const char* seq : {"YGGFL", "ACDEFGHIKLMNPQRSTVWY"}) {
+        INFO(seq);
+        const Document d = *chem::fromSequence(seq);
+        const auto info = chem::atomInfo(d);
+        double closest = 1e9;  // from where an N-H's H goes (away from its two bonds) to the nearest atom
+        for (int i = 0; i < int(d.atoms.size()); ++i) {
+            const auto nbs = d.neighbors(i);
+            if (d.atoms[i].z != 7 || nbs.size() != 2 || info[i].hydrogens != 1) continue;
+            QPointF out;
+            for (int n : nbs) out -= unit(d.atoms[n].pos - d.atoms[i].pos);
+            const QPointF h = d.atoms[i].pos + unit(out) * kBondLength;
+            for (int j = 0; j < int(d.atoms.size()); ++j)
+                if (j != i) closest = std::min(closest, len(d.atoms[j].pos - h) / kBondLength);
+        }
+        CHECK(closest > 0.6);
+    }
+}
+
 TEST_CASE("macrocycles and peptides are laid out cleanly (#502)") {
     // A cyclophane's bridges leave their rings well clear of the ring bonds, not squeezed against one.
     const Document phane = *chem::fromSmiles("C1Cc2ccc(cc2)CCc2ccc1cc2");  // [2.2]paracyclophane
