@@ -49,6 +49,12 @@ wedge, and wedges on atoms that aren't stereocentres. Click one to select it. Tu
 before export and copy** in Preferences to see the list, with Export Anyway or Cancel, before a figure goes out.
 ```
 
+```{feature} world-search
+:title: Look Up on PubChem
+**Structure → Look Up on PubChem** opens the selection's (or the drawing's) PubChem page in your browser,
+matched by InChIKey. Penzene itself never goes online.
+```
+
 ```{feature} wand
 :title: Clean
 Ctrl+Shift+K lays a structure out afresh, keeping its stereo and bond styles.

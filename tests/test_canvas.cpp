@@ -977,6 +977,24 @@ TEST_CASE("choosing a tool explains it in the status bar (#93)") {
     CHECK(w.statusBar()->currentMessage().contains("drag"));
 }
 
+TEST_CASE("Look Up on PubChem needs a structure (#500)") {
+    App app;
+    MainWindow w;
+    QAction* lookUp = nullptr;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "Look Up on &PubChem") lookUp = a;
+    REQUIRE(lookUp);
+    QMenu* structure = nullptr;
+    for (auto* m : w.findChildren<QMenu*>())
+        if (m->title() == "&Structure") structure = m;
+    REQUIRE(structure);
+    emit structure->aboutToShow();
+    CHECK_FALSE(lookUp->isEnabled());  // an empty drawing
+    w.findChild<Canvas*>()->setDocumentSilently(*chem::fromSmiles("c1ccccc1"));
+    emit structure->aboutToShow();
+    CHECK(lookUp->isEnabled());
+}
+
 TEST_CASE("drop an atom on another to merge; Shift for free angles and straight moves (#88)") {
     Fixture f;
     auto drag = [&](QPointF from, QPointF to, Qt::KeyboardModifiers mods) {
