@@ -2,7 +2,7 @@
 # as recipes/penzene/recipe.yaml. Builds the Python module against conda-forge's own
 # RDKit and Qt, so it shares them with the rest of the environment.
 context:
-  version: "0.8.0"
+  version: "1.9.0"
 
 package:
   name: penzene
@@ -10,7 +10,7 @@ package:
 
 source:
   url: https://github.com/JamesOBrien2/penzene/archive/refs/tags/v${{ version }}.tar.gz
-  sha256: 220c29ef85f0ab40c90df5246c4f4910d7457a70acf3f08876545c72d576156d
+  sha256: 8e4d21e1f866946e2bcf5ad27f5095628ba8e1c752f83c4a8107f25f3bef5353
 
 build:
   number: 0
@@ -57,7 +57,10 @@ about:
     desktop app: SMILES, MOL, InChI and ChemDraw CDXML in; SVG, PNG and PDF out, in
     ACS, RSC or JDP style.
   license: GPL-3.0-or-later
-  license_file: LICENSE
+  license_file:
+    - LICENSE
+    - THIRD_PARTY_LICENSES.md
+    - third_party/chemdraw/chemdraw/license.txt  # the ChemDraw file library, built in statically
 
 extra:
   recipe-maintainers:
