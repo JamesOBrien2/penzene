@@ -166,6 +166,9 @@ CompoundCount renumberCompounds(Document& doc, CompoundCount count) {
 }
 
 std::vector<int> syncLegends(Document& doc) {
+    if (std::none_of(doc.atoms.begin(), doc.atoms.end(), [](const Atom& a) { return !a.standsFor.isEmpty(); }) &&
+        std::none_of(doc.texts.begin(), doc.texts.end(), [](const Text& t) { return t.legend; }))
+        return {};  // nothing to write or erase: skip the molecule scan on every commit
     const int n = int(doc.atoms.size());
     std::vector<int> mol(n, -1);  // each atom's molecule, numbered by its first atom
     for (int i = 0; i < n; ++i)
