@@ -610,15 +610,30 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
     for (int i : selectedArrows_) groups.insert(doc_.arrows[i].group);
     for (int i : selectedTexts_) groups.insert(doc_.texts[i].group);
     groups.remove(-1);
+    auto whole = [&](int g) {  // Ctrl/Cmd+click picks one part: that shows as a part
+        for (int i = 0; i < int(doc_.atoms.size()); ++i)
+            if (doc_.atoms[i].group == g && !selectedAtoms_.contains(i)) return false;
+        for (int i = 0; i < int(doc_.arrows.size()); ++i)
+            if (doc_.arrows[i].group == g && !selectedArrows_.contains(i)) return false;
+        for (int i = 0; i < int(doc_.texts.size()); ++i)
+            if (doc_.texts[i].group == g && !selectedTexts_.contains(i)) return false;
+        return true;
+    };
+    groups.removeIf([&](int g) { return !whole(g); });
     for (int g : groups) {
         const QPainterPath shape = groupShape(g);
         p->fillPath(shape, sel);
-        p->strokePath(shape, QPen(line, 1));
+        QPen edge(line, 1.5);
+        edge.setCosmetic(true);  // a hairline at any zoom
+        p->strokePath(shape, edge);
     }
     const int hovered = hoverAtom_ >= 0 ? doc_.atoms[hoverAtom_].group
                         : hoverBond_ >= 0 ? doc_.atoms[doc_.bonds[hoverBond_].a].group : -1;
-    if (hovered >= 0 && !groups.contains(hovered) && tool_ == Tool::Select)  // pointing at a grouped thing shows the group
-        p->strokePath(groupShape(hovered), QPen(line, 1, Qt::DashLine));
+    if (hovered >= 0 && !groups.contains(hovered) && tool_ == Tool::Select) {  // pointing at a grouped thing shows the group
+        QPen dashed(line, 1.5, Qt::DashLine);
+        dashed.setCosmetic(true);
+        p->strokePath(groupShape(hovered), dashed);
+    }
     auto loose = [&](int group) { return !groups.contains(group); };
     p->setPen(Qt::NoPen);
     for (const auto& b : doc_.bonds)

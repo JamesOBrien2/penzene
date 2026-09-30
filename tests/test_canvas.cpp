@@ -3963,6 +3963,13 @@ TEST_CASE("Arrange → Group: grouped objects select, arrange and save as one (#
     CHECK(canvas->selectedTexts() == QSet<int>{0});  // one member takes the group
     click(doc.atoms[1].pos, Qt::ControlModifier);
     CHECK(canvas->selection() == QSet<int>{1});  // Ctrl/Cmd: into the group, just the one
+    {  // and it shows as that part: the rest of the group isn't tinted
+        const QImage shot = canvas->viewport()->grab().toImage();
+        const QPointF a = doc.atoms[0].pos, b = doc.atoms[1].pos, along = (b - a) / len(b - a), across(-along.y(), along.x());
+        const qreal ratio = shot.devicePixelRatio();
+        CHECK(shot.pixelColor(canvas->mapFromScene((a + b) / 2 - 1.5 * across) * ratio) ==
+              shot.pixelColor(canvas->mapFromScene(a + 20 * across) * ratio));
+    }
     canvas->setSelection({0, 1, 2});
     const QPoint on = canvas->mapFromScene(doc.atoms[1].pos);
     QTest::mousePress(canvas->viewport(), Qt::LeftButton, Qt::ControlModifier | Qt::AltModifier, on);
