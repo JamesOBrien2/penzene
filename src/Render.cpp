@@ -111,6 +111,14 @@ static double exitAlong(const QRectF& box, QPointF u) {
     return lo <= hi ? hi : 0;
 }
 
+// An atom list ([N,O,S]) is centred on its atom, bonds stopping at its box (relative to the atom).
+static bool centredLabel(const Atom& a) { return a.label.startsWith('['); }
+static QRectF centredBox(const Atom& a, const DrawingStyle& st) {
+    QFontMetricsF fm(labelFont(st));
+    const double w = fm.horizontalAdvance(a.label), cap = fm.capHeight();
+    return QRectF(-w / 2, -cap / 2, w, cap).adjusted(-1, -2, 1, 2);
+}
+
 // Abbreviation written from the right, bond side last: OMe -> MeO.
 static QString reversedLabel(const QString& s) {
     static const QHash<QString, QString> r{
@@ -127,8 +135,9 @@ static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const D
     const QString s = fromRight ? reversedLabel(a.label) : a.label;
     const double base = a.pos.y() + fm.capHeight() / 2;
     QPainterPath path = textPath({{0, base}, s}, st);
-    const double x = fromRight ? a.pos.x() + fm.horizontalAdvance(s.back()) / 2 - path.boundingRect().right()
-                               : a.pos.x() - fm.horizontalAdvance(s.front()) / 2;
+    const double x = centredLabel(a) ? a.pos.x() - path.boundingRect().center().x()
+                     : fromRight ? a.pos.x() + fm.horizontalAdvance(s.back()) / 2 - path.boundingRect().right()
+                                 : a.pos.x() - fm.horizontalAdvance(s.front()) / 2;
     p.fillPath(path.translated(x, 0), p.pen().color());
     // A charge beyond the group's own, as typed (N3-, #370), raised after the label like an element's.
     const auto head = chem::abbreviationHead(a.label);
@@ -250,6 +259,7 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     // Trim at labels.
     // A bond that would cross an isotope's raised mass number (¹³C) stops beyond it; a level one passes beneath.
     auto trim = [&](int atom, QPointF toward) {
+        if (centredLabel(doc.atoms[atom])) return std::max(st.labelRadius, 1 + exitAlong(centredBox(doc.atoms[atom], st), toward));
         const QString mass = massNumber(doc.atoms[atom]);
         return mass.isEmpty() ? st.labelRadius : std::max(st.labelRadius, 1 + exitAlong(massBox(doc.atoms[atom], st), toward));
     };
