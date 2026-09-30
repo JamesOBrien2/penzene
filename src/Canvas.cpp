@@ -350,6 +350,10 @@ void Canvas::commit(const Document& next, const QString& text) {
     followAnchors(doc_, after);  // whatever moved the atoms, curved arrows on them come along (#498)
     followNumbers(doc_, after);  // and compound numbers, which stay in scheme order (#504)
     renumberCompounds(after, compoundStart_);
+    for (int k : syncLegends(after)) {  // centred under the molecule
+        Text& t = after.texts[k];
+        t.pos.rx() -= textPath(t, documentStyle(after)).boundingRect().center().x() - t.pos.x();
+    }
     if (after == doc_) return;  // nothing changed: no undo step, and the file stays clean
     undo_->push(new Snapshot(this, doc_, after, text));
 }
@@ -1665,7 +1669,12 @@ void Canvas::editAtomProperties(int at) {
     auto* partial = new QComboBox;
     partial->addItems({tr("none"), "δ+", "δ−"});
     partial->setCurrentIndex(a.partial > 0 ? 1 : a.partial < 0 ? 2 : 0);
+    auto* standsFor = new QLineEdit(a.standsFor);
+    standsFor->setPlaceholderText(tr("e.g. N, O, S or H, Me, OMe"));
+    standsFor->setToolTip(tr("What a variable label (X, R1) stands for, written under the molecule as X = N, O, S. "
+                             "Elements only make it a query atom in MOL and SMARTS files."));
     form->addRow(tr("Element or label:"), label);
+    form->addRow(tr("Stands for:"), standsFor);
     form->addRow(tr("Charge:"), charge);
     form->addRow(tr("Atom-map number (0 = none):"), map);
     form->addRow(tr("Lone pairs:"), pairs);
@@ -1682,6 +1691,7 @@ void Canvas::editAtomProperties(int at) {
     Atom& out = next.atoms[at];
     out.charge = charge->value(), out.map = map->value(), out.lonePairs = pairs->value(), out.radicals = radicals->value();
     out.partial = partial->currentIndex() == 1 ? 1 : partial->currentIndex() == 2 ? -1 : 0;
+    out.standsFor = out.label.isEmpty() ? QString() : standsFor->text().trimmed();  // only a label can stand for something
     if (!(next == doc_)) commit(next, tr("Atom properties"));
 }
 
