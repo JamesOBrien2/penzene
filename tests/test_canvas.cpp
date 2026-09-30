@@ -3920,6 +3920,7 @@ TEST_CASE("Arrange → Group: grouped objects select, arrange and save as one (#
     App app;
     MainWindow w;
     w.resize(900, 600);
+    w.show();
     auto* canvas = w.findChild<Canvas*>();
     canvas->setTool(Canvas::Tool::Select);
     Document d = *chem::fromSmiles("CCO");  // ethanol, a benzene well to its right, and a note under ethanol
@@ -3946,6 +3947,16 @@ TEST_CASE("Arrange → Group: grouped objects select, arrange and save as one (#
         QTest::mouseClick(canvas->viewport(), Qt::LeftButton, keys, canvas->mapFromScene(scene));
     };
     canvas->centerOn(doc.atoms[1].pos);
+    {  // a selected group is one even tint: beside an atom, where dot and bond marks used to overlap, as mid-bond
+        canvas->setSelection({0, 1, 2}, {}, {0});
+        const QImage shot = canvas->viewport()->grab().toImage();
+        const QPointF a = doc.atoms[0].pos, b = doc.atoms[1].pos, along = (b - a) / len(b - a), across(-along.y(), along.x());
+        const QPoint nearAtom = canvas->mapFromScene(a + 2 * along + 1.5 * across), midBond = canvas->mapFromScene((a + b) / 2 + 1.5 * across);
+        const qreal ratio = shot.devicePixelRatio();
+        const QColor x = shot.pixelColor(nearAtom * ratio), y = shot.pixelColor(midBond * ratio);
+        CHECK(std::abs(x.red() - y.red()) + std::abs(x.green() - y.green()) + std::abs(x.blue() - y.blue()) < 25);  // a grid line may cross
+        CHECK(shot.pixelColor(midBond * ratio) != shot.pixelColor(canvas->mapFromScene(a + 20 * across) * ratio));  // tinted
+    }
     canvas->setSelection({});
     click(doc.atoms[1].pos);
     CHECK(canvas->selection() == QSet<int>{0, 1, 2});

@@ -580,27 +580,67 @@ void Canvas::drawRulers(QPainter* p) {
     p->restore();
 }
 
+QPainterPath Canvas::groupShape(int group) const {
+    QPainterPathStroker thick;
+    thick.setWidth(10), thick.setCapStyle(Qt::RoundCap), thick.setJoinStyle(Qt::RoundJoin);
+    QPainterPath shape;
+    shape.setFillRule(Qt::WindingFill);  // overlaps add up, not cancel into holes
+    for (const Bond& b : doc_.bonds)
+        if (doc_.atoms[b.a].group == group && doc_.atoms[b.b].group == group) {
+            QPainterPath line(doc_.atoms[b.a].pos);
+            line.lineTo(doc_.atoms[b.b].pos);
+            shape.addPath(thick.createStroke(line));
+        }
+    for (const Atom& a : doc_.atoms)
+        if (a.group == group) shape.addEllipse(a.pos, 6, 6);
+    for (const Arrow& a : doc_.arrows)
+        if (a.group == group) shape.addPath(thick.createStroke(arrowPath(a)));
+    for (const Text& t : doc_.texts)
+        if (t.group == group) shape.addRoundedRect(textPath(t, documentStyle(doc_)).boundingRect().adjusted(-3, -3, 3, 3), 3, 3);
+    return shape.simplified();  // overlaps merged: one even tint, so a group reads as one object
+}
+
 void Canvas::drawForeground(QPainter* p, const QRectF&) {
     QColor sel = theme_.accent, hover = theme_.accent, line = theme_.accent;
     sel.setAlpha(90), hover.setAlpha(60);
     p->setRenderHint(QPainter::Antialiasing);
+    // A selected group is one smooth shape; loose atoms, bonds and so on keep their own marks (#410).
+    QSet<int> groups;
+    for (int i : selectedAtoms_) groups.insert(doc_.atoms[i].group);
+    for (int i : selectedArrows_) groups.insert(doc_.arrows[i].group);
+    for (int i : selectedTexts_) groups.insert(doc_.texts[i].group);
+    groups.remove(-1);
+    for (int g : groups) {
+        const QPainterPath shape = groupShape(g);
+        p->fillPath(shape, sel);
+        p->strokePath(shape, QPen(line, 1));
+    }
+    const int hovered = hoverAtom_ >= 0 ? doc_.atoms[hoverAtom_].group
+                        : hoverBond_ >= 0 ? doc_.atoms[doc_.bonds[hoverBond_].a].group : -1;
+    if (hovered >= 0 && !groups.contains(hovered) && tool_ == Tool::Select)  // pointing at a grouped thing shows the group
+        p->strokePath(groupShape(hovered), QPen(line, 1, Qt::DashLine));
+    auto loose = [&](int group) { return !groups.contains(group); };
     p->setPen(Qt::NoPen);
     for (const auto& b : doc_.bonds)
-        if (selectedAtoms_.contains(b.a) && selectedAtoms_.contains(b.b)) {
+        if (selectedAtoms_.contains(b.a) && selectedAtoms_.contains(b.b) && loose(doc_.atoms[b.a].group)) {
             p->setPen(QPen(sel, 3, Qt::SolidLine, Qt::RoundCap));
             p->drawLine(doc_.atoms[b.a].pos, doc_.atoms[b.b].pos);
         }
     p->setPen(Qt::NoPen);
     p->setBrush(sel);
-    for (int i : selectedAtoms_) p->drawEllipse(doc_.atoms[i].pos, 4, 4);
+    for (int i : selectedAtoms_)
+        if (loose(doc_.atoms[i].group)) p->drawEllipse(doc_.atoms[i].pos, 4, 4);
     p->setPen(QPen(theme_.hotspot, 1.5));
     p->setBrush(Qt::NoBrush);
     for (int i : highlight_) p->drawEllipse(doc_.atoms[i].pos, 7, 7);
     p->setPen(Qt::NoPen);
     p->setBrush(sel);
 
-    for (int i : selectedArrows_) p->strokePath(arrowPath(doc_.arrows[i]), QPen(sel, 4, Qt::SolidLine, Qt::RoundCap));
-    for (int i : selectedTexts_) p->drawRect(textPath(doc_.texts[i], documentStyle(doc_)).boundingRect().adjusted(-1.5, -1.5, 1.5, 1.5));
+    for (int i : selectedArrows_)
+        if (loose(doc_.arrows[i].group)) p->strokePath(arrowPath(doc_.arrows[i]), QPen(sel, 4, Qt::SolidLine, Qt::RoundCap));
+    for (int i : selectedTexts_)
+        if (loose(doc_.texts[i].group))
+            p->drawRect(textPath(doc_.texts[i], documentStyle(doc_)).boundingRect().adjusted(-1.5, -1.5, 1.5, 1.5));
 
     // Drawing or reshaping a curved arrow lights what each end will stay on instead of the hotspot.
     std::vector<std::array<int, 2>> anchors;

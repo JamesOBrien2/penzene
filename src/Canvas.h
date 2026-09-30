@@ -146,6 +146,7 @@ private:
     QUndoStack* undo_;
     edit::CompoundCount compoundStart_;
     void selectGroups();  // a click or marquee on one member takes its whole group
+    QPainterPath groupShape(int group) const;  // one smooth outline around a group's members
     Tool tool_ = Tool::Bond;
     int element_ = 6, bondOrder_ = 1, ringSize_ = 6;
     BondStereo bondStyle_ = BondStereo::None;
