@@ -1430,15 +1430,26 @@ void Canvas::variableAttachment() {
     std::sort(atoms.begin(), atoms.end());
     QPointF mid, centre;
     for (int a : atoms) mid += doc_.atoms[a].pos / atoms.size();
-    auto around = edit::moleculeOf(doc_, atoms[0]);  // the smallest ring they're on, or else their molecule
-    bool ring = false;
-    for (const auto& r : chem::rings(doc_))
-        if (std::find(r.begin(), r.end(), atoms[0]) != r.end() && (!ring || r.size() < around.size())) around = r, ring = true;
+    // The ring holding most of them (the smaller on a tie), or else their molecule.
+    const auto rings = chem::rings(doc_);
+    auto count = [&](const std::vector<int>& r) {
+        return std::count_if(r.begin(), r.end(), [&](int i) { return selectedAtoms_.contains(i); });
+    };
+    auto around = edit::moleculeOf(doc_, atoms[0]);
+    for (const auto& r : rings)
+        if (count(r) >= 2 && (count(r) > count(around) || (count(r) == count(around) && r.size() < around.size()))) around = r;
     for (int a : around) centre += doc_.atoms[a].pos / around.size();
-    if (QLineF(mid, centre).length() < 0.3 * kBondLength)  // a whole ring: in across one of its bonds, not an atom
-        for (int a : atoms)
-            for (int b : doc_.neighbors(a))
-                if (selectedAtoms_.contains(b)) mid = (doc_.atoms[a].pos + doc_.atoms[b].pos) / 2;
+    // In across the middle of a selected bond of it, nearest their centre and not shared with another ring.
+    auto in = [](const std::vector<int>& r, int i) { return std::find(r.begin(), r.end(), i) != r.end(); };
+    QPointF cross = mid;
+    double best = 1e9;
+    for (const Bond& b : doc_.bonds) {
+        if (!selectedAtoms_.contains(b.a) || !selectedAtoms_.contains(b.b) || !in(around, b.a) || !in(around, b.b)) continue;
+        const bool fused = std::count_if(rings.begin(), rings.end(), [&](const auto& r) { return in(r, b.a) && in(r, b.b); }) > 1;
+        const QPointF m = (doc_.atoms[b.a].pos + doc_.atoms[b.b].pos) / 2;
+        if (const double score = QLineF(m, mid).length() + (fused ? 1e6 : 0); score < best) cross = m, best = score;
+    }
+    mid = cross;
     const double length = QLineF(centre, mid).length();
     const QPointF out = length > 1e-6 ? (mid - centre) / length : QPointF(0, -1);
     // The point sits inside, so the bond crosses the ring's edge, as a variable attachment is drawn.
