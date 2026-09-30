@@ -173,6 +173,7 @@ private:
     std::optional<chem::Pose3D> pose_;  // during a 3D rotation drag
     // Scale handles around the selection: corners scale, edges stretch along one axis.
     QRectF selectionBox() const;  // empty unless something with extent is selected
+    bool inSelectedBox(QPointF p) const;  // inside the box of a selected molecule, group, arrow or text
     int handleAt(QPointF p) const;  // 0..7 clockwise from the top-left corner, or -1
     int scaleHandle_ = -1;
     // A lone selected arrow is reshaped instead: handles on its ends and at the top of its curve.

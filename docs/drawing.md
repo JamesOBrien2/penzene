@@ -87,7 +87,8 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
   with agents centred over their arrows).
 - **Arrange → Group** (Ctrl/Cmd+G) makes the selected molecules, arrows and text one object:
   clicking any part selects it all, and Arrange Scheme, Align and Flip move it as one. Ctrl/Cmd+click
-  picks a single part inside a group. **Ungroup** (Shift+Ctrl/Cmd+G) splits it again.
+  picks a single part inside a group. **Ungroup** (Shift+Ctrl/Cmd+G) splits it again. A selection
+  shows one box per molecule (one per group); drag from anywhere inside a box to move it.
 - **Structure → Brackets** puts square or round brackets, with a subscript such as *n*, around the
   selected atoms.
 

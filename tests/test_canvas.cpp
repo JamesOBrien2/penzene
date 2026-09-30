@@ -4000,3 +4000,44 @@ TEST_CASE("Arrange → Group: grouped objects select, arrange and save as one (#
     CHECK(doc.atoms[3].group >= 0);
     CHECK(doc.atoms[0].group == doc.atoms[3].group);
 }
+
+TEST_CASE("drag anywhere in a selected molecule's box moves it; a group has one box (#410)") {
+    App app;
+    MainWindow w;
+    w.resize(900, 600);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setTool(Canvas::Tool::Select);
+    Document d = *chem::fromSmiles("c1ccccc1");
+    d.append(*chem::fromSmiles("c1ccccc1"), {5 * kBondLength, 0});
+    canvas->setDocumentSilently(d);
+    const Document& doc = canvas->document();
+    QPointF left, right;
+    for (int i = 0; i < 6; ++i) left += doc.atoms[i].pos / 6, right += doc.atoms[i + 6].pos / 6;
+    canvas->centerOn((left + right) / 2);
+    auto drag = [&](QPointF from, QPointF by) {
+        const QPoint a = canvas->mapFromScene(from), b = canvas->mapFromScene(from + by);
+        QTest::mousePress(canvas->viewport(), Qt::LeftButton, {}, a);
+        QTest::mouseMove(canvas->viewport(), (a + b) / 2);
+        QTest::mouseMove(canvas->viewport(), b);
+        QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, {}, b);
+    };
+    const QSet<int> both = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+    canvas->setSelection(both);
+    const QPointF was = doc.atoms[0].pos;
+    drag(left, {0, 2 * kBondLength});  // the ring's empty middle: inside its box, on no atom or bond
+    CHECK(len(doc.atoms[0].pos - was - QPointF(0, 2 * kBondLength)) < 1);
+    CHECK(len(doc.atoms[6].pos - (right + QPointF(0, 2 * kBondLength))) > 1e-6);  // both moved together
+    const QPointF gap = (left + right) / 2 + QPointF(0, 2 * kBondLength);
+    canvas->setSelection(both);
+    const QPointF before = doc.atoms[0].pos;
+    drag(gap, {0, 3 * kBondLength});  // between the two boxes: a marquee, nothing moves
+    CHECK(doc.atoms[0].pos == before);
+
+    canvas->setSelection(both);
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "&Group") a->trigger();
+    canvas->setSelection(both);
+    drag(gap, {0, 3 * kBondLength});  // grouped: one box, so the gap is inside it
+    CHECK(len(doc.atoms[0].pos - before - QPointF(0, 3 * kBondLength)) < 1);
+}
