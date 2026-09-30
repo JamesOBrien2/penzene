@@ -140,6 +140,7 @@ private:
     Document doc_;
     bool fitOnShow_ = false;
     QPicture picture_;
+    std::vector<QRectF> labels_;  // each atom's drawn label box, as painted into picture_
     Theme theme_;
     bool grid_ = false, rulers_ = false;
     std::vector<QPointF> preview_;

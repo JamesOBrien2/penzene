@@ -46,8 +46,9 @@ struct Piece {
 std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows, QSet<int> texts);
 
 // What these atoms, bonds between them, arrows and texts cover, as one smooth outline:
-// overlaps merged, so it fills with one even tint.
-QPainterPath shapeOf(const Document& doc, const QSet<int>& atoms, const QSet<int>& arrows, const QSet<int>& texts) {
+// overlaps merged, so it fills with one even tint. A ring whose atoms are all in it is filled inside too.
+QPainterPath shapeOf(const Document& doc, const std::vector<QRectF>& labels, const QSet<int>& atoms, const QSet<int>& arrows,
+                     const QSet<int>& texts) {
     QPainterPathStroker thick;
     thick.setWidth(10), thick.setCapStyle(Qt::RoundCap), thick.setJoinStyle(Qt::RoundJoin);
     QPainterPath shape;
@@ -58,7 +59,18 @@ QPainterPath shapeOf(const Document& doc, const QSet<int>& atoms, const QSet<int
             line.lineTo(doc.atoms[b.b].pos);
             shape.addPath(thick.createStroke(line));
         }
-    for (int i : atoms) shape.addEllipse(doc.atoms[i].pos, 6, 6);
+    for (int i : atoms) {
+        shape.addEllipse(doc.atoms[i].pos, 6, 6);
+        if (i < int(labels.size()) && !labels[i].isEmpty()) shape.addRoundedRect(labels[i].adjusted(-2, -2, 2, 2), 4, 4);  // all of OH, NH₂
+    }
+    for (const auto& r : chem::rings(doc))
+        if (std::all_of(r.begin(), r.end(), [&](int i) { return atoms.contains(i); })) {
+            QPolygonF ring;
+            for (int i : r) ring << doc.atoms[i].pos;
+            QPainterPath inside;
+            inside.addPolygon(ring);
+            shape = shape.simplified().united(inside);  // united, whichever way round the ring runs
+        }
     for (int i : arrows) shape.addPath(thick.createStroke(arrowPath(doc.arrows[i])));
     for (int i : texts) shape.addRoundedRect(textPath(doc.texts[i], documentStyle(doc)).boundingRect().adjusted(-3, -3, 3, 3), 3, 3);
     return shape.simplified();
@@ -497,7 +509,8 @@ void Canvas::refresh() {
     }
     picture_ = QPicture();
     QPainter p(&picture_);
-    paintDocument(p, doc_, {theme_.ink, theme_.error});
+    labels_.assign(doc_.atoms.size(), {});
+    paintDocument(p, doc_, {theme_.ink, theme_.error, 0, &labels_});
     p.end();
     // The scene grows to hold the drawing and its page with room to spare, never shrinking under the view (#326).
     const QRectF drawn = documentBounds(doc_).united(pageRect(doc_)).adjusted(-2000, -2000, 2000, 2000);
@@ -625,7 +638,7 @@ QPainterPath Canvas::groupShape(int group) const {
         if (doc_.arrows[i].group == group) arrows.insert(i);
     for (int i = 0; i < int(doc_.texts.size()); ++i)
         if (doc_.texts[i].group == group) texts.insert(i);
-    return shapeOf(doc_, atoms, arrows, texts);
+    return shapeOf(doc_, labels_, atoms, arrows, texts);
 }
 
 void Canvas::drawForeground(QPainter* p, const QRectF&) {
@@ -634,7 +647,7 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
     p->setRenderHint(QPainter::Antialiasing);
     // The selection is one smooth tinted shape, however its atoms, bonds, arrows and text overlap.
     if (!selectedAtoms_.isEmpty() || !selectedArrows_.isEmpty() || !selectedTexts_.isEmpty()) {
-        const QPainterPath shape = shapeOf(doc_, selectedAtoms_, selectedArrows_, selectedTexts_);
+        const QPainterPath shape = shapeOf(doc_, labels_, selectedAtoms_, selectedArrows_, selectedTexts_);
         p->fillPath(shape, sel);
         QPen edge(line, 1.5);
         edge.setCosmetic(true);  // a hairline at any zoom

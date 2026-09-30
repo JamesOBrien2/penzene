@@ -4041,3 +4041,29 @@ TEST_CASE("drag anywhere in a selected molecule's box moves it; a group has one 
     drag(gap, {0, 3 * kBondLength});  // grouped: one box, so the gap is inside it
     CHECK(len(doc.atoms[0].pos - before - QPointF(0, 3 * kBondLength)) < 1);
 }
+
+TEST_CASE("the selection tint covers whole labels and the insides of whole rings (#410)") {
+    App app;
+    MainWindow w;
+    w.resize(900, 600);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    Document d = *chem::fromSmiles("O");  // water: OH₂, its H₂ to the right
+    d.append(*chem::fromSmiles("c1ccccc1"), {5 * kBondLength, 0});
+    canvas->setDocumentSilently(d);
+    const Document& doc = canvas->document();
+    QPointF ring;
+    for (int i = 1; i < 7; ++i) ring += doc.atoms[i].pos / 6;
+    canvas->centerOn((doc.atoms[0].pos + ring) / 2);
+    auto shot = [&] { return canvas->viewport()->grab().toImage(); };
+    auto at = [&](const QImage& img, QPointF p) { return img.pixelColor(canvas->mapFromScene(p) * img.devicePixelRatio()); };
+    const QPointF h = doc.atoms[0].pos + QPointF(12, 0), clear = doc.atoms[0].pos + QPointF(0, 40);
+    const QImage before = shot();
+    canvas->setSelection({0, 1, 2, 3, 4, 5, 6});
+    const QImage after = shot();
+    CHECK(at(after, h) != at(before, h));  // the H, well past the O
+    CHECK(at(after, ring) != at(before, ring));  // the ring's middle
+    CHECK(at(after, clear) == at(before, clear));
+    canvas->setSelection({1, 2, 3, 4, 5});  // not the whole ring: its middle stays clear
+    CHECK(at(shot(), ring) == at(before, ring));
+}
