@@ -2540,6 +2540,8 @@ void MainWindow::buildMenus() {
         ->setStatusTip(tr("Move the selection, or the whole drawing, to the middle of the page"));
     arrangeMenu->addSeparator();
     arrangeMenu->addAction(tr("Arrange &Scheme"), this, [this] { canvas_->arrangeScheme(); });
+    arrangeMenu->addAction(tr("&Group"), QKeySequence(tr("Ctrl+G")), canvas_, &Canvas::groupSelection);
+    arrangeMenu->addAction(tr("&Ungroup"), QKeySequence(tr("Ctrl+Shift+G")), canvas_, &Canvas::ungroupSelection);
     arrangeMenu->addAction(tr("&Number Compounds"), canvas_, &Canvas::numberCompounds)
         ->setStatusTip(tr("A bold number under each selected molecule, or every one; they renumber in scheme order as you edit"));
     arrangeMenu->addSeparator();

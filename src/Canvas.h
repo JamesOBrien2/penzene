@@ -99,7 +99,9 @@ public:
     std::optional<QPointF> nextPlace() const;
     void addArrowAfter();
     void addTextAfter();
-    void numberCompounds();  // a bold number under each selected molecule (or every one) that has none (#504)
+    void numberCompounds();
+    void groupSelection();    // the selected objects, whole molecules, act as one from now on (#410)
+    void ungroupSelection();  // the groups the selection touches split up  // a bold number under each selected molecule (or every one) that has none (#504)
 
 signals:
     void documentChanged();
@@ -138,11 +140,14 @@ private:
     Document doc_;
     bool fitOnShow_ = false;
     QPicture picture_;
+    std::vector<QRectF> labels_;  // each atom's drawn label box, as painted into picture_
     Theme theme_;
     bool grid_ = false, rulers_ = false;
     std::vector<QPointF> preview_;
     QUndoStack* undo_;
     edit::CompoundCount compoundStart_;
+    void selectGroups();  // a click or marquee on one member takes its whole group
+    QPainterPath groupShape(int group) const;  // one smooth outline around a group's members
     Tool tool_ = Tool::Bond;
     int element_ = 6, bondOrder_ = 1, ringSize_ = 6;
     BondStereo bondStyle_ = BondStereo::None;
@@ -169,6 +174,7 @@ private:
     std::optional<chem::Pose3D> pose_;  // during a 3D rotation drag
     // Scale handles around the selection: corners scale, edges stretch along one axis.
     QRectF selectionBox() const;  // empty unless something with extent is selected
+    bool inSelectedBox(QPointF p) const;  // inside the box of a selected molecule, group, arrow or text
     int handleAt(QPointF p) const;  // 0..7 clockwise from the top-left corner, or -1
     int scaleHandle_ = -1;
     // A lone selected arrow is reshaped instead: handles on its ends and at the top of its curve.

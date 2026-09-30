@@ -3915,3 +3915,155 @@ TEST_CASE("Open says when a file is missing, not that it isn't a structure (#484
     CHECK(w.recentFiles() == QStringList{unmounted});
     QSettings().remove("recentFiles");
 }
+
+TEST_CASE("Arrange → Group: grouped objects select, arrange and save as one (#410)") {
+    App app;
+    MainWindow w;
+    w.resize(900, 600);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setTool(Canvas::Tool::Select);
+    Document d = *chem::fromSmiles("CCO");  // ethanol, a benzene well to its right, and a note under ethanol
+    d.append(*chem::fromSmiles("c1ccccc1"), {10 * kBondLength, 0});
+    d.texts.push_back({{0, 3 * kBondLength}, "crude"});
+    canvas->setDocumentSilently(d);
+    QAction *group = nullptr, *ungroup = nullptr;
+    for (auto* a : w.findChildren<QAction*>()) {
+        if (a->text() == "&Group") group = a;
+        if (a->text() == "&Ungroup") ungroup = a;
+    }
+    REQUIRE(group);
+    REQUIRE(ungroup);
+    CHECK(group->shortcut() == QKeySequence(Qt::CTRL | Qt::Key_G));
+    canvas->setSelection({0}, {}, {0});
+    group->trigger();
+    const Document& doc = canvas->document();
+    const int id = doc.texts[0].group;
+    CHECK(id >= 0);
+    for (int i : {0, 1, 2}) CHECK(doc.atoms[i].group == id);  // the whole molecule, not just the picked atom
+    CHECK(doc.atoms[3].group == -1);
+
+    auto click = [&](QPointF scene, Qt::KeyboardModifiers keys = {}) {
+        QTest::mouseClick(canvas->viewport(), Qt::LeftButton, keys, canvas->mapFromScene(scene));
+    };
+    canvas->centerOn(doc.atoms[1].pos);
+    {  // a selected group is one even tint: beside an atom, where dot and bond marks used to overlap, as mid-bond
+        canvas->setSelection({0, 1, 2}, {}, {0});
+        const QImage shot = canvas->viewport()->grab().toImage();
+        const QPointF a = doc.atoms[0].pos, b = doc.atoms[1].pos, along = (b - a) / len(b - a), across(-along.y(), along.x());
+        const QPoint nearAtom = canvas->mapFromScene(a + 2 * along + 1.5 * across), midBond = canvas->mapFromScene((a + b) / 2 + 1.5 * across);
+        const qreal ratio = shot.devicePixelRatio();
+        const QColor x = shot.pixelColor(nearAtom * ratio), y = shot.pixelColor(midBond * ratio);
+        CHECK(std::abs(x.red() - y.red()) + std::abs(x.green() - y.green()) + std::abs(x.blue() - y.blue()) < 25);  // a grid line may cross
+        CHECK(shot.pixelColor(midBond * ratio) != shot.pixelColor(canvas->mapFromScene(a + 20 * across) * ratio));  // tinted
+    }
+    canvas->setSelection({});
+    click(doc.atoms[1].pos);
+    CHECK(canvas->selection() == QSet<int>{0, 1, 2});
+    CHECK(canvas->selectedTexts() == QSet<int>{0});  // one member takes the group
+    click(doc.atoms[1].pos, Qt::ControlModifier);
+    CHECK(canvas->selection() == QSet<int>{1});  // Ctrl/Cmd: into the group, just the one
+    {  // and it shows as that part: the rest of the group isn't tinted
+        const QImage shot = canvas->viewport()->grab().toImage();
+        const QPointF a = doc.atoms[0].pos, b = doc.atoms[1].pos, along = (b - a) / len(b - a), across(-along.y(), along.x());
+        const qreal ratio = shot.devicePixelRatio();
+        CHECK(shot.pixelColor(canvas->mapFromScene((a + b) / 2 - 1.5 * across) * ratio) ==
+              shot.pixelColor(canvas->mapFromScene(a + 20 * across) * ratio));
+    }
+    canvas->setSelection({0, 1, 2});
+    const QPoint on = canvas->mapFromScene(doc.atoms[1].pos);
+    QTest::mousePress(canvas->viewport(), Qt::LeftButton, Qt::ControlModifier | Qt::AltModifier, on);
+    CHECK(canvas->selection() == QSet<int>{0, 1, 2});  // Ctrl+Alt: a snapped rotation of the whole selection
+    QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, Qt::ControlModifier | Qt::AltModifier, on);
+
+    canvas->setSelection({});
+    const QPointF offset = doc.texts[0].pos - doc.atoms[0].pos;
+    canvas->arrangeScheme();
+    CHECK(len(doc.texts[0].pos - doc.atoms[0].pos - offset) < 1e-6);  // one piece: the note kept its place
+
+    const auto saved = Document::fromJson(doc.toJson());
+    REQUIRE(saved);
+    CHECK(saved->texts[0].group == id);
+    CHECK(saved->atoms[0].group == id);
+    Document twice = *saved;
+    twice.append(*saved);
+    CHECK(twice.atoms[twice.atoms.size() - 9].group != id);  // a second copy is a group of its own
+
+    canvas->setSelection({0});
+    ungroup->trigger();
+    CHECK(doc.texts[0].group == -1);
+    for (const Atom& a : doc.atoms) CHECK(a.group == -1);
+    canvas->arrangeScheme();
+    CHECK(len(doc.texts[0].pos - doc.atoms[0].pos - offset) > 1);  // apart again
+    canvas->setSelection({0, 3});  // two molecules alone, no text to carry the change
+    group->trigger();
+    CHECK(doc.atoms[3].group >= 0);
+    CHECK(doc.atoms[0].group == doc.atoms[3].group);
+}
+
+TEST_CASE("drag anywhere in a selected molecule's box moves it; a group has one box (#410)") {
+    App app;
+    MainWindow w;
+    w.resize(900, 600);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setTool(Canvas::Tool::Select);
+    Document d = *chem::fromSmiles("c1ccccc1");
+    d.append(*chem::fromSmiles("c1ccccc1"), {5 * kBondLength, 0});
+    canvas->setDocumentSilently(d);
+    const Document& doc = canvas->document();
+    QPointF left, right;
+    for (int i = 0; i < 6; ++i) left += doc.atoms[i].pos / 6, right += doc.atoms[i + 6].pos / 6;
+    canvas->centerOn((left + right) / 2);
+    auto drag = [&](QPointF from, QPointF by) {
+        const QPoint a = canvas->mapFromScene(from), b = canvas->mapFromScene(from + by);
+        QTest::mousePress(canvas->viewport(), Qt::LeftButton, {}, a);
+        QTest::mouseMove(canvas->viewport(), (a + b) / 2);
+        QTest::mouseMove(canvas->viewport(), b);
+        QTest::mouseRelease(canvas->viewport(), Qt::LeftButton, {}, b);
+    };
+    const QSet<int> both = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+    canvas->setSelection(both);
+    const QPointF was = doc.atoms[0].pos;
+    drag(left, {0, 2 * kBondLength});  // the ring's empty middle: inside its box, on no atom or bond
+    CHECK(len(doc.atoms[0].pos - was - QPointF(0, 2 * kBondLength)) < 1);
+    CHECK(len(doc.atoms[6].pos - (right + QPointF(0, 2 * kBondLength))) > 1e-6);  // both moved together
+    const QPointF gap = (left + right) / 2 + QPointF(0, 2 * kBondLength);
+    canvas->setSelection(both);
+    const QPointF before = doc.atoms[0].pos;
+    drag(gap, {0, 3 * kBondLength});  // between the two boxes: a marquee, nothing moves
+    CHECK(doc.atoms[0].pos == before);
+
+    canvas->setSelection(both);
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "&Group") a->trigger();
+    canvas->setSelection(both);
+    drag(gap, {0, 3 * kBondLength});  // grouped: one box, so the gap is inside it
+    CHECK(len(doc.atoms[0].pos - before - QPointF(0, 3 * kBondLength)) < 1);
+}
+
+TEST_CASE("the selection tint covers whole labels and the insides of whole rings (#410)") {
+    App app;
+    MainWindow w;
+    w.resize(900, 600);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    Document d = *chem::fromSmiles("O");  // water: OH₂, its H₂ to the right
+    d.append(*chem::fromSmiles("c1ccccc1"), {5 * kBondLength, 0});
+    canvas->setDocumentSilently(d);
+    const Document& doc = canvas->document();
+    QPointF ring;
+    for (int i = 1; i < 7; ++i) ring += doc.atoms[i].pos / 6;
+    canvas->centerOn((doc.atoms[0].pos + ring) / 2);
+    auto shot = [&] { return canvas->viewport()->grab().toImage(); };
+    auto at = [&](const QImage& img, QPointF p) { return img.pixelColor(canvas->mapFromScene(p) * img.devicePixelRatio()); };
+    const QPointF h = doc.atoms[0].pos + QPointF(12, 0), clear = doc.atoms[0].pos + QPointF(0, 40);
+    const QImage before = shot();
+    canvas->setSelection({0, 1, 2, 3, 4, 5, 6});
+    const QImage after = shot();
+    CHECK(at(after, h) != at(before, h));  // the H, well past the O
+    CHECK(at(after, ring) != at(before, ring));  // the ring's middle
+    CHECK(at(after, clear) == at(before, clear));
+    canvas->setSelection({1, 2, 3, 4, 5});  // not the whole ring: its middle stays clear
+    CHECK(at(shot(), ring) == at(before, ring));
+}

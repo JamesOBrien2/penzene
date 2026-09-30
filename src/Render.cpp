@@ -802,6 +802,14 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         p.setPen(QPen(info[i].valenceError ? style.error : ink(a.color), lineWidth));
         if (labeled[i]) {
             drawLabel(p, doc, int(i), info[i].hydrogens, hSide(int(i)), st);
+            if (style.labels) {
+                QPicture label;
+                QPainter q(&label);
+                drawLabel(q, doc, int(i), info[i].hydrogens, hSide(int(i)), st);
+                q.end();
+                style.labels->resize(doc.atoms.size());
+                (*style.labels)[i] = label.boundingRect();
+            }
         } else if (a.charge) {
             QFont sub = labelFont(st, 0.7);
             QString c = QString(a.charge > 0 ? "+" : "−");

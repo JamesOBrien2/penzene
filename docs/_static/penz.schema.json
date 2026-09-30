@@ -69,6 +69,7 @@
       }
     },
     "index": {"type": "integer", "minimum": 0, "description": "An index into atoms."},
+    "group": {"type": "integer", "minimum": 0, "description": "Atoms, arrows and texts sharing a group number act as one (Arrange → Group)."},
     "at": {"type": "array", "items": {"$ref": "#/$defs/index"}, "minItems": 1, "maxItems": 2},
     "color": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"},
     "atom": {
@@ -86,7 +87,8 @@
         "radicals": {"type": "integer", "minimum": 0, "maximum": 2},
         "isotope": {"type": "integer", "minimum": 0, "maximum": 300, "description": "Mass number (13 for carbon-13, 2 for deuterium); 0 or left out for natural abundance."},
         "partial": {"enum": [-1, 0, 1], "description": "Partial charge mark: δ− or δ+."},
-        "stereoGroup": {"type": "string", "pattern": "^(abs|&[1-9][0-9]{0,3}|or[1-9][0-9]{0,3})$", "description": "Enhanced stereo group of a stereocentre: abs (as drawn), &n (a mixture of it and its mirror image) or orn (one of the two, unknown which)."}
+        "stereoGroup": {"type": "string", "pattern": "^(abs|&[1-9][0-9]{0,3}|or[1-9][0-9]{0,3})$", "description": "Enhanced stereo group of a stereocentre: abs (as drawn), &n (a mixture of it and its mirror image) or orn (one of the two, unknown which)."},
+        "group": {"$ref": "#/$defs/group"}
       }
     },
     "bond": {
@@ -119,7 +121,8 @@
         "crossed": {"type": "boolean", "description": "No reaction: an ✕ across the arrow's middle."},
         "head": {"type": "number", "minimum": 0.25, "maximum": 4, "default": 1, "description": "Arrowhead size, relative to the usual."},
         "fromAt": {"$ref": "#/$defs/at", "description": "What the tail is drawn on and follows: one atom, or a bond's two atoms."},
-        "toAt": {"$ref": "#/$defs/at", "description": "What the head is drawn on and follows, as fromAt."}
+        "toAt": {"$ref": "#/$defs/at", "description": "What the head is drawn on and follows, as fromAt."},
+        "group": {"$ref": "#/$defs/group"}
       }
     },
     "text": {
@@ -132,7 +135,8 @@
         "scale": {"type": "number", "exclusiveMinimum": 0, "default": 1},
         "color": {"$ref": "#/$defs/color"},
         "compound": {"type": "boolean", "description": "A compound number: bold, renumbered in scheme order as the drawing is edited."},
-        "anchor": {"$ref": "#/$defs/index", "description": "The atom of the molecule a compound number belongs to; it moves with the molecule."}
+        "anchor": {"$ref": "#/$defs/index", "description": "The atom of the molecule a compound number belongs to; it moves with the molecule."},
+        "group": {"$ref": "#/$defs/group"}
       }
     },
     "fill": {
