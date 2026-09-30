@@ -2042,7 +2042,7 @@ TEST_CASE(".penz schema describes every field the app writes (#573)") {
     Document d = *chem::fromSmiles("C[C@H](N)C(=O)O");  // every feature, so every field is written
     Atom& a = d.atoms[1];
     a.charge = 1, a.label = "Me", a.color = Qt::red, a.map = 1, a.lonePairs = 1, a.radicals = 1, a.partial = 1;
-    a.isotope = 13, a.stereoGroup = StereoGroup::And, a.stereoGroupNumber = 1;
+    a.isotope = 13, a.stereoGroup = StereoGroup::And, a.stereoGroupNumber = 1, a.attachments = {0, 2};
     d.bonds[0].stereo = BondStereo::Wedge, d.bonds[0].position = BondPosition::Left, d.bonds[0].color = Qt::red;
     Arrow arrow;
     arrow.to = {50, 0}, arrow.bend = 5, arrow.color = Qt::red, arrow.dashed = arrow.behind = arrow.crossed = true;

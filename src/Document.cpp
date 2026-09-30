@@ -49,6 +49,11 @@ QByteArray Document::toJson() const {
         if (a.partial) o["partial"] = a.partial;
         if (a.isotope) o["isotope"] = a.isotope;
         if (a.stereoGroup != StereoGroup::None) o["stereoGroup"] = stereoGroupTag(a);
+        if (!a.attachments.empty()) {
+            QJsonArray at;
+            for (int i : a.attachments) at.append(i);
+            o["attachments"] = at;
+        }
         as.append(o);
     }
     for (const auto& b : bonds) {
@@ -190,6 +195,11 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         setStereoGroupTag(a, o["stereoGroup"].toString());
     }
     const int n = int(doc.atoms.size());
+    for (int i = 0; i < n; ++i)
+        for (const auto& v : root["atoms"][i]["attachments"].toArray()) {
+            if (v.toInt(-1) < 0 || v.toInt(-1) >= n || v.toInt(-1) == i) return std::nullopt;
+            doc.atoms[i].attachments.push_back(v.toInt());
+        }
     for (const auto& v : root["bonds"].toArray()) {
         auto o = v.toObject();
         Bond b{o["a"].toInt(-1), o["b"].toInt(-1), o["order"].toInt(1)};
@@ -272,7 +282,11 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
 
 void Document::append(const Document& o, QPointF shift) {
     const int base = int(atoms.size());
-    for (auto a : o.atoms) a.pos += shift, atoms.push_back(a);
+    for (auto a : o.atoms) {
+        a.pos += shift;
+        for (int& i : a.attachments) i += base;
+        atoms.push_back(a);
+    }
     for (auto b : o.bonds) b.a += base, b.b += base, bonds.push_back(b);
     for (auto a : o.arrows) {
         a.from += shift, a.to += shift;
@@ -325,6 +339,14 @@ std::vector<std::vector<int>> Document::bondsAt() const {
     return at;
 }
 
+std::vector<std::vector<int>> Document::joined() const {
+    std::vector<std::vector<int>> out(atoms.size());
+    for (const auto& b : bonds) out[b.a].push_back(b.b), out[b.b].push_back(b.a);
+    for (int i = 0; i < int(atoms.size()); ++i)
+        for (int j : atoms[i].attachments) out[i].push_back(j), out[j].push_back(i);
+    return out;
+}
+
 void Document::removeBond(int bond) {
     const int a = bonds[bond].a, b = bonds[bond].b;
     const bool dropA = neighbors(a).size() == 1;
@@ -366,6 +388,10 @@ void Document::removeAtoms(const std::vector<int>& drop) {
     });
     for (auto& f : fills)
         for (int& i : f.atoms) i = remap[i];
+    for (auto& a : atoms) {  // a variable attachment keeps what's left of its atoms
+        std::erase_if(a.attachments, [&](int i) { return remap[i] < 0; });
+        for (int& i : a.attachments) i = remap[i];
+    }
     for (auto& b : brackets) {  // a bracket keeps around what's left of its atoms
         std::erase_if(b.atoms, [&](int i) { return remap[i] < 0; });
         for (int& i : b.atoms) i = remap[i];

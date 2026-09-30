@@ -36,6 +36,8 @@ struct Atom {
     int isotope = 0;  // mass number (13 for ¹³C, 2 for D); 0 = natural abundance
     StereoGroup stereoGroup = StereoGroup::None;
     int stereoGroupNumber = 0;  // n of &n / orn
+    // A variable attachment: this bare point (z 0, no label) stands for a bond to any one of these atoms.
+    std::vector<int> attachments;
 };
 
 struct Bond {
@@ -145,6 +147,7 @@ struct Document {
     std::vector<int> neighbors(int atom) const;
     // Each atom's bond indices, for loops over every atom (neighbors() scans all the bonds).
     std::vector<std::vector<int>> bondsAt() const;
+    std::vector<std::vector<int>> joined() const;  // each atom's bonded atoms, and a variable attachment's
     QPointF awayDirection(int atom) const;  // bisects the widest gap between its bonds
     void removeBond(int bond);  // also drops endpoints left isolated
     void removeAtom(int atom);  // also drops neighbours left isolated, as removeBond does
@@ -167,7 +170,8 @@ std::vector<Sheet> sheetsFromJson(const QByteArray& data);  // empty if it isn't
 inline bool operator==(const Atom& x, const Atom& y) {
     return x.pos == y.pos && x.z == y.z && x.charge == y.charge && x.label == y.label && x.color == y.color &&
            x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial &&
-           x.isotope == y.isotope && x.stereoGroup == y.stereoGroup && x.stereoGroupNumber == y.stereoGroupNumber;
+           x.isotope == y.isotope && x.stereoGroup == y.stereoGroup && x.stereoGroupNumber == y.stereoGroupNumber &&
+           x.attachments == y.attachments;
 }
 inline bool operator==(const Bond& x, const Bond& y) {
     return x.a == y.a && x.b == y.b && x.order == y.order && x.stereo == y.stereo &&

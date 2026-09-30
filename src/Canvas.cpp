@@ -1195,6 +1195,7 @@ std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows
     }
     std::vector<Piece> out;
     QSet<int> seen;
+    const auto joined = doc.joined();
     for (int s : atoms) {
         if (seen.contains(s)) continue;
         Piece p;
@@ -1204,7 +1205,7 @@ std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows
             int i = stack.back();
             stack.pop_back();
             p.atoms.insert(i);
-            for (int nb : doc.neighbors(i))
+            for (int nb : joined[i])
                 if (atoms.contains(nb) && !seen.contains(nb)) seen.insert(nb), stack.push_back(nb);
         }
         out.push_back(p);
@@ -1421,6 +1422,31 @@ void Canvas::bracketSelection(bool square, const QString& label) {
     Document next = doc_;
     next.brackets.push_back({atoms, square, label});
     commit(next, tr("Brackets"));
+}
+
+void Canvas::variableAttachment() {
+    if (selectedAtoms_.size() < 2) return;
+    std::vector<int> atoms(selectedAtoms_.begin(), selectedAtoms_.end());
+    std::sort(atoms.begin(), atoms.end());
+    QPointF mid, centre;
+    for (int a : atoms) mid += doc_.atoms[a].pos / atoms.size();
+    auto around = edit::moleculeOf(doc_, atoms[0]);  // the smallest ring they're on, or else their molecule
+    bool ring = false;
+    for (const auto& r : chem::rings(doc_))
+        if (std::find(r.begin(), r.end(), atoms[0]) != r.end() && (!ring || r.size() < around.size())) around = r, ring = true;
+    for (int a : around) centre += doc_.atoms[a].pos / around.size();
+    if (QLineF(mid, centre).length() < 0.3 * kBondLength)  // a whole ring: in across one of its bonds, not an atom
+        for (int a : atoms)
+            for (int b : doc_.neighbors(a))
+                if (selectedAtoms_.contains(b)) mid = (doc_.atoms[a].pos + doc_.atoms[b].pos) / 2;
+    const double length = QLineF(centre, mid).length();
+    const QPointF out = length > 1e-6 ? (mid - centre) / length : QPointF(0, -1);
+    // The point sits inside, so the bond crosses the ring's edge, as a variable attachment is drawn.
+    Document next = doc_;
+    const int p = next.addAtom(mid - out * (0.4 * kBondLength), 0);
+    next.atoms[p].attachments = atoms;
+    next.bonds.push_back({p, next.addAtom(mid + out * (0.6 * kBondLength))});
+    commit(next, tr("Variable attachment"));
 }
 
 void Canvas::removeBrackets() {
