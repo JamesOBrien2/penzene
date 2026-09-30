@@ -27,9 +27,11 @@ Space select.
   deuterium and tritium (`d` on an atom makes it D). They're drawn ¹³C, carried through SMILES
   (`[13CH4]`), MOL and ChemDraw files, and counted in the masses.
 - `x` and `r` on an atom label it X and R. `R1`, `R2`… export as MDL R-groups.
-- Query atoms for SAR and scope figures: type `A` (any atom), `Q` (not C or H), `X` (halogen), `M` (metal),
-  their `AH`, `QH`… forms (or H), or an atom list such as `[N,O,S]`. MOL files and Edit → Copy As → SMARTS
-  keep them as queries, and the structure checks list them.
+- **Stands for** (Atom Properties) says what a variable label means: `N, O, S` or `H, Me, OMe`. Penzene
+  writes it under the molecule (X = N, O, S) and rewrites that line whenever a definition changes, so edit
+  the definitions rather than the line. Elements only make the atom a query atom list in MOL files and
+  Edit → Copy As → SMARTS; groups stay a note. For searches, the MDL codes `A`, `Q`, `M` (and `AH`, `QH`,
+  `XH`, `MH`) can be typed as labels too.
 - **Structure → Expand Abbreviations** draws them out in full.
 - Atom Properties (`/` on an atom) sets the charge, map number, lone pairs, radical electrons and δ±.
 - `:` cycles lone pairs, `*` toggles a radical dot, and the atom's context menu adds δ+ or δ−.
