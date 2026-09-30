@@ -2042,14 +2042,14 @@ TEST_CASE(".penz schema describes every field the app writes (#573)") {
     Document d = *chem::fromSmiles("C[C@H](N)C(=O)O");  // every feature, so every field is written
     Atom& a = d.atoms[1];
     a.charge = 1, a.label = "Me", a.color = Qt::red, a.map = 1, a.lonePairs = 1, a.radicals = 1, a.partial = 1;
-    a.isotope = 13, a.stereoGroup = StereoGroup::And, a.stereoGroupNumber = 1, a.attachments = {0, 2};
+    a.isotope = 13, a.stereoGroup = StereoGroup::And, a.stereoGroupNumber = 1, a.attachments = {0, 2}, a.group = 0;
     d.bonds[0].stereo = BondStereo::Wedge, d.bonds[0].position = BondPosition::Left, d.bonds[0].color = Qt::red;
     Arrow arrow;
     arrow.to = {50, 0}, arrow.bend = 5, arrow.color = Qt::red, arrow.dashed = arrow.behind = arrow.crossed = true;
-    arrow.look = OrbitalLook::Shaded, arrow.head = 2, arrow.fromAt = {0, -1}, arrow.toAt = {1, 2};
+    arrow.look = OrbitalLook::Shaded, arrow.head = 2, arrow.fromAt = {0, -1}, arrow.toAt = {1, 2}, arrow.group = 0;
     d.arrows.push_back(arrow);
     Text text{{0, 40}, "1"};
-    text.scale = 2, text.color = Qt::red, text.compound = true, text.anchor = 0;
+    text.scale = 2, text.color = Qt::red, text.compound = true, text.anchor = 0, text.group = 0;
     d.texts.push_back(text);
     d.fills.push_back({{0, 1, 2}, Qt::red});
     d.brackets.push_back({{0, 1}, false, "n"});

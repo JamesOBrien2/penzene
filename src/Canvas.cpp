@@ -38,6 +38,55 @@ using namespace edit;
 
 namespace {
 
+// The selection (everything if nothing is selected) as separate objects: each molecule, arrow and
+// text is one (a group is one too), so they align, distribute and show as wholes.
+struct Piece {
+    QSet<int> atoms, arrows, texts;
+};
+std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows, QSet<int> texts);
+
+// What these atoms, bonds between them, arrows and texts cover, as one smooth outline:
+// overlaps merged, so it fills with one even tint. A ring whose atoms are all in it is filled inside too.
+QPainterPath shapeOf(const Document& doc, const std::vector<QRectF>& labels, const QSet<int>& atoms, const QSet<int>& arrows,
+                     const QSet<int>& texts) {
+    QPainterPathStroker thick;
+    thick.setWidth(10), thick.setCapStyle(Qt::RoundCap), thick.setJoinStyle(Qt::RoundJoin);
+    QPainterPath shape;
+    shape.setFillRule(Qt::WindingFill);  // overlaps add up, not cancel into holes
+    for (const Bond& b : doc.bonds)
+        if (atoms.contains(b.a) && atoms.contains(b.b)) {
+            QPainterPath line(doc.atoms[b.a].pos);
+            line.lineTo(doc.atoms[b.b].pos);
+            shape.addPath(thick.createStroke(line));
+        }
+    for (int i : atoms) {
+        shape.addEllipse(doc.atoms[i].pos, 6, 6);
+        if (i < int(labels.size()) && !labels[i].isEmpty()) shape.addRoundedRect(labels[i].adjusted(-2, -2, 2, 2), 4, 4);  // all of OH, NH₂
+    }
+    for (const auto& r : chem::rings(doc))
+        if (std::all_of(r.begin(), r.end(), [&](int i) { return atoms.contains(i); })) {
+            QPolygonF ring;
+            for (int i : r) ring << doc.atoms[i].pos;
+            QPainterPath inside;
+            inside.addPolygon(ring);
+            shape = shape.simplified().united(inside);  // united, whichever way round the ring runs
+        }
+    for (int i : arrows) shape.addPath(thick.createStroke(arrowPath(doc.arrows[i])));
+    for (int i : texts) shape.addRoundedRect(textPath(doc.texts[i], documentStyle(doc)).boundingRect().adjusted(-3, -3, 3, 3), 3, 3);
+    return shape.simplified();
+}
+
+// Around these atoms, arrows and texts, clear of the atoms' labels' centres; empty without extent.
+QRectF boxAround(const Document& doc, const QSet<int>& atoms, const QSet<int>& arrows, const QSet<int>& texts) {
+    QPolygonF pts;
+    for (int i : atoms) pts << doc.atoms[i].pos;
+    for (int i : arrows) pts << doc.arrows[i].from << doc.arrows[i].to;
+    for (int i : texts) pts << doc.texts[i].pos;
+    const QRectF r = pts.boundingRect();
+    if (pts.size() < 2 || (r.width() < 1e-6 && r.height() < 1e-6)) return {};
+    return r.adjusted(-6, -6, 6, 6);
+}
+
 class Snapshot : public QUndoCommand {
 public:
     Snapshot(Canvas* c, Document before, Document after, const QString& text)
@@ -460,7 +509,8 @@ void Canvas::refresh() {
     }
     picture_ = QPicture();
     QPainter p(&picture_);
-    paintDocument(p, doc_, {theme_.ink, theme_.error});
+    labels_.assign(doc_.atoms.size(), {});
+    paintDocument(p, doc_, {theme_.ink, theme_.error, 0, &labels_});
     p.end();
     // The scene grows to hold the drawing and its page with room to spare, never shrinking under the view (#326).
     const QRectF drawn = documentBounds(doc_).united(pageRect(doc_)).adjusted(-2000, -2000, 2000, 2000);
@@ -580,27 +630,39 @@ void Canvas::drawRulers(QPainter* p) {
     p->restore();
 }
 
+QPainterPath Canvas::groupShape(int group) const {
+    QSet<int> atoms, arrows, texts;
+    for (int i = 0; i < int(doc_.atoms.size()); ++i)
+        if (doc_.atoms[i].group == group) atoms.insert(i);
+    for (int i = 0; i < int(doc_.arrows.size()); ++i)
+        if (doc_.arrows[i].group == group) arrows.insert(i);
+    for (int i = 0; i < int(doc_.texts.size()); ++i)
+        if (doc_.texts[i].group == group) texts.insert(i);
+    return shapeOf(doc_, labels_, atoms, arrows, texts);
+}
+
 void Canvas::drawForeground(QPainter* p, const QRectF&) {
     QColor sel = theme_.accent, hover = theme_.accent, line = theme_.accent;
     sel.setAlpha(90), hover.setAlpha(60);
     p->setRenderHint(QPainter::Antialiasing);
-    p->setPen(Qt::NoPen);
-    for (const auto& b : doc_.bonds)
-        if (selectedAtoms_.contains(b.a) && selectedAtoms_.contains(b.b)) {
-            p->setPen(QPen(sel, 3, Qt::SolidLine, Qt::RoundCap));
-            p->drawLine(doc_.atoms[b.a].pos, doc_.atoms[b.b].pos);
-        }
-    p->setPen(Qt::NoPen);
-    p->setBrush(sel);
-    for (int i : selectedAtoms_) p->drawEllipse(doc_.atoms[i].pos, 4, 4);
+    // The selection is one smooth tinted shape, however its atoms, bonds, arrows and text overlap.
+    if (!selectedAtoms_.isEmpty() || !selectedArrows_.isEmpty() || !selectedTexts_.isEmpty()) {
+        const QPainterPath shape = shapeOf(doc_, labels_, selectedAtoms_, selectedArrows_, selectedTexts_);
+        p->fillPath(shape, sel);
+        QPen edge(line, 1.5);
+        edge.setCosmetic(true);  // a hairline at any zoom
+        p->strokePath(shape, edge);
+    }
+    const int hovered = hoverAtom_ >= 0 ? doc_.atoms[hoverAtom_].group
+                        : hoverBond_ >= 0 ? doc_.atoms[doc_.bonds[hoverBond_].a].group : -1;
+    if (hovered >= 0 && tool_ == Tool::Select && !(hoverAtom_ >= 0 && selectedAtoms_.contains(hoverAtom_))) {
+        QPen dashed(line, 1.5, Qt::DashLine);  // pointing at a grouped thing shows its group (#410)
+        dashed.setCosmetic(true);
+        p->strokePath(groupShape(hovered), dashed);
+    }
     p->setPen(QPen(theme_.hotspot, 1.5));
     p->setBrush(Qt::NoBrush);
     for (int i : highlight_) p->drawEllipse(doc_.atoms[i].pos, 7, 7);
-    p->setPen(Qt::NoPen);
-    p->setBrush(sel);
-
-    for (int i : selectedArrows_) p->strokePath(arrowPath(doc_.arrows[i]), QPen(sel, 4, Qt::SolidLine, Qt::RoundCap));
-    for (int i : selectedTexts_) p->drawRect(textPath(doc_.texts[i], documentStyle(doc_)).boundingRect().adjusted(-1.5, -1.5, 1.5, 1.5));
 
     // Drawing or reshaping a curved arrow lights what each end will stay on instead of the hotspot.
     std::vector<std::array<int, 2>> anchors;
@@ -626,7 +688,8 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
         if (const QRectF box = selectionBox(); !box.isNull() && reshapedArrow() < 0) {
             p->setBrush(Qt::NoBrush);
             p->setPen(QPen(line, 0, Qt::DotLine));
-            p->drawRect(box);
+            for (const Piece& piece : pieces(doc_, selectedAtoms_, selectedArrows_, selectedTexts_))  // a box each; a group is one
+                if (const QRectF b = boxAround(doc_, piece.atoms, piece.arrows, piece.texts); !b.isNull()) p->drawRect(b);
             if (tool_ == Tool::Select) {
                 p->setPen(QPen(line, 0));
                 p->setBrush(theme_.paper);
@@ -818,14 +881,19 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
             if (threeD && atoms.isEmpty()) { drag_ = Drag::None; break; }
             bool already = selectedAtoms_.contains(atoms) && selectedArrows_.contains(arrows) &&
                            selectedTexts_.contains(texts);
+            const bool one = e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier) &&
+                             !(e->modifiers() & Qt::AltModifier);  // into a group: just this (#410); Ctrl+Alt snaps a rotation
             if (shift) selectedAtoms_ |= atoms, selectedArrows_ |= arrows, selectedTexts_ |= texts;
-            else if (!already) selectedAtoms_ = atoms, selectedArrows_ = arrows, selectedTexts_ = texts;
+            else if (!already || one) selectedAtoms_ = atoms, selectedArrows_ = arrows, selectedTexts_ = texts;
+            if (!one) selectGroups();
             drag_ = threeD ? Drag::Rotate3D
                            : !(e->modifiers() & Qt::AltModifier) ? Drag::Move : shift ? Drag::Rotate3D : Drag::Rotate;
             if (drag_ == Drag::Rotate3D && !(pose_ = chem::pose3D(doc_, moleculesOfSelection())))
                 drag_ = threeD ? Drag::None : Drag::Rotate;
         } else if (threeD && !selectedAtoms_.isEmpty() && selectionBox().contains(pressPos_)) {
             drag_ = (pose_ = chem::pose3D(doc_, moleculesOfSelection())) ? Drag::Rotate3D : Drag::None;
+        } else if (!shift && inSelectedBox(pressPos_)) {
+            drag_ = e->modifiers() & Qt::AltModifier ? Drag::Rotate : Drag::Move;  // anywhere in a selected thing's box
         } else {
             if (!shift) selectedAtoms_.clear(), selectedArrows_.clear(), selectedTexts_.clear();
             drag_ = Drag::Rubber;
@@ -1039,6 +1107,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
             if (r.contains(doc_.arrows[i].from) && r.contains(doc_.arrows[i].to)) selectedArrows_.insert(i);
         for (int i = 0; i < int(doc_.texts.size()); ++i)
             if (r.intersects(textPath(doc_.texts[i], documentStyle(doc_)).boundingRect())) selectedTexts_.insert(i);
+        selectGroups();
     } else if (drag == Drag::Arrow) {
         const int hit = arrowAt(pressPos_);
         if (click && hit >= 0 && isOrbital(next.arrows[hit].kind) == isOrbital(arrowKind_)) {
@@ -1176,15 +1245,10 @@ void Canvas::mouseDoubleClickEvent(QMouseEvent* e) {
             if (!seen.contains(nb)) seen.insert(nb), stack.push_back(nb);
     }
     setSelection(seen);
+    selectGroups();
 }
 
 namespace {
-
-// The selection (everything if nothing is selected) as separate objects: each
-// molecule, arrow and text is one, so they align and distribute as wholes.
-struct Piece {
-    QSet<int> atoms, arrows, texts;
-};
 
 std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows, QSet<int> texts) {
     if (atoms.isEmpty() && arrows.isEmpty() && texts.isEmpty())
@@ -1231,6 +1295,22 @@ std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows
         if (home) home->texts.insert(t);
         else out.push_back({{}, {}, {t}});
     }
+    auto groups = [&](const Piece& p) {  // grouped objects are one piece, whatever joins them (#410)
+        QSet<int> g;
+        for (int i : p.atoms) g.insert(doc.atoms[i].group);
+        for (int i : p.arrows) g.insert(doc.arrows[i].group);
+        for (int i : p.texts) g.insert(doc.texts[i].group);
+        g.remove(-1);
+        return g;
+    };
+    for (size_t i = 0; i < out.size(); ++i)  // ponytail: quadratic in pieces; fine for a page's worth
+        for (size_t j = i + 1; j < out.size();)
+            if (groups(out[i]).intersects(groups(out[j]))) {
+                out[i].atoms |= out[j].atoms, out[i].arrows |= out[j].arrows, out[i].texts |= out[j].texts;
+                out.erase(out.begin() + j), j = i + 1;
+            } else {
+                ++j;
+            }
     return out;
 }
 
@@ -1514,14 +1594,13 @@ void Canvas::transformSelection(const QTransform& t, const QString& what) {
     commit(next, what);
 }
 
-QRectF Canvas::selectionBox() const {
-    QPolygonF pts;
-    for (int i : selectedAtoms_) pts << doc_.atoms[i].pos;
-    for (int i : selectedArrows_) pts << doc_.arrows[i].from << doc_.arrows[i].to;
-    for (int i : selectedTexts_) pts << doc_.texts[i].pos;
-    const QRectF r = pts.boundingRect();
-    if (pts.size() < 2 || (r.width() < 1e-6 && r.height() < 1e-6)) return {};
-    return r.adjusted(-6, -6, 6, 6);  // clear of the atoms' labels' centres
+QRectF Canvas::selectionBox() const { return boxAround(doc_, selectedAtoms_, selectedArrows_, selectedTexts_); }
+
+bool Canvas::inSelectedBox(QPointF p) const {
+    if (selectedAtoms_.isEmpty() && selectedArrows_.isEmpty() && selectedTexts_.isEmpty()) return false;
+    for (const Piece& piece : pieces(doc_, selectedAtoms_, selectedArrows_, selectedTexts_))
+        if (boxAround(doc_, piece.atoms, piece.arrows, piece.texts).contains(p)) return true;
+    return false;
 }
 
 std::optional<QPointF> Canvas::rotateHandle() const {
@@ -1737,6 +1816,48 @@ void Canvas::numberCompounds() {
         t.pos.rx() -= textPath(t, documentStyle(next)).boundingRect().center().x() - t.pos.x();
     }
     commit(next, tr("Number Compounds"));
+}
+
+void Canvas::selectGroups() {
+    QSet<int> groups;
+    for (int i : selectedAtoms_) groups.insert(doc_.atoms[i].group);
+    for (int i : selectedArrows_) groups.insert(doc_.arrows[i].group);
+    for (int i : selectedTexts_) groups.insert(doc_.texts[i].group);
+    groups.remove(-1);
+    if (groups.isEmpty()) return;
+    for (int i = 0; i < int(doc_.atoms.size()); ++i)
+        if (groups.contains(doc_.atoms[i].group)) selectedAtoms_.insert(i);
+    for (int i = 0; i < int(doc_.arrows.size()); ++i)
+        if (groups.contains(doc_.arrows[i].group)) selectedArrows_.insert(i);
+    for (int i = 0; i < int(doc_.texts.size()); ++i)
+        if (groups.contains(doc_.texts[i].group)) selectedTexts_.insert(i);
+    viewport()->update();
+    emit selectionChanged();
+}
+
+void Canvas::groupSelection() {
+    const auto ps = pieces(doc_, selectedAtoms_, selectedArrows_, selectedTexts_);
+    if (ps.size() < 2 || (selectedAtoms_.isEmpty() && selectedArrows_.isEmpty() && selectedTexts_.isEmpty())) return;
+    Document next = doc_;
+    int id = 0;
+    for (const auto& a : doc_.atoms) id = std::max(id, a.group + 1);
+    for (const auto& a : doc_.arrows) id = std::max(id, a.group + 1);
+    for (const auto& t : doc_.texts) id = std::max(id, t.group + 1);
+    for (int i : selectedAtoms_)
+        for (int a : moleculeOf(doc_, i)) next.atoms[a].group = id;  // whole molecules, so none is torn apart
+    for (int i : selectedArrows_) next.arrows[i].group = id;
+    for (int i : selectedTexts_) next.texts[i].group = id;
+    commit(next, tr("Group"));
+    selectGroups();
+}
+
+void Canvas::ungroupSelection() {
+    selectGroups();
+    Document next = doc_;
+    for (int i : selectedAtoms_) next.atoms[i].group = -1;
+    for (int i : selectedArrows_) next.arrows[i].group = -1;
+    for (int i : selectedTexts_) next.texts[i].group = -1;
+    commit(next, tr("Ungroup"));
 }
 
 void Canvas::setArrowHead(double size) {

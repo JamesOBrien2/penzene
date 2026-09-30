@@ -38,6 +38,7 @@ struct Atom {
     int stereoGroupNumber = 0;  // n of &n / orn
     // A variable attachment: this bare point (z 0, no label) stands for a bond to any one of these atoms.
     std::vector<int> attachments;
+    int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
 };
 
 struct Bond {
@@ -83,6 +84,7 @@ struct Arrow {
     // What a curved arrow's end starts or ends on, and moves with: one atom, a bond's two, or none (-1).
     std::array<int, 2> fromAt{-1, -1}, toAt{-1, -1};
     double head = 1;  // arrowhead size, relative to the usual
+    int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
     bool operator==(const Arrow&) const = default;
 };
 
@@ -95,6 +97,7 @@ struct Text {
     QColor color;
     bool compound = false;  // a compound number (#504): bold, renumbered in scheme order on every edit
     int anchor = -1;        // an atom of the molecule it numbers, which it follows; -1 = free
+    int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
     bool operator==(const Text&) const = default;
 };
 
@@ -171,7 +174,7 @@ inline bool operator==(const Atom& x, const Atom& y) {
     return x.pos == y.pos && x.z == y.z && x.charge == y.charge && x.label == y.label && x.color == y.color &&
            x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial &&
            x.isotope == y.isotope && x.stereoGroup == y.stereoGroup && x.stereoGroupNumber == y.stereoGroupNumber &&
-           x.attachments == y.attachments;
+           x.attachments == y.attachments && x.group == y.group;
 }
 inline bool operator==(const Bond& x, const Bond& y) {
     return x.a == y.a && x.b == y.b && x.order == y.order && x.stereo == y.stereo &&
