@@ -1,0 +1,58 @@
+# The winget manifests, checked as the winget-pkgs checklist asks: winget validate, then a real
+# install and uninstall from them, on Windows. Runs when they change, or by hand for a release.
+name: winget
+
+on:
+  pull_request:
+    paths: [packaging/winget/**, .github/workflows/winget.yml]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release to check (e.g. 1.9.0); the latest when empty
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  manifest:
+    runs-on: windows-2025
+    env:
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render the manifests
+        shell: pwsh
+        run: |
+          if (-not $env:VERSION) {
+            $env:VERSION = (Invoke-RestMethod https://api.github.com/repos/JamesOBrien2/penzene/releases/latest).tag_name.TrimStart('v')
+          }
+          "VERSION=$env:VERSION" >> $env:GITHUB_ENV
+          python packaging/winget/render.py $env:VERSION out
+      - name: WinGet
+        shell: pwsh
+        run: |
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+            Install-PackageProvider -Name NuGet -Force | Out-Null
+            Install-Module Microsoft.WinGet.Client -Force -Repository PSGallery
+            Repair-WinGetPackageManager -AllUsers -Latest
+          }
+          winget --version
+      - name: Validate, install and uninstall
+        shell: pwsh
+        run: |
+          $manifest = "out/manifests/j/JamesOBrien2/Penzene/$env:VERSION"
+          winget validate --manifest $manifest --disable-interactivity
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          winget settings --enable LocalManifestFiles
+          winget install --manifest $manifest --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # The ProductCode in the manifest is the uninstall entry Inno writes.
+          $entry = Get-ItemProperty -ErrorAction SilentlyContinue `
+            'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Penzene_is1',
+            'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Penzene_is1'
+          if (-not $entry) { throw 'No Penzene_is1 uninstall entry after installing' }
+          $entry | Select-Object DisplayName, DisplayVersion, Publisher | Format-List
+          if ($entry.DisplayVersion -ne $env:VERSION) { throw "DisplayVersion $($entry.DisplayVersion), expected $env:VERSION" }
+          winget uninstall --manifest $manifest --silent --disable-interactivity
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
