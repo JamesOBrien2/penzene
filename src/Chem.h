@@ -47,6 +47,8 @@ QByteArray toCdx(const Document& doc);    // binary CDX: all that toCdxml writes
 QByteArray cdxToCdxml(const QByteArray& cdx);
 QByteArray cdxmlToCdx(const QByteArray& cdxml);
 std::string toSmiles(const Document& doc);  // "" if the structure isn't valid
+std::string toSmarts(const Document& doc);  // query atoms (A, Q, X, M, [N,O,S]) as queries
+QString queryMeaning(const QString& label);  // "a halogen" for X, "one of N, O, S"; "" for no query label
 
 // A drawn reaction: the molecules before, alongside and after its arrow.
 struct Reaction {

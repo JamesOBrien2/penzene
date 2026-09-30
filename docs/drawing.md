@@ -27,6 +27,9 @@ Space select.
   deuterium and tritium (`d` on an atom makes it D). They're drawn ¹³C, carried through SMILES
   (`[13CH4]`), MOL and ChemDraw files, and counted in the masses.
 - `x` and `r` on an atom label it X and R. `R1`, `R2`… export as MDL R-groups.
+- Query atoms for SAR and scope figures: type `A` (any atom), `Q` (not C or H), `X` (halogen), `M` (metal),
+  their `AH`, `QH`… forms (or H), or an atom list such as `[N,O,S]`. MOL files and Edit → Copy As → SMARTS
+  keep them as queries, and the structure checks list them.
 - **Structure → Expand Abbreviations** draws them out in full.
 - Atom Properties (`/` on an atom) sets the charge, map number, lone pairs, radical electrons and δ±.
 - `:` cycles lone pairs, `*` toggles a radical dot, and the atom's context menu adds δ+ or δ−.

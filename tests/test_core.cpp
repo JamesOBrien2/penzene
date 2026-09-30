@@ -1022,7 +1022,7 @@ TEST_CASE("R-groups and generic atoms export and read back (#34)") {
         for (const auto& a : back->atoms)
             if (!a.label.isEmpty()) labels << a.label;
         labels.sort();
-        CHECK(labels.join(",").toStdString() == (v3000 ? "R1,R2" : "R1,R2,X"));  // V3000 has no alias block
+        CHECK(labels.join(",").toStdString() == "R1,R2,X");  // X as a query atom, so V3000 too (#505)
     }
     Document ar = *chem::fromSmiles("CC");
     REQUIRE(edit::applyLabel(ar, 1, "Ar", true));
@@ -2083,4 +2083,27 @@ TEST_CASE("a molecule's predicted shifts don't depend on the others on the page 
     REQUIRE(sticks.size() == alone.size());
     for (size_t k = 0; k < sticks.size(); ++k) CHECK(sticks[k].ppm == alone[k].ppm);
     CHECK(chem::predictShifts(d).size() == chem::predictShifts(ethanol).size());  // the canvas's shift labels too
+}
+
+TEST_CASE("query atoms A, Q, X, M and atom lists keep their meaning in MOL and SMARTS (#505)") {
+    Document d = *chem::fromSmiles("c1ccccc1CC");
+    for (auto [i, label] : {std::pair{6, "Q"}, {7, "[N,O,S]"}}) d.atoms[i].z = 0, d.atoms[i].label = label;
+    const std::string smarts = chem::toSmarts(d);
+    INFO(smarts);
+    CHECK(smarts.find("!#6") != std::string::npos);  // Q: not carbon
+    CHECK(smarts.find("#7,#8,#16") != std::string::npos);
+    for (bool v3000 : {false, true}) {
+        const auto back = chem::fromMolBlock(chem::toMolBlock(d, v3000));
+        REQUIRE(back);
+        CHECK(back->atoms[6].label == "Q");
+        CHECK(back->atoms[7].label == "[N,O,S]");
+        CHECK(back->atoms[7].z == 0);
+    }
+    std::vector<QString> problems;
+    for (const auto& p : chem::checkStructure(d)) problems.push_back(p.message);
+    CHECK(std::find(problems.begin(), problems.end(), "Query atom Q: any atom but C or H") != problems.end());
+    CHECK(std::find(problems.begin(), problems.end(), "Query atom [N,O,S]: one of N, O, S") != problems.end());
+    CHECK(std::none_of(problems.begin(), problems.end(), [](const QString& p) { return p.startsWith("Unknown label"); }));
+    d.atoms[6].label = "X";
+    CHECK(chem::fromMolBlock(chem::toMolBlock(d))->atoms[6].label == "X");
 }

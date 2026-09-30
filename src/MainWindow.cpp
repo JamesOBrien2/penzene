@@ -2377,6 +2377,9 @@ void MainWindow::buildMenus() {
     copyAs->addAction(tr("&SMILES"), QKeySequence(tr("Ctrl+Alt+C")), this, [this] {
         QApplication::clipboard()->setText(QString::fromStdString(chem::toSmiles(canvas_->selectedSubset())));
     });
+    copyAs->addAction(tr("SMAR&TS"), this, [this] {
+        QApplication::clipboard()->setText(QString::fromStdString(chem::toSmarts(canvas_->selectedSubset())));
+    });
     copyAs->addAction(tr("&InChI"), this, [this] {
         QApplication::clipboard()->setText(QString::fromStdString(chem::toInchi(canvas_->selectedSubset())));
     });
