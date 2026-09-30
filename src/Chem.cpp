@@ -245,8 +245,9 @@ static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
     // A variable attachment is MDL's position variation bond (V3000 ENDPTS), from its bare point.
     for (size_t i = 0; i < in.atoms.size(); ++i) {
         const auto& ends = in.atoms[i].attachments;
+        if (ends.empty()) continue;
         const auto nbs = doc.neighbors(int(i));
-        auto* bond = ends.empty() || nbs.size() != 1 ? nullptr : mol->getBondBetweenAtoms(i, nbs[0]);
+        auto* bond = nbs.size() != 1 ? nullptr : mol->getBondBetweenAtoms(i, nbs[0]);
         if (!bond) continue;
         std::string pts = "(" + std::to_string(ends.size());
         for (int e : ends) pts += " " + std::to_string(e + 1);
@@ -1536,14 +1537,15 @@ std::string toSmiles(const Document& doc) {
 // ponytail: SMILES and InChI still see a * there; CXSMILES m: if they need the positions.
 static Document onePosition(Document doc) {
     std::vector<int> points;
-    for (int i = 0; i < int(doc.atoms.size()); ++i)
-        if (const auto nbs = doc.neighbors(i); !doc.atoms[i].attachments.empty() && nbs.size() == 1 &&
-                                               doc.bondBetween(doc.atoms[i].attachments[0], nbs[0]) < 0) {
+    for (int i = 0; i < int(doc.atoms.size()); ++i) {
+        if (doc.atoms[i].attachments.empty()) continue;  // neighbors() scans every bond
+        if (const auto nbs = doc.neighbors(i); nbs.size() == 1 && doc.bondBetween(doc.atoms[i].attachments[0], nbs[0]) < 0) {
             Bond& b = doc.bonds[doc.bondBetween(i, nbs[0])];
             b.a = doc.atoms[i].attachments[0], b.b = nbs[0];
             points.push_back(i);
         }
-    doc.removeAtoms(points);
+    }
+    if (!points.empty()) doc.removeAtoms(points);
     return doc;
 }
 
