@@ -20,9 +20,10 @@ Defender warn about them more often.
 ## Submitting
 
 1. Test them: the `winget` workflow (`.github/workflows/winget.yml`, run by hand from the Actions
-   tab for a release) renders them, runs `winget validate`, installs from them and uninstalls on
-   Windows, the two checks the winget-pkgs pull request checklist asks for. On Windows the same by
-   hand (after `winget settings --enable LocalManifestFiles` once, as administrator):
+   tab for a release) renders them and runs `winget validate`. It can't install from them, since
+   Windows holds the unsigned installer at a publisher prompt on a runner. The winget-pkgs checklist
+   also asks for an install and uninstall, so do those on a Windows PC (after `winget settings
+   --enable LocalManifestFiles` once, as administrator):
 
    ```powershell
    winget validate --manifest out\manifests\j\JamesOBrien2\Penzene\1.4.0
@@ -37,7 +38,7 @@ Defender warn about them more often.
      `manifests/` tree into it, and open a pull request.
 
    Title it `New package: JamesOBrien2.Penzene version X.Y.Z` and tick the template's checklist
-   (link the `winget` workflow run for validate and install). The bot closes a pull request that
+   (link the `winget` workflow run for validate). The bot closes a pull request that
    waits on its author: sign the Microsoft CLA when it asks, and answer any `Needs-Author-Feedback`
    within five days.
 3. For later releases, `wingetcreate update JamesOBrien2.Penzene --version X.Y.Z --urls
