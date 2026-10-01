@@ -4057,6 +4057,39 @@ TEST_CASE("Arrange → Group: grouped objects select, arrange and save as one (#
     CHECK(doc.atoms[0].group == doc.atoms[3].group);
 }
 
+TEST_CASE("atoms added to a grouped molecule join its group: explicit hydrogens go with it (#590)") {
+    App app;
+    MainWindow w;
+    w.resize(900, 600);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setTool(Canvas::Tool::Select);
+    Document d = *chem::fromSmiles("CCO");
+    d.append(*chem::fromSmiles("C"), {10 * kBondLength, 0});  // methane, ungrouped
+    d.texts.push_back({{0, 3 * kBondLength}, "crude"});
+    canvas->setDocumentSilently(d);
+    QAction *group = nullptr, *hydrogens = nullptr;
+    for (auto* a : w.findChildren<QAction*>()) {
+        if (a->text() == "&Group") group = a;
+        if (a->text() == "Add Explicit &Hydrogens") hydrogens = a;
+    }
+    REQUIRE(group);
+    REQUIRE(hydrogens);
+    canvas->setSelection({0}, {}, {0});
+    group->trigger();
+    const int id = canvas->document().texts[0].group;
+    canvas->setSelection({}, {}, {});
+    hydrogens->trigger();
+    const Document& doc = canvas->document();
+    REQUIRE(doc.atoms.size() == 4 + 6 + 4);
+    for (int a : edit::moleculeOf(doc, 0)) CHECK(doc.atoms[a].group == id);  // ethanol's six H too
+    for (int a : edit::moleculeOf(doc, 3)) CHECK(doc.atoms[a].group == -1);  // methane's stay out
+    canvas->centerOn(doc.atoms[1].pos);
+    QTest::mouseClick(canvas->viewport(), Qt::LeftButton, {}, canvas->mapFromScene(doc.atoms[1].pos));
+    canvas->deleteSelection();
+    CHECK(canvas->document().atoms.size() == 5);  // the group went whole: only methane is left
+}
+
 TEST_CASE("drag anywhere in a selected molecule's box moves it; a group has one box (#410)") {
     App app;
     MainWindow w;

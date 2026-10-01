@@ -349,6 +349,7 @@ void Canvas::commit(const Document& next, const QString& text) {
     Document after = next;
     followAnchors(doc_, after);  // whatever moved the atoms, curved arrows on them come along (#498)
     followNumbers(doc_, after);  // and compound numbers, which stay in scheme order (#504)
+    joinGroups(after);
     renumberCompounds(after, compoundStart_);
     for (int k : syncLegends(after)) {  // centred under the molecule
         Text& t = after.texts[k];

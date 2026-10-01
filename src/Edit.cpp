@@ -211,6 +211,22 @@ std::vector<int> syncLegends(Document& doc) {
     return placed;
 }
 
+// A group holds whole molecules (#410), so an atom bonded into a grouped one (explicit H, an
+// expanded label, a sprouted bond) but in no group itself joins it, as does everything joined to that.
+void joinGroups(Document& doc) {
+    if (std::none_of(doc.atoms.begin(), doc.atoms.end(), [](const Atom& a) { return a.group >= 0; })) return;
+    const auto joined = doc.joined();
+    std::vector<int> todo;
+    for (int i = 0; i < int(doc.atoms.size()); ++i)
+        if (doc.atoms[i].group >= 0) todo.push_back(i);
+    while (!todo.empty()) {
+        const int a = todo.back();
+        todo.pop_back();
+        for (int nb : joined[a])
+            if (doc.atoms[nb].group < 0) doc.atoms[nb].group = doc.atoms[a].group, todo.push_back(nb);
+    }
+}
+
 void followNumbers(const Document& before, Document& after) {
     if (before.atoms.size() != after.atoms.size() || before.texts.size() != after.texts.size()) return;
     for (size_t k = 0; k < after.texts.size(); ++k) {
