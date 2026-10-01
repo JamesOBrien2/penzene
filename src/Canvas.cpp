@@ -1307,7 +1307,7 @@ std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows
         g.remove(-1);
         return g;
     };
-    for (size_t i = 0; i < out.size(); ++i)  // ponytail: quadratic in pieces; fine for a page's worth
+    for (size_t i = 0; i < out.size(); ++i)  // quadratic in pieces; fine for a page's worth
         for (size_t j = i + 1; j < out.size();)
             if (groups(out[i]).intersects(groups(out[j]))) {
                 out[i].atoms |= out[j].atoms, out[i].arrows |= out[j].arrows, out[i].texts |= out[j].texts;

@@ -387,7 +387,7 @@ static void layout(RWMol& mol) {
         for (int i : f) {
             const auto* a = mol.getAtomWithIdx(i);
             const auto& p = conf.getAtomPos(i);
-            // ponytail: a label's extent guessed at 0.65 Å a character, its first letter centred on the atom.
+            // A label's extent guessed at 0.65 Å a character, its first letter centred on the atom.
             int chars = 0;
             if (a->getAtomicNum() != 6 || a->getFormalCharge() || !a->getDegree()) {
                 const int h = int(a->getTotalNumHs()), q = std::abs(a->getFormalCharge());
@@ -617,7 +617,7 @@ struct FileMarks {
 
 // Arrows, free text and label nodes from the CDXML itself; RDKit only reads the
 // molecules. Returns the label nodes and how many bonds each node id has.
-// ponytail: plain lines, brackets, shapes and binary .cdx graphics are skipped.
+// Plain lines, brackets, shapes and binary .cdx graphics are skipped.
 static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& doc, QHash<int, int>& bondCount,
                                                std::vector<QPointF>& lonePairs, FileMarks& inks) {
     QXmlStreamReader r(xml);
@@ -1258,7 +1258,7 @@ std::optional<Document> readFile(const QString& path) {
 
 // CDXML in our own coordinates (BondLength = ours, y down, as ChemDraw), so
 // ChemDraw and chemDrawGraphics read it back unscaled.
-// ponytail: abbreviations are written expanded, free-text labels as generic
+// Abbreviations are written expanded, free-text labels as generic
 // nicknames; ChemDraw's own Fragment/Nickname nodes would keep "OMe" as a label.
 QByteArray toCdxml(const Document& doc) {
     QByteArray out;
@@ -1610,7 +1610,7 @@ std::string toSmiles(const Document& doc) {
 }
 
 // Each variable attachment bonded at its first atom: every position has the same formula and mass.
-// ponytail: SMILES and InChI still see a * there; CXSMILES m: if they need the positions.
+// SMILES and InChI still see a * there; CXSMILES m: if they need the positions.
 static Document onePosition(Document doc) {
     std::vector<int> points;
     for (int i = 0; i < int(doc.atoms.size()); ++i) {
@@ -1743,7 +1743,7 @@ std::vector<Peak> isotopePattern(const Document& doc, Ion ion) {
     if (ion == Ion::MplusNa) ++natural[11], ++charge;
     if (ion == Ion::MminusH) --natural[1], --charge;
     if (natural[1] < 0) return {};
-    // ponytail: one atom at a time; square-and-multiply if thousand-atom polymers get slow.
+    // One atom at a time; square-and-multiply if thousand-atom polymers get slow.
     for (const auto& [z, n] : natural) {
         if (n == 0) continue;
         std::vector<Peak> one;
@@ -2199,7 +2199,7 @@ int atomicNumber(const std::string& sym) {
 
 namespace chem {
 
-// ponytail: depth always comes from an embedding; a MOL file's own z isn't kept
+// Depth always comes from an embedding; a MOL file's own z isn't kept
 // on import, so a drawn 3D structure gets a fresh conformer. Keep z to use it.
 std::optional<Pose3D> pose3D(const Document& doc, const std::vector<int>& atoms) {
     if (atoms.empty()) return std::nullopt;
@@ -2310,7 +2310,7 @@ long hoseRank(int z) {  // CDK's element ranks; other elements by their mass
     case 14: return 8500; case 5: return 8400; case 9: return 8300; case 17: return 8200; case 35: return 8100;
     case 53: return 7900; case 0: return 800000;
     }
-    // ponytail: rounded average mass, not the major isotope's mass number (PeriodicTable's inline
+    // Rounded average mass, not the major isotope's mass number (PeriodicTable's inline
     // lookups aren't exported by the Windows DLL); it only orders rare elements, the same way everywhere.
     return 800000 - std::lround(RDKit::Atom(z).getMass());
 }

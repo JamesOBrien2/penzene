@@ -90,7 +90,7 @@ QPointF snapToAnchor(const Document& doc, std::array<int, 2> at, QPointF p, QPoi
     return len(d) < 1e-6 ? c : c + unit(d) * gap;
 }
 
-// ponytail: an end that follows is shifted, not turned, with its atoms: an electron pair drawn
+// An end that follows is shifted, not turned, with its atoms: an electron pair drawn
 // beside an atom stays on the same side of it when only the structure is rotated.
 void followAnchors(const Document& before, Document& after) {
     if (before.atoms.size() != after.atoms.size() || before.arrows.size() != after.arrows.size()) return;
@@ -631,7 +631,7 @@ Hotspot hotkey(Document& doc, Hotspot h, const QString& t) {
             return h;
         }
         if (t == "j" || t == "J") {  // η5-cyclopentadienyl / η6-benzene, bonded through the ring's centre
-            // ponytail: η-bonds have no SMILES or MOL form; the centroid is a bare dummy (*) there.
+            // η-bonds have no SMILES or MOL form; the centroid is a bare dummy (*) there.
             const int n = t == "j" ? 5 : 6;
             const QPointF centre = doc.atoms[at].pos + doc.awayDirection(at) * (1.6 * kBondLength);
             const auto ring = ringAt(doc, centre, n, n == 6);  // may reuse atoms already there
