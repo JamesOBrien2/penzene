@@ -261,7 +261,7 @@ static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
         // Generic atoms (expansion drops their labels, so they come from `in`): R1…Rn as
         // MDL R-groups (R# with RGP, [n*] in SMILES), query atoms as queries, any other text (X, Ar)
         // as an MDL atom alias.
-        // ponytail: V3000 has no alias block, so there X/Ar become plain * atoms (a list's comes back as X, Y…).
+        // V3000 has no alias block, so there X/Ar become plain * atoms (a list's comes back as X, Y…).
         if (!query && a.z == 0 && i < in.atoms.size() && !in.atoms[i].label.isEmpty()) {
             static const QRegularExpression rgroup("^R(\\d+)$");
             const QString label = in.atoms[i].label;
