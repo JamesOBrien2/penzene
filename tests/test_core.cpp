@@ -779,6 +779,18 @@ TEST_CASE("reactions: reaction SMILES and RXN, both ways (#101)") {
     CHECK_FALSE(chem::fromRxn("not an rxn"));
 }
 
+TEST_CASE("multi-step reaction SMILES, one step a line, read back as one scheme (#591)") {
+    const std::string text = "CCO>>CC=O\r\nCC=O>>CC(=O)O\n";  // as copied, with Windows line ends too
+    auto doc = chem::fromReactionSmiles(text);
+    REQUIRE(doc);
+    CHECK(doc->arrows.size() == 2);
+    const auto steps = chem::reactionsOf(*doc);
+    REQUIRE(steps.size() == 2);
+    CHECK(doc->atoms.size() == 3 + 3 + 4);  // the shared intermediate drawn once
+    CHECK(chem::toReactionSmiles(steps) == chem::toReactionSmiles(chem::reactionsOf(*chem::fromReactionSmiles(chem::toReactionSmiles(steps)))));
+    CHECK_FALSE(chem::fromReactionSmiles("CCO>>CC=O\nnot a reaction"));  // any bad line: nothing
+}
+
 TEST_CASE("an RD file opens as one scheme (#387)") {
     // Ethanol -> acetaldehyde -> acetic acid, written as two Rxnfiles.
     auto mol = [](const char* s) { return *chem::fromSmiles(s); };

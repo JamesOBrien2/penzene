@@ -1186,19 +1186,26 @@ Document layoutReaction(const std::vector<Reaction>& steps) {
     return out;
 }
 
+// One step a line, as toReactionSmiles writes a scheme (#591); a step starting from the last one's
+// products carries on from them.
 std::optional<Document> fromReactionSmiles(const std::string& smiles) {
-    const QStringList sides = QString::fromStdString(smiles).trimmed().split('>');
-    if (sides.size() != 3) return std::nullopt;
-    Reaction r;
-    std::vector<Document>* into[] = {&r.reactants, &r.agents, &r.products};
-    for (int k = 0; k < 3; ++k)
-        for (const QString& part : sides[k].split('.', Qt::SkipEmptyParts)) {
-            auto m = fromSmiles(part.toStdString());
-            if (!m) return std::nullopt;
-            into[k]->push_back(std::move(*m));
-        }
-    if (r.reactants.empty() && r.products.empty()) return std::nullopt;
-    return layoutReaction({r});
+    std::vector<Reaction> steps;
+    for (const QString& line : QString::fromStdString(smiles).split('\n', Qt::SkipEmptyParts)) {
+        const QStringList sides = line.trimmed().split('>');
+        if (sides.size() != 3) return std::nullopt;
+        Reaction r;
+        std::vector<Document>* into[] = {&r.reactants, &r.agents, &r.products};
+        for (int k = 0; k < 3; ++k)
+            for (const QString& part : sides[k].split('.', Qt::SkipEmptyParts)) {
+                auto m = fromSmiles(part.toStdString());
+                if (!m) return std::nullopt;
+                into[k]->push_back(std::move(*m));
+            }
+        if (r.reactants.empty() && r.products.empty()) return std::nullopt;
+        steps.push_back(std::move(r));
+    }
+    if (steps.empty()) return std::nullopt;
+    return layoutReaction(steps);
 }
 
 static std::optional<Reaction> readRxn(const QString& s) {
