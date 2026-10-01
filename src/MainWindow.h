@@ -166,5 +166,5 @@ private:
     class QComboBox* nucleus_;
     class NmrView* nmr_;
     std::vector<std::pair<QAction*, std::function<QIcon()>>> icons_;
-    std::vector<class QFrame*> flyouts_;  // the tool rail's group flyouts
+    std::vector<struct FlyoutFrame*> flyouts_;  // the tool rail's group flyouts
 };

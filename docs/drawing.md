@@ -6,7 +6,8 @@ The rail on the left holds the tools in six groups: **Select** (select, rotate i
 double, triple, wedge, hash, interaction, partial, chain), **Rings**, **Atoms** (element,
 charges), **Arrows**, and **Shapes** (lines, boxes, ellipses, text). Click a group to open its tools
 beside the rail. They stay open, so you can keep several on screen and drag each by its title or
-any bare part of it, or drag a corner to resize it (the tools reflow to fit); close one with its **✕**. Clicking a group also
+any bare part of it, or drag a corner to resize it (the tools reflow to fit); close one with its **✕**. A new one opens
+beside those already open, and Penzene reopens them where you left them; **View → Reset Tool Layout** puts them back. Clicking a group also
 picks the tool you last used from it. Hover over a tool to see its key.
 
 Point at an atom or bond and it becomes the **hotspot**, marked in green. It stays put when the mouse

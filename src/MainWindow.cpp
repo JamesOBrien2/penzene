@@ -330,6 +330,132 @@ static QString uiStyle(const Theme& t) {
               c.accentBg.name());
 }
 
+// A tool flyout: the tools flow into as many columns as fit its width. Drag it by any part that
+// isn't a tool (its title, margins and gaps) to move it off the others (#466), or by a corner
+// to resize it; the tools reflow and the box follows them.
+struct FlyoutFrame : QObject {
+    struct Tool {
+        QWidget* w;
+        int span;
+        bool newRow;
+    };
+    QWidget* fly;
+    QGridLayout* grid;
+    std::vector<Tool> tools;
+    bool nextNewRow = false;
+    static constexpr int kDefaultCols = 4;
+    int cols = kDefaultCols;
+    int corner = 0;  // the corner being dragged: Qt::Edges, or 0 when moving
+    QPoint grab;  // where the drag began, in the window
+    QRect start;  // and the box then
+
+    FlyoutFrame(QWidget* flyout, QGridLayout* g) : QObject(flyout), fly(flyout), grid(g) {
+        flyout->setCursor(Qt::SizeAllCursor);
+        flyout->setMouseTracking(true);
+        flyout->installEventFilter(this);
+    }
+    void newRow() { nextNewRow = true; }  // the next tool starts a row, at the default width (resized, the tools just flow)
+    void add(QWidget* w, int span = 1) {
+        tools.push_back({w, span, std::exchange(nextNewRow, false)});
+        place(cols);
+    }
+    void place(int c) {
+        cols = c;
+        int slot = 0;
+        for (auto& t : tools) {
+            grid->removeWidget(t.w);
+            const int span = std::min(t.span, c);
+            if (t.newRow && c == kDefaultCols) slot = (slot + c - 1) / c * c;
+            if (slot % c + span > c) slot = (slot / c + 1) * c;
+            grid->addWidget(t.w, slot / c, slot % c, 1, span);
+            slot += span;
+        }
+    }
+    QSize sizeFor(int c) {
+        place(c);
+        fly->layout()->invalidate();
+        fly->layout()->activate();
+        return fly->layout()->minimumSize();
+    }
+    // The column count for a box dragged to `want`: as many as fit the width, or, when the drag
+    // was mostly vertical, the fewest that fit the height. Never wider than the window.
+    void fit(QSize want, int maxWidth, bool byHeight) {
+        int most = 0;
+        for (auto& t : tools) most += t.span;
+        int c = 1;
+        if (byHeight) {
+            while (c < most && sizeFor(c).height() > want.height() && sizeFor(c + 1).width() <= maxWidth) ++c;
+        } else {
+            for (int n = 1; n <= most && sizeFor(n).width() <= std::min(want.width(), maxWidth); ++n) c = n;
+        }
+        place(c);
+    }
+    int cornerAt(QPoint p) const {
+        constexpr int zone = 12;
+        int edges = 0;
+        if (p.x() < zone) edges |= Qt::LeftEdge;
+        if (p.x() >= fly->width() - zone) edges |= Qt::RightEdge;
+        if (p.y() < zone) edges |= Qt::TopEdge;
+        if (p.y() >= fly->height() - zone) edges |= Qt::BottomEdge;
+        const bool horizontal = edges & (Qt::LeftEdge | Qt::RightEdge), vertical = edges & (Qt::TopEdge | Qt::BottomEdge);
+        return horizontal && vertical ? edges : 0;
+    }
+    static Qt::CursorShape cursorFor(int edges) {
+        if (!edges) return Qt::SizeAllCursor;
+        const bool topLeftOrBottomRight = bool(edges & Qt::LeftEdge) == bool(edges & Qt::TopEdge);
+        return topLeftOrBottomRight ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor;
+    }
+    void resize(QPoint mouse) {
+        QWidget* window = fly->parentWidget();
+        const QRect old = start;
+        const int left = corner & Qt::LeftEdge ? mouse.x() : old.left(), right = corner & Qt::RightEdge ? mouse.x() : old.right();
+        const int top = corner & Qt::TopEdge ? mouse.y() : old.top(), bottom = corner & Qt::BottomEdge ? mouse.y() : old.bottom();
+        const QPoint moved = mouse - grab;
+        fit({right - left + 1, bottom - top + 1}, window->width(), std::abs(moved.y()) > std::abs(moved.x()));
+        const QSize size = sizeFor(cols);
+        // The corner opposite the one dragged stays put.
+        QPoint at(corner & Qt::LeftEdge ? old.right() + 1 - size.width() : old.left(),
+                  corner & Qt::TopEdge ? old.bottom() + 1 - size.height() : old.top());
+        at.setX(std::clamp(at.x(), 0, std::max(0, window->width() - size.width())));
+        at.setY(std::clamp(at.y(), 0, std::max(0, window->height() - size.height())));
+        fly->setGeometry({at, size});
+    }
+    bool eventFilter(QObject*, QEvent* e) override {
+        if (e->type() == QEvent::Show) {  // the tools keep the ordinary pointer
+            for (auto* b : fly->findChildren<QAbstractButton*>()) b->setCursor(Qt::ArrowCursor);
+            return false;
+        }
+        const auto type = e->type();
+        if (type != QEvent::MouseButtonPress && type != QEvent::MouseMove && type != QEvent::MouseButtonRelease) return false;
+        const auto* me = static_cast<QMouseEvent*>(e);
+        QWidget* window = fly->parentWidget();
+        const QPoint mouse = window->mapFromGlobal(me->globalPosition().toPoint());
+        if (type == QEvent::MouseButtonPress) {
+            corner = cornerAt(me->position().toPoint());
+            grab = corner ? mouse : mouse - fly->pos();
+            start = fly->geometry();
+            fly->raise();  // over another one it overlaps
+            return true;
+        }
+        if (type == QEvent::MouseButtonRelease) {
+            corner = 0;
+            return false;
+        }
+        if (!(me->buttons() & Qt::LeftButton)) {
+            fly->setCursor(cursorFor(cornerAt(me->position().toPoint())));
+            return false;
+        }
+        if (corner) {
+            resize(mouse);
+            return true;
+        }
+        const QPoint to = mouse - grab;
+        fly->move(std::clamp(to.x(), 0, std::max(0, window->width() - fly->width())),
+                  std::clamp(to.y(), 0, std::max(0, window->height() - fly->height())));
+        return true;
+    }
+};
+
 MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_, this)) {
 #ifdef Q_OS_MACOS
     // Registers itself with Qt, once. Qt deletes its converters when QApplication goes, so this
@@ -562,6 +688,14 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     connect(autosaver, &QTimer::timeout, this, &MainWindow::autosave);
     autosaver->start(60 * 1000);
     buildWelcome();
+    for (size_t i = 0; i < flyouts_.size(); ++i) {  // the tool layout left at the last quit, after the theme sizes it
+        const QVariantList v = QSettings().value(QString("toolLayout/%1").arg(i)).toList();
+        if (v.size() != 3) continue;
+        FlyoutFrame* f = flyouts_[i];
+        f->fly->ensurePolished();
+        f->fly->setGeometry({v[1].toPoint(), f->sizeFor(std::max(1, v[2].toInt()))});  // as a corner drag sizes it
+        f->fly->setVisible(v[0].toBool());
+    }
 }
 
 // A card over the empty canvas: examples to open, and where to learn the keys. It goes away
@@ -645,9 +779,9 @@ void MainWindow::paintExamples() {
 void MainWindow::resizeEvent(QResizeEvent* e) {
     QMainWindow::resizeEvent(e);
     for (auto* f : flyouts_)
-        if (f->isVisible())
-            f->move(std::clamp(f->x(), 0, std::max(0, width() - f->width())),
-                    std::clamp(f->y(), 0, std::max(0, height() - f->height())));
+        if (!f->fly->isHidden())  // restored ones too, before the window is first shown
+            f->fly->move(std::clamp(f->fly->x(), 0, std::max(0, width() - f->fly->width())),
+                         std::clamp(f->fly->y(), 0, std::max(0, height() - f->fly->height())));
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* e) {
@@ -1137,6 +1271,11 @@ void MainWindow::dropEvent(QDropEvent* e) {
 
 void MainWindow::closeEvent(QCloseEvent* e) {
     if (!maybeSave()) return e->ignore();
+    QSettings s;  // the tool layout, restored at the next launch
+    for (size_t i = 0; i < flyouts_.size(); ++i) {
+        const FlyoutFrame* f = flyouts_[i];
+        s.setValue(QString("toolLayout/%1").arg(i), QVariantList{f->fly->isVisible(), f->fly->pos(), f->cols});
+    }
     QFile::remove(autosavePath());  // a deliberate quit: nothing to recover
     e->accept();
 }
@@ -1765,131 +1904,6 @@ struct GridArrows : QObject {
     }
 };
 
-// A tool flyout: the tools flow into as many columns as fit its width. Drag it by any part that
-// isn't a tool (its title, margins and gaps) to move it off the others (#466), or by a corner
-// to resize it; the tools reflow and the box follows them.
-struct FlyoutFrame : QObject {
-    struct Tool {
-        QWidget* w;
-        int span;
-        bool newRow;
-    };
-    QWidget* fly;
-    QGridLayout* grid;
-    std::vector<Tool> tools;
-    bool nextNewRow = false;
-    static constexpr int kDefaultCols = 4;
-    int cols = kDefaultCols;
-    int corner = 0;  // the corner being dragged: Qt::Edges, or 0 when moving
-    QPoint grab;  // where the drag began, in the window
-    QRect start;  // and the box then
-
-    FlyoutFrame(QWidget* flyout, QGridLayout* g) : QObject(flyout), fly(flyout), grid(g) {
-        flyout->setCursor(Qt::SizeAllCursor);
-        flyout->setMouseTracking(true);
-        flyout->installEventFilter(this);
-    }
-    void newRow() { nextNewRow = true; }  // the next tool starts a row, at the default width (resized, the tools just flow)
-    void add(QWidget* w, int span = 1) {
-        tools.push_back({w, span, std::exchange(nextNewRow, false)});
-        place(cols);
-    }
-    void place(int c) {
-        cols = c;
-        int slot = 0;
-        for (auto& t : tools) {
-            grid->removeWidget(t.w);
-            const int span = std::min(t.span, c);
-            if (t.newRow && c == kDefaultCols) slot = (slot + c - 1) / c * c;
-            if (slot % c + span > c) slot = (slot / c + 1) * c;
-            grid->addWidget(t.w, slot / c, slot % c, 1, span);
-            slot += span;
-        }
-    }
-    QSize sizeFor(int c) {
-        place(c);
-        fly->layout()->invalidate();
-        fly->layout()->activate();
-        return fly->layout()->minimumSize();
-    }
-    // The column count for a box dragged to `want`: as many as fit the width, or, when the drag
-    // was mostly vertical, the fewest that fit the height. Never wider than the window.
-    void fit(QSize want, int maxWidth, bool byHeight) {
-        int most = 0;
-        for (auto& t : tools) most += t.span;
-        int c = 1;
-        if (byHeight) {
-            while (c < most && sizeFor(c).height() > want.height() && sizeFor(c + 1).width() <= maxWidth) ++c;
-        } else {
-            for (int n = 1; n <= most && sizeFor(n).width() <= std::min(want.width(), maxWidth); ++n) c = n;
-        }
-        place(c);
-    }
-    int cornerAt(QPoint p) const {
-        constexpr int zone = 12;
-        int edges = 0;
-        if (p.x() < zone) edges |= Qt::LeftEdge;
-        if (p.x() >= fly->width() - zone) edges |= Qt::RightEdge;
-        if (p.y() < zone) edges |= Qt::TopEdge;
-        if (p.y() >= fly->height() - zone) edges |= Qt::BottomEdge;
-        const bool horizontal = edges & (Qt::LeftEdge | Qt::RightEdge), vertical = edges & (Qt::TopEdge | Qt::BottomEdge);
-        return horizontal && vertical ? edges : 0;
-    }
-    static Qt::CursorShape cursorFor(int edges) {
-        if (!edges) return Qt::SizeAllCursor;
-        const bool topLeftOrBottomRight = bool(edges & Qt::LeftEdge) == bool(edges & Qt::TopEdge);
-        return topLeftOrBottomRight ? Qt::SizeFDiagCursor : Qt::SizeBDiagCursor;
-    }
-    void resize(QPoint mouse) {
-        QWidget* window = fly->parentWidget();
-        const QRect old = start;
-        const int left = corner & Qt::LeftEdge ? mouse.x() : old.left(), right = corner & Qt::RightEdge ? mouse.x() : old.right();
-        const int top = corner & Qt::TopEdge ? mouse.y() : old.top(), bottom = corner & Qt::BottomEdge ? mouse.y() : old.bottom();
-        const QPoint moved = mouse - grab;
-        fit({right - left + 1, bottom - top + 1}, window->width(), std::abs(moved.y()) > std::abs(moved.x()));
-        const QSize size = sizeFor(cols);
-        // The corner opposite the one dragged stays put.
-        QPoint at(corner & Qt::LeftEdge ? old.right() + 1 - size.width() : old.left(),
-                  corner & Qt::TopEdge ? old.bottom() + 1 - size.height() : old.top());
-        at.setX(std::clamp(at.x(), 0, std::max(0, window->width() - size.width())));
-        at.setY(std::clamp(at.y(), 0, std::max(0, window->height() - size.height())));
-        fly->setGeometry({at, size});
-    }
-    bool eventFilter(QObject*, QEvent* e) override {
-        if (e->type() == QEvent::Show) {  // the tools keep the ordinary pointer
-            for (auto* b : fly->findChildren<QAbstractButton*>()) b->setCursor(Qt::ArrowCursor);
-            return false;
-        }
-        const auto type = e->type();
-        if (type != QEvent::MouseButtonPress && type != QEvent::MouseMove && type != QEvent::MouseButtonRelease) return false;
-        const auto* me = static_cast<QMouseEvent*>(e);
-        QWidget* window = fly->parentWidget();
-        const QPoint mouse = window->mapFromGlobal(me->globalPosition().toPoint());
-        if (type == QEvent::MouseButtonPress) {
-            corner = cornerAt(me->position().toPoint());
-            grab = corner ? mouse : mouse - fly->pos();
-            start = fly->geometry();
-            fly->raise();  // over another one it overlaps
-            return true;
-        }
-        if (type == QEvent::MouseButtonRelease) {
-            corner = 0;
-            return false;
-        }
-        if (!(me->buttons() & Qt::LeftButton)) {
-            fly->setCursor(cursorFor(cornerAt(me->position().toPoint())));
-            return false;
-        }
-        if (corner) {
-            resize(mouse);
-            return true;
-        }
-        const QPoint to = mouse - grab;
-        fly->move(std::clamp(to.x(), 0, std::max(0, window->width() - fly->width())),
-                  std::clamp(to.y(), 0, std::max(0, window->height() - fly->height())));
-        return true;
-    }
-};
 }  // namespace
 
 static QWidget* periodicTable(const std::function<void(int)>& picked) {
@@ -1962,6 +1976,24 @@ void MainWindow::buildTools() {
             g.flyout->adjustSize();
             QPoint at = g.railButton->mapTo(this, QPoint(g.railButton->width() + 12, 0));
             at.setY(std::min(at.y(), height() - g.flyout->height() - 8));
+            // Not over an open one: the first free spot to the right of one, then below one (#408).
+            QRect box(at, g.flyout->size());
+            std::vector<QRect> open;
+            for (auto* f : flyouts_)
+                if (f->fly != g.flyout && f->fly->isVisible()) open.push_back(f->fly->geometry());
+            auto free = [&](const QRect& r) {
+                return rect().contains(r) && std::none_of(open.begin(), open.end(), [&](const QRect& o) { return o.intersects(r); });
+            };
+            if (!free(box)) {
+                std::vector<QPoint> spots;
+                for (const QRect& o : open) spots.push_back({o.right() + 9, o.top()});
+                for (const QRect& o : open) spots.push_back({at.x(), o.bottom() + 9});
+                for (QPoint p : spots)
+                    if (free(box.translated(p - at))) {
+                        at = p;
+                        break;
+                    }  // none free: its usual spot
+            }
             g.flyout->move(at);
         }
         g.flyout->raise();
@@ -1999,7 +2031,7 @@ void MainWindow::buildTools() {
         escape->setShortcutContext(Qt::WidgetWithChildrenShortcut);
         connect(escape, &QAction::triggered, fly, &QWidget::hide);
         fly->addAction(escape);
-        flyouts_.push_back(fly);
+        flyouts_.push_back(frame);
 
         auto* railAction = new QAction(icon(), name, this);
         railAction->setCheckable(true);
@@ -2698,6 +2730,13 @@ void MainWindow::buildMenus() {
         });
     }
     canvas_->setGuides(grid->isChecked(), rulers->isChecked());
+    view->addAction(tr("Reset Tool &Layout"), this, [this] {
+        for (auto* f : flyouts_) {
+            f->fly->hide();
+            f->place(FlyoutFrame::kDefaultCols);
+        }
+        QSettings().remove("toolLayout");
+    })->setStatusTip(tr("Close the tool flyouts and put them back at their usual size and place"));
     view->addSeparator();
     auto* templatesToggle = templateDock_->toggleViewAction();
     templatesToggle->setText(tr("&Templates"));
