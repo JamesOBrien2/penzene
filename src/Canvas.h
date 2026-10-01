@@ -50,6 +50,7 @@ public:
     // Brackets around the selected atoms (square or round, with a subscript such as "n"); none removes theirs.
     void bracketSelection(bool square, const QString& label);
     void removeBrackets();
+    void variableAttachment();  // a bond from the selected atoms to a new carbon, on any one of them
     void arrangeScheme();  // the selection (or everything) as a tidy reaction scheme
     // `t` (rotate, scale, stretch) about the selection's centre; everything if nothing is selected.
     void transformSelection(const QTransform& t, const QString& what);

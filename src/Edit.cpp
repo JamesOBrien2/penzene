@@ -116,14 +116,13 @@ void followAnchors(const Document& before, Document& after) {
 }
 
 std::vector<int> moleculeOf(const Document& doc, int atom) {
-    const auto bondsAt = doc.bondsAt();
+    const auto joined = doc.joined();
     std::vector<bool> seen(doc.atoms.size());
     std::vector<int> out{atom};
     seen[atom] = true;
     for (size_t k = 0; k < out.size(); ++k)
-        for (int b : bondsAt[out[k]])
-            for (int nb : {doc.bonds[b].a, doc.bonds[b].b})
-                if (!seen[nb]) seen[nb] = true, out.push_back(nb);
+        for (int nb : joined[out[k]])
+            if (!seen[nb]) seen[nb] = true, out.push_back(nb);
     return out;
 }
 
@@ -392,6 +391,7 @@ void mergeAtoms(Document& doc, const std::vector<std::pair<int, int>>& keepDrop)
         ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
     };
     for (auto& b : doc.brackets) moveOnto(b.atoms);
+    for (auto& a : doc.atoms) moveOnto(a.attachments);
     for (auto& ring : doc.aromaticCircleOverrides) moveOnto(ring);
     std::vector<int> drops;
     for (auto [keep, drop] : keepDrop) drops.push_back(drop);

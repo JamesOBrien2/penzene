@@ -3916,6 +3916,39 @@ TEST_CASE("Open says when a file is missing, not that it isn't a structure (#484
     QSettings().remove("recentFiles");
 }
 
+TEST_CASE("Structure → Variable Attachment: a bond on any one of the selected atoms (#455)") {
+    Fixture f;
+    f.canvas.setDocumentSilently(*chem::fromSmiles("c1ccccc1"));
+    f.canvas.setSelection({0, 1});
+    f.canvas.variableAttachment();
+    const Document d = f.doc();
+    REQUIRE(d.atoms.size() == 8);
+    const Atom& point = d.atoms[6];
+    CHECK(point.z == 0);
+    CHECK(point.attachments == std::vector<int>{0, 1});
+    const QLineF bond(point.pos, d.atoms[7].pos), edge(d.atoms[0].pos, d.atoms[1].pos);
+    CHECK(bond.intersects(edge) == QLineF::BoundedIntersection);  // drawn across the ring's edge
+    CHECK(chem::properties(d)->formula == "C7H8");  // toluene, wherever it sits
+    CHECK(edit::moleculeOf(d, 7).size() == 8);  // moves with its ring
+
+    CHECK(*Document::fromJson(d.toJson()) == d);
+    const std::string mol = chem::toMolBlock(d, true);
+    CHECK(mol.find("ENDPTS=(2 1 2)") != std::string::npos);
+    for (const auto& back : {chem::fromMolBlock(mol), chem::fromChemDraw(chem::toCdxml(d))}) {
+        REQUIRE(back);
+        const auto it = std::find_if(back->atoms.begin(), back->atoms.end(), [](const Atom& a) { return a.z == 0; });
+        REQUIRE(it != back->atoms.end());
+        CHECK(it->attachments.size() == 2);
+    }
+
+    Document less = d;
+    less.removeAtoms({0});  // keeps what's left of its atoms
+    CHECK(less.atoms[5].attachments == std::vector<int>{0});
+    Document more = d;
+    more.append(d);
+    CHECK(more.atoms[14].attachments == std::vector<int>{8, 9});
+}
+
 TEST_CASE("Arrange → Group: grouped objects select, arrange and save as one (#410)") {
     App app;
     MainWindow w;
@@ -4066,4 +4099,66 @@ TEST_CASE("the selection tint covers whole labels and the insides of whole rings
     CHECK(at(after, clear) == at(before, clear));
     canvas->setSelection({1, 2, 3, 4, 5});  // not the whole ring: its middle stays clear
     CHECK(at(shot(), ring) == at(before, ring));
+}
+
+TEST_CASE("a flyout opens beside the open ones, and the tool layout is remembered until reset (#408)") {
+    App app;
+    QSettings().remove("toolLayout");
+    auto rail = [](MainWindow& w, const QString& g) {
+        for (auto* b : w.findChildren<QToolButton*>("railButton"))
+            if (b->text() == g) return b;
+        return static_cast<QToolButton*>(nullptr);
+    };
+    auto flyout = [](MainWindow& w, const QString& g) {
+        for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
+            if (f->findChild<QLabel*>("flyoutTitle")->text() == g.toUpper()) return f;
+        return static_cast<QFrame*>(nullptr);
+    };
+    QPoint ringsAt;
+    int ringsWidth = 0;
+    {
+        MainWindow w;
+        w.resize(1400, 900);
+        w.show();
+        rail(w, "Bonds")->click();
+        rail(w, "Rings")->click();
+        auto *bonds = flyout(w, "Bonds"), *rings = flyout(w, "Rings");
+        CHECK_FALSE(rings->geometry().intersects(bonds->geometry()));  // beside Bonds, not over it
+        rings->move(500, 400);
+        rail(w, "Atoms")->click();
+        for (auto* other : {bonds, rings}) CHECK_FALSE(flyout(w, "Atoms")->geometry().intersects(other->geometry()));
+        for (const char* g : {"Select", "Arrows", "Shapes"}) rail(w, g)->click();
+        w.resize(700, 500);  // no room for them all: each still inside the window
+        for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
+            if (f->isVisible()) CHECK(w.rect().contains(f->geometry()));
+        w.resize(1400, 900);
+        for (const char* g : {"Bonds", "Atoms", "Select", "Arrows", "Shapes"}) flyout(w, g)->hide();
+        rings->move(500, 400);
+        const QPoint corner(rings->width() - 3, rings->height() - 3);  // wider: more columns
+        QTest::mousePress(rings, Qt::LeftButton, {}, corner);
+        QTest::mouseMove(rings, corner + QPoint(200, 0));
+        QTest::mouseRelease(rings, Qt::LeftButton, {}, corner + QPoint(200, 0));
+        ringsAt = rings->pos(), ringsWidth = rings->width();
+        CHECK(w.close());
+    }
+    {
+        MainWindow w;  // the next launch
+        w.resize(1400, 900);
+        w.show();
+        auto* rings = flyout(w, "Rings");
+        CHECK(rings->isVisible());
+        CHECK(rings->pos() == ringsAt);
+        CHECK(rings->width() == ringsWidth);
+        CHECK_FALSE(flyout(w, "Bonds")->isVisible());
+        QAction* reset = nullptr;
+        for (auto* a : w.findChildren<QAction*>())
+            if (a->text() == "Reset Tool &Layout") reset = a;
+        REQUIRE(reset);
+        reset->trigger();
+        CHECK_FALSE(rings->isVisible());
+        CHECK_FALSE(QSettings().contains("toolLayout/2"));
+        rail(w, "Rings")->click();
+        CHECK(rings->width() < ringsWidth);  // its usual size again
+    }
+    QSettings().remove("toolLayout");
 }

@@ -6,7 +6,8 @@ The rail on the left holds the tools in six groups: **Select** (select, rotate i
 double, triple, wedge, hash, interaction, partial, chain), **Rings**, **Atoms** (element,
 charges), **Arrows**, and **Shapes** (lines, boxes, ellipses, text). Click a group to open its tools
 beside the rail. They stay open, so you can keep several on screen and drag each by its title or
-any bare part of it, or drag a corner to resize it (the tools reflow to fit); close one with its **✕**. Clicking a group also
+any bare part of it, or drag a corner to resize it (the tools reflow to fit); close one with its **✕**. A new one opens
+beside those already open, and Penzene reopens them where you left them; **View → Reset Tool Layout** puts them back. Clicking a group also
 picks the tool you last used from it. Hover over a tool to see its key.
 
 Point at an atom or bond and it becomes the **hotspot**, marked in green. It stays put when the mouse
@@ -96,6 +97,9 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
   shows one box per molecule (one per group); drag from anywhere inside a box to move it.
 - **Structure → Brackets** puts square or round brackets, with a subscript such as *n*, around the
   selected atoms.
+- **Structure → Variable Attachment** draws a bond across the edge of the selected atoms (a ring's,
+  say) for a substituent on any one of them. Formula and mass count it once; MOL (V3000) and
+  ChemDraw files keep the positions.
 
 ## Arrows, text, shapes and colour
 
