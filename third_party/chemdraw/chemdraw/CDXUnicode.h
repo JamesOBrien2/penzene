@@ -47,7 +47,7 @@ CORE_CHEMISTRY_API std::string StringToUnicode(const std::string &fontName, cons
 #ifdef __linux
 typedef std::basic_string<wchar_t> UTF16_string;
 #else
-typedef std::basic_string<UINT16> UTF16_string;
+typedef std::basic_string<char16_t> UTF16_string;  // libc++ 19+ has no char_traits<unsigned short>
 #endif
 
 CORE_CHEMISTRY_API UTF16_string ConvertUTF8to16(const std::string &utf8);
