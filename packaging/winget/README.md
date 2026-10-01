@@ -1,6 +1,6 @@
 # winget
 
-The three `*.yaml.in` files are the winget manifests (schema 1.12.0) for the Inno Setup installer,
+The three `*.yaml.in` files are the winget manifests (schema 1.10.0) for the Inno Setup installer,
 `penzene-windows-x64-setup.exe`. `render.py` fills in the version, release date and the
 installer's sha256 (from GitHub's asset digest, or by downloading it), in the directory layout
 microsoft/winget-pkgs uses:
