@@ -36,6 +36,7 @@ struct Atom {
     int isotope = 0;  // mass number (13 for ¹³C, 2 for D); 0 = natural abundance
     StereoGroup stereoGroup = StereoGroup::None;
     int stereoGroupNumber = 0;  // n of &n / orn
+    QString standsFor;  // a variable label's meaning ("N, O, S"; "H, Me, OMe"), shown in its molecule's legend
     // A variable attachment: this bare point (z 0, no label) stands for a bond to any one of these atoms.
     std::vector<int> attachments;
     int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
@@ -97,6 +98,7 @@ struct Text {
     QColor color;
     bool compound = false;  // a compound number (#504): bold, renumbered in scheme order on every edit
     int anchor = -1;        // an atom of the molecule it numbers, which it follows; -1 = free
+    bool legend = false;    // its molecule's variable definitions (X = N, O, S), rewritten from them on every edit
     int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
     bool operator==(const Text&) const = default;
 };
@@ -174,7 +176,7 @@ inline bool operator==(const Atom& x, const Atom& y) {
     return x.pos == y.pos && x.z == y.z && x.charge == y.charge && x.label == y.label && x.color == y.color &&
            x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial &&
            x.isotope == y.isotope && x.stereoGroup == y.stereoGroup && x.stereoGroupNumber == y.stereoGroupNumber &&
-           x.attachments == y.attachments && x.group == y.group;
+           x.standsFor == y.standsFor && x.attachments == y.attachments && x.group == y.group;
 }
 inline bool operator==(const Bond& x, const Bond& y) {
     return x.a == y.a && x.b == y.b && x.order == y.order && x.stereo == y.stereo &&

@@ -49,6 +49,7 @@ QByteArray Document::toJson() const {
         if (a.partial) o["partial"] = a.partial;
         if (a.isotope) o["isotope"] = a.isotope;
         if (a.stereoGroup != StereoGroup::None) o["stereoGroup"] = stereoGroupTag(a);
+        if (!a.standsFor.isEmpty()) o["standsFor"] = a.standsFor;
         if (!a.attachments.empty()) {
             QJsonArray at;
             for (int i : a.attachments) at.append(i);
@@ -86,6 +87,7 @@ QByteArray Document::toJson() const {
         if (t.scale != 1) o["scale"] = t.scale;
         if (t.color.isValid()) o["color"] = t.color.name();
         if (t.compound) o["compound"] = true;
+        if (t.legend) o["legend"] = true;
         if (t.anchor >= 0) o["anchor"] = t.anchor;
         if (t.group >= 0) o["group"] = t.group;
         ts.append(o);
@@ -196,6 +198,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         if (a.z < 0 || a.z > 118 || !std::isfinite(a.pos.x()) || !std::isfinite(a.pos.y())) return std::nullopt;
         if (a.isotope < a.z) a.isotope = 0;  // lighter than its protons: no such isotope, as a typed label (#368)
         setStereoGroupTag(a, o["stereoGroup"].toString());
+        a.standsFor = o["standsFor"].toString();
         a.group = std::max(-1, o["group"].toInt(-1));
     }
     const int n = int(doc.atoms.size());
@@ -253,6 +256,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
                QColor(o["color"].toString())};
         if (!(t.scale > 0)) t.scale = 1;  // files saved before #316 could hold 0
         t.compound = o["compound"].toBool();
+        t.legend = o["legend"].toBool();
         t.group = std::max(-1, o["group"].toInt(-1));
         if (const int a = o["anchor"].toInt(-1); a >= 0 && a < int(doc.atoms.size())) t.anchor = a;
         if (!finite({t.pos.x(), t.pos.y(), t.scale})) return std::nullopt;

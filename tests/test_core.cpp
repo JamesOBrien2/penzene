@@ -2042,14 +2042,14 @@ TEST_CASE(".penz schema describes every field the app writes (#573)") {
     Document d = *chem::fromSmiles("C[C@H](N)C(=O)O");  // every feature, so every field is written
     Atom& a = d.atoms[1];
     a.charge = 1, a.label = "Me", a.color = Qt::red, a.map = 1, a.lonePairs = 1, a.radicals = 1, a.partial = 1;
-    a.isotope = 13, a.stereoGroup = StereoGroup::And, a.stereoGroupNumber = 1, a.attachments = {0, 2}, a.group = 0;
+    a.isotope = 13, a.stereoGroup = StereoGroup::And, a.stereoGroupNumber = 1, a.attachments = {0, 2}, a.group = 0, a.standsFor = "N, O";
     d.bonds[0].stereo = BondStereo::Wedge, d.bonds[0].position = BondPosition::Left, d.bonds[0].color = Qt::red;
     Arrow arrow;
     arrow.to = {50, 0}, arrow.bend = 5, arrow.color = Qt::red, arrow.dashed = arrow.behind = arrow.crossed = true;
     arrow.look = OrbitalLook::Shaded, arrow.head = 2, arrow.fromAt = {0, -1}, arrow.toAt = {1, 2}, arrow.group = 0;
     d.arrows.push_back(arrow);
     Text text{{0, 40}, "1"};
-    text.scale = 2, text.color = Qt::red, text.compound = true, text.anchor = 0, text.group = 0;
+    text.scale = 2, text.color = Qt::red, text.compound = text.legend = true, text.anchor = 0, text.group = 0;
     d.texts.push_back(text);
     d.fills.push_back({{0, 1, 2}, Qt::red});
     d.brackets.push_back({{0, 1}, false, "n"});
@@ -2083,4 +2083,48 @@ TEST_CASE("a molecule's predicted shifts don't depend on the others on the page 
     REQUIRE(sticks.size() == alone.size());
     for (size_t k = 0; k < sticks.size(); ++k) CHECK(sticks[k].ppm == alone[k].ppm);
     CHECK(chem::predictShifts(d).size() == chem::predictShifts(ethanol).size());  // the canvas's shift labels too
+}
+
+TEST_CASE("a variable label stands for elements or groups: a legend, and an atom list in MOL and SMARTS (#505)") {
+    Document d = *chem::fromSmiles("Clc1ccc(cc1)C(=O)NCCO");
+    REQUIRE(edit::applyLabel(d, 0, "R", true));
+    REQUIRE(edit::applyLabel(d, 9, "X", true));
+    const std::string plain = chem::toSmarts(d);
+    CHECK(plain.find("#9") == std::string::npos);  // a bare X is a variable, not "any halogen"
+    d.atoms[0].standsFor = "H, Me, OMe";  // groups: a note only
+    d.atoms[9].standsFor = "N, O, S";     // elements: a query atom list
+    edit::syncLegends(d);
+    auto legends = [](const Document& doc) {
+        QStringList out;
+        for (const Text& t : doc.texts)
+            if (t.legend) out << t.text;
+        return out;
+    };
+    CHECK(legends(d) == QStringList{"R = H, Me, OMe\nX = N, O, S"});
+    CHECK(d.texts[0].anchor >= 0);
+    CHECK(*Document::fromJson(d.toJson()) == d);
+
+    const std::string smarts = chem::toSmarts(d);
+    INFO(smarts);
+    CHECK(smarts.find("#7,#8,#16") != std::string::npos);
+    for (bool v3000 : {false, true}) {
+        auto back = chem::fromMolBlock(chem::toMolBlock(d, v3000));
+        REQUIRE(back);
+        CHECK(back->atoms[9].label == "X");  // the alias, or the first free of X, Y... (V3000)
+        CHECK(back->atoms[9].standsFor == "N, O, S");
+        CHECK(back->atoms[9].z == 0);
+        edit::syncLegends(*back);
+        CHECK(legends(*back).join("").contains("X = N, O, S"));
+    }
+    std::vector<QString> problems;
+    for (const auto& p : chem::checkStructure(d)) problems.push_back(p.message);
+    CHECK(std::find(problems.begin(), problems.end(), "Query atom X: one of N, O, S") != problems.end());
+    CHECK(std::none_of(problems.begin(), problems.end(), [](const QString& p) { return p.startsWith("Unknown label"); }));
+
+    d.atoms[0].standsFor.clear(), d.atoms[9].standsFor.clear();
+    edit::syncLegends(d);
+    CHECK(legends(d).isEmpty());  // gone with the last definition
+    REQUIRE(edit::applyLabel(d, 12, "Q", true));  // MDL's heteroatom code, typed
+    CHECK(chem::toSmarts(d).find("!#6") != std::string::npos);
+    CHECK(chem::fromMolBlock(chem::toMolBlock(d))->atoms[12].label == "Q");
 }

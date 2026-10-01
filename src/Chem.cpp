@@ -25,7 +25,10 @@
 #include <GraphMol/atomic_data.h>
 #include <GraphMol/new_canon.h>
 #include <GraphMol/SmilesParse/SmilesParse.h>
+#include <GraphMol/SmilesParse/SmartsWrite.h>
 #include <GraphMol/SmilesParse/SmilesWrite.h>
+#include <GraphMol/QueryAtom.h>
+#include <GraphMol/QueryOps.h>
 #include <GraphMol/Substruct/SubstructMatch.h>
 
 #include <QDateTime>
@@ -197,22 +200,70 @@ Document projectionsAsWedges(const Document& in) {
     return doc;
 }
 
+// A definition made only of elements ("N, O, S"): the atom list a variable label stands for.
+static std::optional<std::vector<int>> elementList(const QString& standsFor) {
+    std::vector<int> zs;
+    for (const QString& s : standsFor.split(',', Qt::SkipEmptyParts)) {
+        const int z = atomicNumber(s.trimmed().toStdString());
+        if (z <= 0 || QString::fromStdString(symbol(z)) != s.trimmed()) return std::nullopt;
+        zs.push_back(z);
+    }
+    return zs.empty() ? std::nullopt : std::optional(zs);
+}
+
+// MDL's query codes, typed as labels for search queries; X is left out, as figures use it as a variable.
+static bool isGenericQuery(const QString& label) {
+    return label != "X" &&
+           std::find(RDKit::complexQueries.begin(), RDKit::complexQueries.end(), label.toStdString()) != RDKit::complexQueries.end();
+}
+
+QString queryMeaning(const Atom& a) {
+    static const QHash<QString, const char*> generic{
+        {"A", QT_TRANSLATE_NOOP("QObject", "any atom but H")},       {"AH", QT_TRANSLATE_NOOP("QObject", "any atom")},
+        {"Q", QT_TRANSLATE_NOOP("QObject", "any atom but C or H")},  {"QH", QT_TRANSLATE_NOOP("QObject", "any atom but C")},
+        {"XH", QT_TRANSLATE_NOOP("QObject", "a halogen or H")},
+        {"M", QT_TRANSLATE_NOOP("QObject", "a metal")},              {"MH", QT_TRANSLATE_NOOP("QObject", "a metal or H")}};
+    if (a.label.isEmpty()) return {};
+    if (generic.contains(a.label)) return QObject::tr(generic[a.label]);
+    if (elementList(a.standsFor)) return QObject::tr("one of %1").arg(a.standsFor);
+    return {};
+}
+
+// A query atom (#505): MDL's codes, or a variable label standing for elements only, as an atom
+// list (its label kept as the alias). Null for any other atom.
+static RDKit::Atom* queryAtom(const Atom& a) {
+    if (a.label.isEmpty()) return nullptr;
+    if (isGenericQuery(a.label)) {
+        auto* q = new RDKit::QueryAtom(0);
+        RDKit::convertComplexNameToQuery(q, a.label.toStdString());
+        return q;
+    }
+    const auto zs = elementList(a.standsFor);
+    if (!zs) return nullptr;
+    auto* q = new RDKit::QueryAtom((*zs)[0]);
+    for (size_t k = 1; k < zs->size(); ++k) q->expandQuery(RDKit::makeAtomNumQuery((*zs)[k]), Queries::COMPOSITE_OR);
+    q->setProp(RDKit::common_properties::molFileAlias, a.label.toStdString());
+    return q;
+}
+
 static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
     const Document doc = projectionsAsWedges(expand ? expanded(in) : in);
     auto mol = std::make_unique<RWMol>();
     auto* conf = new RDKit::Conformer(doc.atoms.size());
     for (size_t i = 0; i < doc.atoms.size(); ++i) {
         const auto& a = doc.atoms[i];
-        auto* atom = new RDKit::Atom(a.z);
+        RDKit::Atom* query = a.z == 0 && i < in.atoms.size() ? queryAtom(in.atoms[i]) : nullptr;
+        auto* atom = query ? query : new RDKit::Atom(a.z);
         atom->setFormalCharge(a.charge);
         atom->setNumRadicalElectrons(a.radicals);
         if (a.isotope && a.z > 0) atom->setIsotope(a.isotope);
         // Not setAtomMapNum: it logs through rdErrorLog, which the Windows DLL doesn't export.
         if (a.map > 0) atom->setProp(RDKit::common_properties::molAtomMapNumber, a.map);
         // Generic atoms (expansion drops their labels, so they come from `in`): R1…Rn as
-        // MDL R-groups (R# with RGP, [n*] in SMILES), any other text (X, Ar) as an MDL atom alias.
-        // ponytail: V3000 has no alias block, so there X/Ar become plain * atoms.
-        if (a.z == 0 && i < in.atoms.size() && !in.atoms[i].label.isEmpty()) {
+        // MDL R-groups (R# with RGP, [n*] in SMILES), query atoms as queries, any other text (X, Ar)
+        // as an MDL atom alias.
+        // V3000 has no alias block, so there X/Ar become plain * atoms (a list's comes back as X, Y…).
+        if (!query && a.z == 0 && i < in.atoms.size() && !in.atoms[i].label.isEmpty()) {
             static const QRegularExpression rgroup("^R(\\d+)$");
             const QString label = in.atoms[i].label;
             if (const auto m = rgroup.match(label); m.hasMatch()) {
@@ -368,18 +419,37 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
     Document doc;
     for (const auto* a : mol.atoms()) {
         const auto& p = conf.getAtomPos(a->getIdx());
-        QString label;  // a generic atom's: its alias (X, Ar), or R-group number
+        QString label, standsFor;  // a generic atom's: its alias (X, Ar), or R-group number
         unsigned r = 0;
         std::string alias;
-        if (a->getAtomicNum() == 0 && a->getPropIfPresent(RDKit::common_properties::molFileAlias, alias) && !alias.empty())
+        a->getPropIfPresent(RDKit::common_properties::molFileAlias, alias);
+        if (a->hasQuery() && isGenericQuery(QString::fromStdString(a->getQuery()->getTypeLabel())))  // before lists: Q is an OR too
+            label = QString::fromStdString(a->getQuery()->getTypeLabel());
+        else if (a->hasQuery() && RDKit::isAtomListQuery(a)) {  // a variable: its alias, else X, Y… (below)
+            std::vector<int> zs;
+            RDKit::getAtomListQueryVals(a->getQuery(), zs);
+            QStringList symbols;
+            for (int z : zs) symbols << QString::fromStdString(symbol(z));
+            label = QString::fromStdString(alias), standsFor = symbols.join(", ");
+        } else if (a->hasQuery() && a->getQuery()->getTypeLabel() == "X") {  // MDL's halogen
+            label = "X", standsFor = "F, Cl, Br, I";
+        } else if (a->getAtomicNum() == 0 && !alias.empty())
             label = QString::fromStdString(alias);
         else if (a->getAtomicNum() == 0 && a->getPropIfPresent(RDKit::common_properties::_MolFileRLabel, r) && r)
             label = QString("R%1").arg(r);
-        doc.atoms.push_back({QPointF(p.x * scale, -p.y * scale), int(a->getAtomicNum()),
+        doc.atoms.push_back({QPointF(p.x * scale, -p.y * scale), standsFor.isEmpty() ? int(a->getAtomicNum()) : 0,
                              a->getFormalCharge(), label, {}, int(a->getAtomMapNum()), 0,
                              int(std::min(2u, a->getNumRadicalElectrons()))});
         if (a->getAtomicNum() > 0) doc.atoms.back().isotope = int(a->getIsotope());  // on a dummy it's an R-group number
+        doc.atoms.back().standsFor = standsFor;
     }
+    for (Atom& a : doc.atoms)  // unnamed atom lists: the first of X, Y, Z… not already used
+        if (!a.standsFor.isEmpty() && a.label.isEmpty())
+            for (const char* name : {"X", "Y", "Z", "W", "V", "U"})
+                if (std::none_of(doc.atoms.begin(), doc.atoms.end(), [&](const Atom& o) { return o.label == name; })) {
+                    a.label = name;
+                    break;
+                }
     for (const auto* b : mol.bonds()) {
         Bond out{int(b->getBeginAtomIdx()), int(b->getEndAtomIdx())};
         out.order = b->getBondType() == RDKit::Bond::DOUBLE   ? 2
@@ -1508,6 +1578,12 @@ std::string toSdf(const Document& doc, bool v3000) {
     return out;
 }
 
+std::string toSmarts(const Document& doc) {
+    auto mol = toRDKit(doc);
+    perceive(*mol, false);
+    return RDKit::MolToSmarts(*mol);
+}
+
 std::string toSmiles(const Document& doc) {
     auto mol = toRDKit(doc);
     if (!perceive(*mol)) return "";
@@ -2007,10 +2083,10 @@ std::vector<Problem> checkStructure(const Document& doc) {
         if (info[i].valenceError)
             out.push_back({QObject::tr("Valence error: %1 has too many bonds").arg(name(i)), {i}});
     for (int i = 0; i < n; ++i)
-        if (!doc.atoms[i].label.isEmpty() && !abbreviationHead(doc.atoms[i].label))
-            out.push_back({QObject::tr("Unknown label \"%1\": drawn, but treated as an unknown group")
-                               .arg(doc.atoms[i].label),
-                           {i}});
+        if (const QString label = doc.atoms[i].label; !queryMeaning(doc.atoms[i]).isEmpty())
+            out.push_back({QObject::tr("Query atom %1: %2").arg(label, queryMeaning(doc.atoms[i])), {i}});
+        else if (!label.isEmpty() && doc.atoms[i].standsFor.isEmpty() && !abbreviationHead(label))
+            out.push_back({QObject::tr("Unknown label \"%1\": drawn, but treated as an unknown group").arg(label), {i}});
     for (int i = 0; i < n; ++i)
         for (int j = i + 1; j < n; ++j)
             if (QLineF(doc.atoms[i].pos, doc.atoms[j].pos).length() < 0.3 * kBondLength)

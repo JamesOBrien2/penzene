@@ -8,6 +8,7 @@
 #include <QRegularExpression>
 #include <algorithm>
 #include <map>
+#include <set>
 #include <tuple>
 
 namespace edit {
@@ -161,6 +162,53 @@ CompoundCount renumberCompounds(Document& doc, CompoundCount count) {
         text = QString::number(n) + suffix;
     }
     return count;
+}
+
+std::vector<int> syncLegends(Document& doc) {
+    if (std::none_of(doc.atoms.begin(), doc.atoms.end(), [](const Atom& a) { return !a.standsFor.isEmpty(); }) &&
+        std::none_of(doc.texts.begin(), doc.texts.end(), [](const Text& t) { return t.legend; }))
+        return {};  // nothing to write or erase: skip the molecule scan on every commit
+    const int n = int(doc.atoms.size());
+    std::vector<int> mol(n, -1);  // each atom's molecule, numbered by its first atom
+    for (int i = 0; i < n; ++i)
+        if (mol[i] < 0)
+            for (int a : moleculeOf(doc, i)) mol[a] = i;
+    auto lines = [&](int m) {
+        QStringList out;
+        for (int a = 0; a < n; ++a)
+            if (const Atom& at = doc.atoms[a]; mol[a] == m && !at.label.isEmpty() && !at.standsFor.trimmed().isEmpty())
+                out << at.label + " = " + at.standsFor.trimmed();
+        out.removeDuplicates();
+        out.sort();
+        return out.join('\n');
+    };
+    std::set<int> hasLegend;
+    std::erase_if(doc.texts, [&](Text& t) {  // rewritten from the definitions; gone with the last one
+        if (!t.legend) return false;
+        const int m = t.anchor >= 0 && t.anchor < n ? mol[t.anchor] : -1;
+        if (m < 0 || hasLegend.count(m)) return true;
+        t.text = lines(m);
+        hasLegend.insert(m);
+        return t.text.isEmpty();
+    });
+    std::vector<int> placed;
+    for (int m = 0; m < n; ++m) {
+        if (mol[m] != m || hasLegend.count(m)) continue;
+        const QString text = lines(m);
+        if (text.isEmpty()) continue;
+        std::vector<int> atoms;
+        for (int a = 0; a < n; ++a)
+            if (mol[a] == m) atoms.push_back(a);
+        const QRectF box = atomBox(doc, atoms);
+        double y = box.bottom() + 1.3 * kBondLength;  // under the molecule, and under its compound number
+        for (const Text& t : doc.texts)
+            if (t.compound && t.anchor >= 0 && t.anchor < n && mol[t.anchor] == m) y = std::max(y, t.pos.y() + 1.2 * kBondLength);
+        Text t{{box.center().x(), y}, text};
+        t.legend = true, t.anchor = m;
+        doc.texts.push_back(t);
+        placed.push_back(int(doc.texts.size()) - 1);
+    }
+    return placed;
 }
 
 void followNumbers(const Document& before, Document& after) {
