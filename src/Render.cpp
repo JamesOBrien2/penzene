@@ -536,7 +536,7 @@ static void drawOrbital(QPainter& p, const Arrow& a, const QColor& color, double
             const QColor inner = main ? mix(color, 0.75) : QColor(Qt::white), outer = main ? color : mix(color, 0.7);
             const QPointF focus = r.center() + light * 0.3 * radius;
             if (p.paintEngine() && (p.paintEngine()->type() == QPaintEngine::Pdf || p.paintEngine()->type() == kEmfEngine)) {
-                // ponytail: Qt writes gradient fills with an uncoloured pattern colour space, which
+                // Qt writes gradient fills with an uncoloured pattern colour space, which
                 // Apple's PDF renderer (Preview, Keynote, Word on macOS) skips; so PDFs get 16 vector
                 // bands instead. Drop this once Qt writes a plain /Pattern colour space.
                 constexpr int kBands = 16;

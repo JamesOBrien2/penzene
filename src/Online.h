@@ -31,7 +31,7 @@ ReleaseNotes parseReleaseNotes(const QString& section);
 }  // namespace online
 
 // Optional online lookups against PubChem, only when the user asks for one.
-// ponytail: only compounds PubChem already knows resolve; a local namer (OPSIN
+// Only compounds PubChem already knows resolve; a local namer (OPSIN
 // needs a JVM, STOUT an ML runtime) would lift that, at a heavy dependency cost.
 namespace pubchem {
 

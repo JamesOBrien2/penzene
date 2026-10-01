@@ -26,7 +26,7 @@ void ensureApp() {
     static int argc = 1;
     static char name[] = "penzene";
     static char* argv[] = {name, nullptr};
-    new QGuiApplication(argc, argv);  // ponytail: never freed; the process owns it until exit
+    new QGuiApplication(argc, argv);  // never freed; the process owns it until exit
 }
 
 QString qs(const std::string& s) { return QString::fromStdString(s); }
