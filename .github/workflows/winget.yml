@@ -40,6 +40,7 @@ jobs:
           winget --version
       - name: Validate, install and uninstall
         shell: pwsh
+        timeout-minutes: 15  # an install that hangs fails here, and its logs are printed below
         run: |
           $manifest = "out/manifests/j/JamesOBrien2/Penzene/$env:VERSION"
           winget validate --manifest $manifest --disable-interactivity
@@ -56,3 +57,7 @@ jobs:
           if ($entry.DisplayVersion -ne $env:VERSION) { throw "DisplayVersion $($entry.DisplayVersion), expected $env:VERSION" }
           winget uninstall --manifest $manifest --silent --disable-interactivity
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: WinGet's logs
+        if: failure()
+        shell: pwsh
+        run: Get-ChildItem "$env:LOCALAPPDATA\Packages\Microsoft.DesktopAppInstaller_8wekyb3d8bbwe\LocalState\DiagOutputDir" -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { "== $($_.Name)"; Get-Content $_.FullName -Tail 60 }
