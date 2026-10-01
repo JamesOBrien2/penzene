@@ -2496,6 +2496,7 @@ void MainWindow::buildMenus() {
                                 if (ok) canvas_->bracketSelection(square, label.trimmed());
                             });
     brackets->addAction(tr("Remove &Brackets"), this, [this] { canvas_->removeBrackets(); });
+    structure->addAction(tr("&Variable Attachment"), canvas_, &Canvas::variableAttachment);
     structure->addAction(tr("Save Selection as &Template…"), this, &MainWindow::saveTemplate);
 
     auto* arrangeMenu = menuBar()->addMenu(tr("&Arrange"));

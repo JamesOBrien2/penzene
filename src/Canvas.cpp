@@ -1259,6 +1259,7 @@ std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows
     }
     std::vector<Piece> out;
     QSet<int> seen;
+    const auto joined = doc.joined();
     for (int s : atoms) {
         if (seen.contains(s)) continue;
         Piece p;
@@ -1268,7 +1269,7 @@ std::vector<Piece> pieces(const Document& doc, QSet<int> atoms, QSet<int> arrows
             int i = stack.back();
             stack.pop_back();
             p.atoms.insert(i);
-            for (int nb : doc.neighbors(i))
+            for (int nb : joined[i])
                 if (atoms.contains(nb) && !seen.contains(nb)) seen.insert(nb), stack.push_back(nb);
         }
         out.push_back(p);
@@ -1501,6 +1502,42 @@ void Canvas::bracketSelection(bool square, const QString& label) {
     Document next = doc_;
     next.brackets.push_back({atoms, square, label});
     commit(next, tr("Brackets"));
+}
+
+void Canvas::variableAttachment() {
+    if (selectedAtoms_.size() < 2) return;
+    std::vector<int> atoms(selectedAtoms_.begin(), selectedAtoms_.end());
+    std::sort(atoms.begin(), atoms.end());
+    QPointF mid, centre;
+    for (int a : atoms) mid += doc_.atoms[a].pos / atoms.size();
+    // The ring holding most of them (the smaller on a tie), or else their molecule.
+    const auto rings = chem::rings(doc_);
+    auto count = [&](const std::vector<int>& r) {
+        return std::count_if(r.begin(), r.end(), [&](int i) { return selectedAtoms_.contains(i); });
+    };
+    auto around = edit::moleculeOf(doc_, atoms[0]);
+    for (const auto& r : rings)
+        if (count(r) >= 2 && (count(r) > count(around) || (count(r) == count(around) && r.size() < around.size()))) around = r;
+    for (int a : around) centre += doc_.atoms[a].pos / around.size();
+    // In across the middle of a selected bond of it, nearest their centre and not shared with another ring.
+    auto in = [](const std::vector<int>& r, int i) { return std::find(r.begin(), r.end(), i) != r.end(); };
+    QPointF cross = mid;
+    double best = 1e9;
+    for (const Bond& b : doc_.bonds) {
+        if (!selectedAtoms_.contains(b.a) || !selectedAtoms_.contains(b.b) || !in(around, b.a) || !in(around, b.b)) continue;
+        const bool fused = std::count_if(rings.begin(), rings.end(), [&](const auto& r) { return in(r, b.a) && in(r, b.b); }) > 1;
+        const QPointF m = (doc_.atoms[b.a].pos + doc_.atoms[b.b].pos) / 2;
+        if (const double score = QLineF(m, mid).length() + (fused ? 1e6 : 0); score < best) cross = m, best = score;
+    }
+    mid = cross;
+    const double length = QLineF(centre, mid).length();
+    const QPointF out = length > 1e-6 ? (mid - centre) / length : QPointF(0, -1);
+    // The point sits inside, so the bond crosses the ring's edge, as a variable attachment is drawn.
+    Document next = doc_;
+    const int p = next.addAtom(mid - out * (0.4 * kBondLength), 0);
+    next.atoms[p].attachments = atoms;
+    next.bonds.push_back({p, next.addAtom(mid + out * (0.6 * kBondLength))});
+    commit(next, tr("Variable attachment"));
 }
 
 void Canvas::removeBrackets() {

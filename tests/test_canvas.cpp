@@ -3916,6 +3916,39 @@ TEST_CASE("Open says when a file is missing, not that it isn't a structure (#484
     QSettings().remove("recentFiles");
 }
 
+TEST_CASE("Structure → Variable Attachment: a bond on any one of the selected atoms (#455)") {
+    Fixture f;
+    f.canvas.setDocumentSilently(*chem::fromSmiles("c1ccccc1"));
+    f.canvas.setSelection({0, 1});
+    f.canvas.variableAttachment();
+    const Document d = f.doc();
+    REQUIRE(d.atoms.size() == 8);
+    const Atom& point = d.atoms[6];
+    CHECK(point.z == 0);
+    CHECK(point.attachments == std::vector<int>{0, 1});
+    const QLineF bond(point.pos, d.atoms[7].pos), edge(d.atoms[0].pos, d.atoms[1].pos);
+    CHECK(bond.intersects(edge) == QLineF::BoundedIntersection);  // drawn across the ring's edge
+    CHECK(chem::properties(d)->formula == "C7H8");  // toluene, wherever it sits
+    CHECK(edit::moleculeOf(d, 7).size() == 8);  // moves with its ring
+
+    CHECK(*Document::fromJson(d.toJson()) == d);
+    const std::string mol = chem::toMolBlock(d, true);
+    CHECK(mol.find("ENDPTS=(2 1 2)") != std::string::npos);
+    for (const auto& back : {chem::fromMolBlock(mol), chem::fromChemDraw(chem::toCdxml(d))}) {
+        REQUIRE(back);
+        const auto it = std::find_if(back->atoms.begin(), back->atoms.end(), [](const Atom& a) { return a.z == 0; });
+        REQUIRE(it != back->atoms.end());
+        CHECK(it->attachments.size() == 2);
+    }
+
+    Document less = d;
+    less.removeAtoms({0});  // keeps what's left of its atoms
+    CHECK(less.atoms[5].attachments == std::vector<int>{0});
+    Document more = d;
+    more.append(d);
+    CHECK(more.atoms[14].attachments == std::vector<int>{8, 9});
+}
+
 TEST_CASE("Arrange → Group: grouped objects select, arrange and save as one (#410)") {
     App app;
     MainWindow w;

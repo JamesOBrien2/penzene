@@ -14,6 +14,7 @@
 #include <GraphMol/Descriptors/MolSurf.h>
 #include <algorithm>
 #include <map>
+#include <numeric>
 #include <set>
 #include <type_traits>
 #include <GraphMol/inchi.h>
@@ -241,6 +242,18 @@ static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
                           b.stereo == BondStereo::Wedge ? 1u : b.stereo == BondStereo::Hash ? 6u : 4u);
         }
     }
+    // A variable attachment is MDL's position variation bond (V3000 ENDPTS), from its bare point.
+    for (size_t i = 0; i < in.atoms.size(); ++i) {
+        const auto& ends = in.atoms[i].attachments;
+        if (ends.empty()) continue;
+        const auto nbs = doc.neighbors(int(i));
+        auto* bond = nbs.size() != 1 ? nullptr : mol->getBondBetweenAtoms(i, nbs[0]);
+        if (!bond) continue;
+        std::string pts = "(" + std::to_string(ends.size());
+        for (int e : ends) pts += " " + std::to_string(e + 1);
+        bond->setProp(RDKit::common_properties::_MolFileBondEndPts, pts + ")");
+        bond->setProp(RDKit::common_properties::_MolFileBondAttach, std::string("ANY"));
+    }
     // Stereo groups: all abs centres in one, each &n and orn its own, n kept as the group's id.
     std::map<std::pair<StereoGroup, int>, std::vector<RDKit::Atom*>> groups;
     for (size_t i = 0; i < in.atoms.size(); ++i)
@@ -377,6 +390,14 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
                      : b->getBondDir() == RDKit::Bond::UNKNOWN   ? BondStereo::Wavy
                                                                  : BondStereo::None;
         doc.bonds.push_back(out);
+        std::string pts;  // a position variation bond: "(n i j …)", 1-based, from its dummy atom
+        const int dummy = mol.getAtomWithIdx(out.a)->getAtomicNum() == 0 ? out.a : out.b;
+        if (b->getPropIfPresent(RDKit::common_properties::_MolFileBondEndPts, pts) && mol.getAtomWithIdx(dummy)->getAtomicNum() == 0) {
+            const QStringList ids = QString::fromStdString(pts).remove('(').remove(')').split(' ', Qt::SkipEmptyParts);
+            for (qsizetype k = 1; k < ids.size(); ++k)
+                if (const int j = ids[k].toInt() - 1; j >= 0 && j < int(mol.getNumAtoms()) && j != dummy)
+                    doc.atoms[dummy].attachments.push_back(j);
+        }
     }
     auto groups = mol.getStereoGroups();
     RDKit::assignStereoGroupIds(groups);  // numbers for groups the source left unnumbered
@@ -517,16 +538,18 @@ struct LabelNode {
 };
 
 // The colours the file gives atoms and bonds, by node position: RDKit reads none of them.
-struct FileInks {
+// What the file marks on atoms and bonds that RDKit's reading drops, by position.
+struct FileMarks {
     std::vector<std::pair<QPointF, QColor>> atoms;
     std::vector<std::tuple<QPointF, QPointF, QColor>> bonds;  // from, to
+    std::vector<std::pair<QPointF, std::vector<QPointF>>> variable;  // variable attachment points and their atoms
 };
 
 // Arrows, free text and label nodes from the CDXML itself; RDKit only reads the
 // molecules. Returns the label nodes and how many bonds each node id has.
 // ponytail: plain lines, brackets, shapes and binary .cdx graphics are skipped.
 static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& doc, QHash<int, int>& bondCount,
-                                               std::vector<QPointF>& lonePairs, FileInks& inks) {
+                                               std::vector<QPointF>& lonePairs, FileMarks& inks) {
     QXmlStreamReader r(xml);
     double scale = kBondLength / 30;  // CDXML's default BondLength
     double lineWidth = 1;  // and LineWidth, in points
@@ -549,6 +572,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     // Black is the ink (it follows the theme), so it comes back as no colour.
     std::vector<QColor> table;
     QHash<int, QPointF> nodePos;
+    std::vector<std::pair<int, QStringList>> variable;  // node id, its Attachments
     auto ink = [&](const QXmlStreamAttributes& at) {
         const int i = at.value("color").toInt() - 2;
         const QColor c = i >= 0 && i < int(table.size()) ? table[i] : QColor();
@@ -610,6 +634,8 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             if (at.hasAttribute("Z")) moleculeZ = std::min(moleculeZ, at.value("Z").toDouble());
             const int id = at.value("id").toInt();
             nodePos[id] = point(at.value("p"));
+            if (at.value("NodeType") == u"VariableAttachment")
+                variable.push_back({id, at.value("Attachments").toString().split(' ', Qt::SkipEmptyParts)});
             if (const QColor c = ink(at); c.isValid() && !inLabel) inks.atoms.push_back({nodePos[id], c});
             for (const Open& o : stack)  // an atom inside a label's fragment (its link out isn't one)
                 if (o.label >= 0 && at.value("NodeType") != u"ExternalConnectionPoint") {
@@ -725,6 +751,11 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     std::erase_if(doc.texts, [](const Text& t) { return t.text.trimmed().isEmpty(); });
     for (auto& t : doc.texts) t.text = t.text.trimmed().replace('\r', '\n');
     for (auto& l : labels) l.text = l.text.trimmed().replace('\r', '\n');
+    for (const auto& [id, ids] : variable) {
+        inks.variable.push_back({nodePos[id], {}});
+        for (const QString& i : ids)
+            if (nodePos.contains(i.toInt())) inks.variable.back().second.push_back(nodePos[i.toInt()]);
+    }
     return labels;
 }
 
@@ -824,7 +855,7 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         Document graphics;
         QHash<int, int> bondCount;
         std::vector<QPointF> lonePairs;
-        FileInks inks;
+        FileMarks inks;
         placeLabels(doc, chemDrawGraphics(data, graphics, bondCount, lonePairs, inks), bondCount);
         auto atomAt = [&](QPointF p) {
             for (int i = 0; i < int(doc.atoms.size()); ++i)
@@ -836,6 +867,12 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         for (const auto& [from, to, c] : inks.bonds)
             for (Bond& b : doc.bonds)
                 if ((atomAt(from) == b.a && atomAt(to) == b.b) || (atomAt(from) == b.b && atomAt(to) == b.a)) b.color = c;
+        for (const auto& [p, ends] : inks.variable)  // RDKit reads the point as a carbon
+            if (const int i = atomAt(p); i >= 0) {
+                doc.atoms[i].z = 0;
+                for (QPointF e : ends)
+                    if (const int j = atomAt(e); j >= 0 && j != i) doc.atoms[i].attachments.push_back(j);
+            }
         for (QPointF lp : lonePairs) {  // onto the nearest atom
             int best = -1;
             double bestDist = 1.4 * kBondLength;
@@ -1303,7 +1340,10 @@ QByteArray toCdxml(const Document& doc) {
                 if (a.stereoGroupNumber) w.writeAttribute("EnhancedStereoGroupNum", QString::number(a.stereoGroupNumber));
             }
         };
-        for (size_t i = 0; i < doc.atoms.size(); ++i) {
+        std::vector<size_t> order(doc.atoms.size());  // variable attachment points last, after the ids they name
+        std::iota(order.begin(), order.end(), 0);
+        std::stable_partition(order.begin(), order.end(), [&](size_t i) { return doc.atoms[i].attachments.empty(); });
+        for (size_t i : order) {
             const Atom& a = doc.atoms[i];
             node[i] = id++;
             w.writeStartElement("n");
@@ -1311,6 +1351,14 @@ QByteArray toCdxml(const Document& doc) {
             w.writeAttribute("Z", QString::number(z));
             w.writeAttribute("p", pt(a.pos));
             paint(a.color);
+            if (!a.attachments.empty()) {
+                QStringList ids;
+                for (int j : a.attachments) ids << QString::number(node[j]);
+                w.writeAttribute("NodeType", "VariableAttachment");
+                w.writeAttribute("Attachments", ids.join(' '));
+                w.writeEndElement();
+                continue;
+            }
             if (a.label.isEmpty()) {
                 element(a);
                 w.writeEndElement();
@@ -1485,8 +1533,25 @@ std::string toSmiles(const Document& doc) {
     return parses(smiles) ? smiles : "";  // e.g. a hydrogen with four bonds (#266)
 }
 
-std::optional<Properties> properties(const Document& doc) {
-    if (doc.atoms.empty()) return std::nullopt;
+// Each variable attachment bonded at its first atom: every position has the same formula and mass.
+// ponytail: SMILES and InChI still see a * there; CXSMILES m: if they need the positions.
+static Document onePosition(Document doc) {
+    std::vector<int> points;
+    for (int i = 0; i < int(doc.atoms.size()); ++i) {
+        if (doc.atoms[i].attachments.empty()) continue;  // neighbors() scans every bond
+        if (const auto nbs = doc.neighbors(i); nbs.size() == 1 && doc.bondBetween(doc.atoms[i].attachments[0], nbs[0]) < 0) {
+            Bond& b = doc.bonds[doc.bondBetween(i, nbs[0])];
+            b.a = doc.atoms[i].attachments[0], b.b = nbs[0];
+            points.push_back(i);
+        }
+    }
+    if (!points.empty()) doc.removeAtoms(points);
+    return doc;
+}
+
+std::optional<Properties> properties(const Document& drawn) {
+    if (drawn.atoms.empty()) return std::nullopt;
+    const Document doc = onePosition(drawn);
     auto mol = toRDKit(doc);
     if (!perceive(*mol)) return std::nullopt;
     return Properties{RDKit::Descriptors::calcMolFormula(*mol, true),  // isotopes apart: C[13C]H6O, CDH3
@@ -1497,7 +1562,7 @@ std::optional<Properties> properties(const Document& doc) {
 std::optional<Profile> profile(const Document& doc) {
     auto basic = properties(doc);
     if (!basic) return std::nullopt;
-    auto mol = toRDKit(doc);
+    auto mol = toRDKit(onePosition(doc));
     if (!perceive(*mol)) return std::nullopt;
     Profile p{*basic};
     double mr = 0;

@@ -91,6 +91,9 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
   shows one box per molecule (one per group); drag from anywhere inside a box to move it.
 - **Structure → Brackets** puts square or round brackets, with a subscript such as *n*, around the
   selected atoms.
+- **Structure → Variable Attachment** draws a bond across the edge of the selected atoms (a ring's,
+  say) for a substituent on any one of them. Formula and mass count it once; MOL (V3000) and
+  ChemDraw files keep the positions.
 
 ## Arrows, text, shapes and colour
 
