@@ -113,16 +113,19 @@ bool attach(Document& doc, int at, const std::string& what) {
     return true;
 }
 
+bool expandLabel(Document& doc, int at) {
+    const Atom was = doc.atoms[at];
+    const auto head = abbreviationHead(was.label);
+    if (!attach(doc, at, was.label.toStdString())) return false;
+    if (head) doc.atoms[at].charge += was.charge - head->charge;  // a charged group: N3- (#370, #589)
+    return true;
+}
+
 Document expanded(const Document& doc) {
     Document out = doc;
-    for (int i = 0; i < int(doc.atoms.size()); ++i) {
-        if (doc.atoms[i].label.isEmpty()) continue;
-        const auto head = abbreviationHead(doc.atoms[i].label);
-        if (!attach(out, i, doc.atoms[i].label.toStdString()))
+    for (int i = 0; i < int(doc.atoms.size()); ++i)
+        if (!doc.atoms[i].label.isEmpty() && !expandLabel(out, i))
             out.atoms[i].label.clear();  // unknown label (e.g. from a newer file): keep the atom as is
-        else if (head)
-            out.atoms[i].charge += doc.atoms[i].charge - head->charge;  // a charged group: N3- (#370)
-    }
     return out;
 }
 

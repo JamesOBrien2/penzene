@@ -145,6 +145,7 @@ QStringList abbreviations();
 // Replaces `atom` with the first atom of `smiles` (or an abbreviation) and lays
 // the rest out away from its bonds. New atoms are appended, so indices stay valid.
 bool attach(Document& doc, int atom, const std::string& smilesOrAbbreviation);
+bool expandLabel(Document& doc, int atom);  // one label drawn out in full, a charged group keeping its charge (N3-)
 Document expanded(const Document& doc);  // abbreviations drawn out in full
 // Fischer crossings and Haworth rings redrawn with the wedges they mean (chemistry uses this).
 Document projectionsAsWedges(const Document& doc);
