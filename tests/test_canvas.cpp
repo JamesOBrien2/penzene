@@ -453,6 +453,29 @@ TEST_CASE("abbreviations: valence, clean, expand") {
     CHECK(back->atoms[2].label == "Boc");
 }
 
+TEST_CASE("expanding a charged group keeps its charge, from the menu and the atom's own action (#589)") {
+    Fixture f;
+    Document d;
+    d.addAtom({0, 0}, 7);
+    REQUIRE(edit::applyLabel(d, 0, "N3-", true));
+    REQUIRE(chem::properties(d));
+    const std::string azide = chem::properties(d)->formula;
+    CHECK(azide.find("H") == std::string::npos);
+    auto charge = [](const Document& doc) {
+        int sum = 0;
+        for (const Atom& a : doc.atoms) sum += a.charge;
+        return sum;
+    };
+    f.canvas.setDocumentSilently(d);
+    f.canvas.expandAbbreviations();
+    CHECK(f.doc().atoms.size() == 3);
+    CHECK(charge(f.doc()) == -1);
+    CHECK(chem::properties(f.doc())->formula == azide);
+    Document one = d;
+    REQUIRE(chem::expandLabel(one, 0));  // what the atom's Expand Abbreviation action calls
+    CHECK(charge(one) == -1);
+}
+
 static double angleAt(const Document& d, int centre, int x, int y) {
     QPointF u = d.atoms[x].pos - d.atoms[centre].pos, v = d.atoms[y].pos - d.atoms[centre].pos;
     return std::acos((u.x() * v.x() + u.y() * v.y()) / (std::hypot(u.x(), u.y()) * std::hypot(v.x(), v.y()))) * 180 / M_PI;

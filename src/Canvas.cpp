@@ -1736,7 +1736,7 @@ void Canvas::expandAbbreviations() {
     Document next = doc_;
     for (int i = 0; i < int(doc_.atoms.size()); ++i) {
         bool wanted = selectedAtoms_.isEmpty() ? (hoverAtom_ < 0 || hoverAtom_ == i) : selectedAtoms_.contains(i);
-        if (wanted && !doc_.atoms[i].label.isEmpty()) chem::attach(next, i, doc_.atoms[i].label.toStdString());
+        if (wanted && !doc_.atoms[i].label.isEmpty()) chem::expandLabel(next, i);
     }
     if (!(next == doc_)) commit(next, tr("Expand"));
 }
@@ -2103,7 +2103,7 @@ QMenu* Canvas::contextMenuAt(QPointF at) {
         if (!doc_.atoms[atom].label.isEmpty())
             menu->addAction(tr("Expand Abbreviation"), this, [this, atom] {
                 Document next = doc_;
-                chem::attach(next, atom, doc_.atoms[atom].label.toStdString());
+                chem::expandLabel(next, atom);
                 commit(next, tr("Expand"));
             });
         menu->addSeparator();
