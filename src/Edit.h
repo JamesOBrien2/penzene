@@ -34,6 +34,10 @@ struct CompoundCount {
 CompoundCount renumberCompounds(Document& doc, CompoundCount from = {});
 // A compound number in `after` that wasn't moved itself follows the foot of its molecule from `before`.
 void followNumbers(const Document& before, Document& after);
+// Each molecule's variable definitions (X = N, O, S) as one legend Text under it, rewritten from
+// its atoms' standsFor; placed once (it may then be moved), dropped with the last definition.
+// Returns the legends it placed, for the caller to centre.
+std::vector<int> syncLegends(Document& doc);
 int atomAtOrNew(Document& doc, QPointF p, int z = 6);
 void link(Document& doc, int a, int b, int order = 1, BondStereo stereo = BondStereo::None);
 std::vector<int> addRing(Document& doc, const std::vector<QPointF>& verts, bool aromatic);

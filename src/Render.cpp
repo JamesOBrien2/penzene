@@ -536,7 +536,7 @@ static void drawOrbital(QPainter& p, const Arrow& a, const QColor& color, double
             const QColor inner = main ? mix(color, 0.75) : QColor(Qt::white), outer = main ? color : mix(color, 0.7);
             const QPointF focus = r.center() + light * 0.3 * radius;
             if (p.paintEngine() && (p.paintEngine()->type() == QPaintEngine::Pdf || p.paintEngine()->type() == kEmfEngine)) {
-                // ponytail: Qt writes gradient fills with an uncoloured pattern colour space, which
+                // Qt writes gradient fills with an uncoloured pattern colour space, which
                 // Apple's PDF renderer (Preview, Keynote, Word on macOS) skips; so PDFs get 16 vector
                 // bands instead. Drop this once Qt writes a plain /Pattern colour space.
                 constexpr int kBands = 16;
@@ -802,6 +802,14 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         p.setPen(QPen(info[i].valenceError ? style.error : ink(a.color), lineWidth));
         if (labeled[i]) {
             drawLabel(p, doc, int(i), info[i].hydrogens, hSide(int(i)), st);
+            if (style.labels) {
+                QPicture label;
+                QPainter q(&label);
+                drawLabel(q, doc, int(i), info[i].hydrogens, hSide(int(i)), st);
+                q.end();
+                style.labels->resize(doc.atoms.size());
+                (*style.labels)[i] = label.boundingRect();
+            }
         } else if (a.charge) {
             QFont sub = labelFont(st, 0.7);
             QString c = QString(a.charge > 0 ? "+" : "−");

@@ -16,6 +16,7 @@ struct RenderStyle {
     QColor ink = Qt::black;
     QColor error = QColor(220, 40, 40);
     double lineWidth = 0;  // > 0 overrides the drawing style's (toolbar icons)
+    std::vector<QRectF>* labels = nullptr;  // if set: each atom's drawn label box (empty: none), for the selection's outline
 };
 
 // Screen colours. Exports and copies always use black ink on a clear

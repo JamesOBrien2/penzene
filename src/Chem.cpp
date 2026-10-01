@@ -14,6 +14,7 @@
 #include <GraphMol/Descriptors/MolSurf.h>
 #include <algorithm>
 #include <map>
+#include <numeric>
 #include <set>
 #include <type_traits>
 #include <GraphMol/inchi.h>
@@ -24,7 +25,10 @@
 #include <GraphMol/atomic_data.h>
 #include <GraphMol/new_canon.h>
 #include <GraphMol/SmilesParse/SmilesParse.h>
+#include <GraphMol/SmilesParse/SmartsWrite.h>
 #include <GraphMol/SmilesParse/SmilesWrite.h>
+#include <GraphMol/QueryAtom.h>
+#include <GraphMol/QueryOps.h>
 #include <GraphMol/Substruct/SubstructMatch.h>
 
 #include <QDateTime>
@@ -196,22 +200,70 @@ Document projectionsAsWedges(const Document& in) {
     return doc;
 }
 
+// A definition made only of elements ("N, O, S"): the atom list a variable label stands for.
+static std::optional<std::vector<int>> elementList(const QString& standsFor) {
+    std::vector<int> zs;
+    for (const QString& s : standsFor.split(',', Qt::SkipEmptyParts)) {
+        const int z = atomicNumber(s.trimmed().toStdString());
+        if (z <= 0 || QString::fromStdString(symbol(z)) != s.trimmed()) return std::nullopt;
+        zs.push_back(z);
+    }
+    return zs.empty() ? std::nullopt : std::optional(zs);
+}
+
+// MDL's query codes, typed as labels for search queries; X is left out, as figures use it as a variable.
+static bool isGenericQuery(const QString& label) {
+    return label != "X" &&
+           std::find(RDKit::complexQueries.begin(), RDKit::complexQueries.end(), label.toStdString()) != RDKit::complexQueries.end();
+}
+
+QString queryMeaning(const Atom& a) {
+    static const QHash<QString, const char*> generic{
+        {"A", QT_TRANSLATE_NOOP("QObject", "any atom but H")},       {"AH", QT_TRANSLATE_NOOP("QObject", "any atom")},
+        {"Q", QT_TRANSLATE_NOOP("QObject", "any atom but C or H")},  {"QH", QT_TRANSLATE_NOOP("QObject", "any atom but C")},
+        {"XH", QT_TRANSLATE_NOOP("QObject", "a halogen or H")},
+        {"M", QT_TRANSLATE_NOOP("QObject", "a metal")},              {"MH", QT_TRANSLATE_NOOP("QObject", "a metal or H")}};
+    if (a.label.isEmpty()) return {};
+    if (generic.contains(a.label)) return QObject::tr(generic[a.label]);
+    if (elementList(a.standsFor)) return QObject::tr("one of %1").arg(a.standsFor);
+    return {};
+}
+
+// A query atom (#505): MDL's codes, or a variable label standing for elements only, as an atom
+// list (its label kept as the alias). Null for any other atom.
+static RDKit::Atom* queryAtom(const Atom& a) {
+    if (a.label.isEmpty()) return nullptr;
+    if (isGenericQuery(a.label)) {
+        auto* q = new RDKit::QueryAtom(0);
+        RDKit::convertComplexNameToQuery(q, a.label.toStdString());
+        return q;
+    }
+    const auto zs = elementList(a.standsFor);
+    if (!zs) return nullptr;
+    auto* q = new RDKit::QueryAtom((*zs)[0]);
+    for (size_t k = 1; k < zs->size(); ++k) q->expandQuery(RDKit::makeAtomNumQuery((*zs)[k]), Queries::COMPOSITE_OR);
+    q->setProp(RDKit::common_properties::molFileAlias, a.label.toStdString());
+    return q;
+}
+
 static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
     const Document doc = projectionsAsWedges(expand ? expanded(in) : in);
     auto mol = std::make_unique<RWMol>();
     auto* conf = new RDKit::Conformer(doc.atoms.size());
     for (size_t i = 0; i < doc.atoms.size(); ++i) {
         const auto& a = doc.atoms[i];
-        auto* atom = new RDKit::Atom(a.z);
+        RDKit::Atom* query = a.z == 0 && i < in.atoms.size() ? queryAtom(in.atoms[i]) : nullptr;
+        auto* atom = query ? query : new RDKit::Atom(a.z);
         atom->setFormalCharge(a.charge);
         atom->setNumRadicalElectrons(a.radicals);
         if (a.isotope && a.z > 0) atom->setIsotope(a.isotope);
         // Not setAtomMapNum: it logs through rdErrorLog, which the Windows DLL doesn't export.
         if (a.map > 0) atom->setProp(RDKit::common_properties::molAtomMapNumber, a.map);
         // Generic atoms (expansion drops their labels, so they come from `in`): R1…Rn as
-        // MDL R-groups (R# with RGP, [n*] in SMILES), any other text (X, Ar) as an MDL atom alias.
-        // ponytail: V3000 has no alias block, so there X/Ar become plain * atoms.
-        if (a.z == 0 && i < in.atoms.size() && !in.atoms[i].label.isEmpty()) {
+        // MDL R-groups (R# with RGP, [n*] in SMILES), query atoms as queries, any other text (X, Ar)
+        // as an MDL atom alias.
+        // V3000 has no alias block, so there X/Ar become plain * atoms (a list's comes back as X, Y…).
+        if (!query && a.z == 0 && i < in.atoms.size() && !in.atoms[i].label.isEmpty()) {
             static const QRegularExpression rgroup("^R(\\d+)$");
             const QString label = in.atoms[i].label;
             if (const auto m = rgroup.match(label); m.hasMatch()) {
@@ -240,6 +292,18 @@ static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
             bond->setProp(RDKit::common_properties::_MolFileBondStereo,
                           b.stereo == BondStereo::Wedge ? 1u : b.stereo == BondStereo::Hash ? 6u : 4u);
         }
+    }
+    // A variable attachment is MDL's position variation bond (V3000 ENDPTS), from its bare point.
+    for (size_t i = 0; i < in.atoms.size(); ++i) {
+        const auto& ends = in.atoms[i].attachments;
+        if (ends.empty()) continue;
+        const auto nbs = doc.neighbors(int(i));
+        auto* bond = nbs.size() != 1 ? nullptr : mol->getBondBetweenAtoms(i, nbs[0]);
+        if (!bond) continue;
+        std::string pts = "(" + std::to_string(ends.size());
+        for (int e : ends) pts += " " + std::to_string(e + 1);
+        bond->setProp(RDKit::common_properties::_MolFileBondEndPts, pts + ")");
+        bond->setProp(RDKit::common_properties::_MolFileBondAttach, std::string("ANY"));
     }
     // Stereo groups: all abs centres in one, each &n and orn its own, n kept as the group's id.
     std::map<std::pair<StereoGroup, int>, std::vector<RDKit::Atom*>> groups;
@@ -323,7 +387,7 @@ static void layout(RWMol& mol) {
         for (int i : f) {
             const auto* a = mol.getAtomWithIdx(i);
             const auto& p = conf.getAtomPos(i);
-            // ponytail: a label's extent guessed at 0.65 Å a character, its first letter centred on the atom.
+            // A label's extent guessed at 0.65 Å a character, its first letter centred on the atom.
             int chars = 0;
             if (a->getAtomicNum() != 6 || a->getFormalCharge() || !a->getDegree()) {
                 const int h = int(a->getTotalNumHs()), q = std::abs(a->getFormalCharge());
@@ -355,18 +419,37 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
     Document doc;
     for (const auto* a : mol.atoms()) {
         const auto& p = conf.getAtomPos(a->getIdx());
-        QString label;  // a generic atom's: its alias (X, Ar), or R-group number
+        QString label, standsFor;  // a generic atom's: its alias (X, Ar), or R-group number
         unsigned r = 0;
         std::string alias;
-        if (a->getAtomicNum() == 0 && a->getPropIfPresent(RDKit::common_properties::molFileAlias, alias) && !alias.empty())
+        a->getPropIfPresent(RDKit::common_properties::molFileAlias, alias);
+        if (a->hasQuery() && isGenericQuery(QString::fromStdString(a->getQuery()->getTypeLabel())))  // before lists: Q is an OR too
+            label = QString::fromStdString(a->getQuery()->getTypeLabel());
+        else if (a->hasQuery() && RDKit::isAtomListQuery(a)) {  // a variable: its alias, else X, Y… (below)
+            std::vector<int> zs;
+            RDKit::getAtomListQueryVals(a->getQuery(), zs);
+            QStringList symbols;
+            for (int z : zs) symbols << QString::fromStdString(symbol(z));
+            label = QString::fromStdString(alias), standsFor = symbols.join(", ");
+        } else if (a->hasQuery() && a->getQuery()->getTypeLabel() == "X") {  // MDL's halogen
+            label = "X", standsFor = "F, Cl, Br, I";
+        } else if (a->getAtomicNum() == 0 && !alias.empty())
             label = QString::fromStdString(alias);
         else if (a->getAtomicNum() == 0 && a->getPropIfPresent(RDKit::common_properties::_MolFileRLabel, r) && r)
             label = QString("R%1").arg(r);
-        doc.atoms.push_back({QPointF(p.x * scale, -p.y * scale), int(a->getAtomicNum()),
+        doc.atoms.push_back({QPointF(p.x * scale, -p.y * scale), standsFor.isEmpty() ? int(a->getAtomicNum()) : 0,
                              a->getFormalCharge(), label, {}, int(a->getAtomMapNum()), 0,
                              int(std::min(2u, a->getNumRadicalElectrons()))});
         if (a->getAtomicNum() > 0) doc.atoms.back().isotope = int(a->getIsotope());  // on a dummy it's an R-group number
+        doc.atoms.back().standsFor = standsFor;
     }
+    for (Atom& a : doc.atoms)  // unnamed atom lists: the first of X, Y, Z… not already used
+        if (!a.standsFor.isEmpty() && a.label.isEmpty())
+            for (const char* name : {"X", "Y", "Z", "W", "V", "U"})
+                if (std::none_of(doc.atoms.begin(), doc.atoms.end(), [&](const Atom& o) { return o.label == name; })) {
+                    a.label = name;
+                    break;
+                }
     for (const auto* b : mol.bonds()) {
         Bond out{int(b->getBeginAtomIdx()), int(b->getEndAtomIdx())};
         out.order = b->getBondType() == RDKit::Bond::DOUBLE   ? 2
@@ -377,6 +460,14 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
                      : b->getBondDir() == RDKit::Bond::UNKNOWN   ? BondStereo::Wavy
                                                                  : BondStereo::None;
         doc.bonds.push_back(out);
+        std::string pts;  // a position variation bond: "(n i j …)", 1-based, from its dummy atom
+        const int dummy = mol.getAtomWithIdx(out.a)->getAtomicNum() == 0 ? out.a : out.b;
+        if (b->getPropIfPresent(RDKit::common_properties::_MolFileBondEndPts, pts) && mol.getAtomWithIdx(dummy)->getAtomicNum() == 0) {
+            const QStringList ids = QString::fromStdString(pts).remove('(').remove(')').split(' ', Qt::SkipEmptyParts);
+            for (qsizetype k = 1; k < ids.size(); ++k)
+                if (const int j = ids[k].toInt() - 1; j >= 0 && j < int(mol.getNumAtoms()) && j != dummy)
+                    doc.atoms[dummy].attachments.push_back(j);
+        }
     }
     auto groups = mol.getStereoGroups();
     RDKit::assignStereoGroupIds(groups);  // numbers for groups the source left unnumbered
@@ -517,16 +608,18 @@ struct LabelNode {
 };
 
 // The colours the file gives atoms and bonds, by node position: RDKit reads none of them.
-struct FileInks {
+// What the file marks on atoms and bonds that RDKit's reading drops, by position.
+struct FileMarks {
     std::vector<std::pair<QPointF, QColor>> atoms;
     std::vector<std::tuple<QPointF, QPointF, QColor>> bonds;  // from, to
+    std::vector<std::pair<QPointF, std::vector<QPointF>>> variable;  // variable attachment points and their atoms
 };
 
 // Arrows, free text and label nodes from the CDXML itself; RDKit only reads the
 // molecules. Returns the label nodes and how many bonds each node id has.
-// ponytail: plain lines, brackets, shapes and binary .cdx graphics are skipped.
+// Plain lines, brackets, shapes and binary .cdx graphics are skipped.
 static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& doc, QHash<int, int>& bondCount,
-                                               std::vector<QPointF>& lonePairs, FileInks& inks) {
+                                               std::vector<QPointF>& lonePairs, FileMarks& inks) {
     QXmlStreamReader r(xml);
     double scale = kBondLength / 30;  // CDXML's default BondLength
     double lineWidth = 1;  // and LineWidth, in points
@@ -549,6 +642,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     // Black is the ink (it follows the theme), so it comes back as no colour.
     std::vector<QColor> table;
     QHash<int, QPointF> nodePos;
+    std::vector<std::pair<int, QStringList>> variable;  // node id, its Attachments
     auto ink = [&](const QXmlStreamAttributes& at) {
         const int i = at.value("color").toInt() - 2;
         const QColor c = i >= 0 && i < int(table.size()) ? table[i] : QColor();
@@ -610,6 +704,8 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             if (at.hasAttribute("Z")) moleculeZ = std::min(moleculeZ, at.value("Z").toDouble());
             const int id = at.value("id").toInt();
             nodePos[id] = point(at.value("p"));
+            if (at.value("NodeType") == u"VariableAttachment")
+                variable.push_back({id, at.value("Attachments").toString().split(' ', Qt::SkipEmptyParts)});
             if (const QColor c = ink(at); c.isValid() && !inLabel) inks.atoms.push_back({nodePos[id], c});
             for (const Open& o : stack)  // an atom inside a label's fragment (its link out isn't one)
                 if (o.label >= 0 && at.value("NodeType") != u"ExternalConnectionPoint") {
@@ -725,6 +821,11 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     std::erase_if(doc.texts, [](const Text& t) { return t.text.trimmed().isEmpty(); });
     for (auto& t : doc.texts) t.text = t.text.trimmed().replace('\r', '\n');
     for (auto& l : labels) l.text = l.text.trimmed().replace('\r', '\n');
+    for (const auto& [id, ids] : variable) {
+        inks.variable.push_back({nodePos[id], {}});
+        for (const QString& i : ids)
+            if (nodePos.contains(i.toInt())) inks.variable.back().second.push_back(nodePos[i.toInt()]);
+    }
     return labels;
 }
 
@@ -824,7 +925,7 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         Document graphics;
         QHash<int, int> bondCount;
         std::vector<QPointF> lonePairs;
-        FileInks inks;
+        FileMarks inks;
         placeLabels(doc, chemDrawGraphics(data, graphics, bondCount, lonePairs, inks), bondCount);
         auto atomAt = [&](QPointF p) {
             for (int i = 0; i < int(doc.atoms.size()); ++i)
@@ -836,6 +937,12 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         for (const auto& [from, to, c] : inks.bonds)
             for (Bond& b : doc.bonds)
                 if ((atomAt(from) == b.a && atomAt(to) == b.b) || (atomAt(from) == b.b && atomAt(to) == b.a)) b.color = c;
+        for (const auto& [p, ends] : inks.variable)  // RDKit reads the point as a carbon
+            if (const int i = atomAt(p); i >= 0) {
+                doc.atoms[i].z = 0;
+                for (QPointF e : ends)
+                    if (const int j = atomAt(e); j >= 0 && j != i) doc.atoms[i].attachments.push_back(j);
+            }
         for (QPointF lp : lonePairs) {  // onto the nearest atom
             int best = -1;
             double bestDist = 1.4 * kBondLength;
@@ -1151,7 +1258,7 @@ std::optional<Document> readFile(const QString& path) {
 
 // CDXML in our own coordinates (BondLength = ours, y down, as ChemDraw), so
 // ChemDraw and chemDrawGraphics read it back unscaled.
-// ponytail: abbreviations are written expanded, free-text labels as generic
+// Abbreviations are written expanded, free-text labels as generic
 // nicknames; ChemDraw's own Fragment/Nickname nodes would keep "OMe" as a label.
 QByteArray toCdxml(const Document& doc) {
     QByteArray out;
@@ -1303,7 +1410,10 @@ QByteArray toCdxml(const Document& doc) {
                 if (a.stereoGroupNumber) w.writeAttribute("EnhancedStereoGroupNum", QString::number(a.stereoGroupNumber));
             }
         };
-        for (size_t i = 0; i < doc.atoms.size(); ++i) {
+        std::vector<size_t> order(doc.atoms.size());  // variable attachment points last, after the ids they name
+        std::iota(order.begin(), order.end(), 0);
+        std::stable_partition(order.begin(), order.end(), [&](size_t i) { return doc.atoms[i].attachments.empty(); });
+        for (size_t i : order) {
             const Atom& a = doc.atoms[i];
             node[i] = id++;
             w.writeStartElement("n");
@@ -1311,6 +1421,14 @@ QByteArray toCdxml(const Document& doc) {
             w.writeAttribute("Z", QString::number(z));
             w.writeAttribute("p", pt(a.pos));
             paint(a.color);
+            if (!a.attachments.empty()) {
+                QStringList ids;
+                for (int j : a.attachments) ids << QString::number(node[j]);
+                w.writeAttribute("NodeType", "VariableAttachment");
+                w.writeAttribute("Attachments", ids.join(' '));
+                w.writeEndElement();
+                continue;
+            }
             if (a.label.isEmpty()) {
                 element(a);
                 w.writeEndElement();
@@ -1460,6 +1578,12 @@ std::string toSdf(const Document& doc, bool v3000) {
     return out;
 }
 
+std::string toSmarts(const Document& doc) {
+    auto mol = toRDKit(doc);
+    perceive(*mol, false);
+    return RDKit::MolToSmarts(*mol);
+}
+
 std::string toSmiles(const Document& doc) {
     auto mol = toRDKit(doc);
     if (!perceive(*mol)) return "";
@@ -1485,8 +1609,25 @@ std::string toSmiles(const Document& doc) {
     return parses(smiles) ? smiles : "";  // e.g. a hydrogen with four bonds (#266)
 }
 
-std::optional<Properties> properties(const Document& doc) {
-    if (doc.atoms.empty()) return std::nullopt;
+// Each variable attachment bonded at its first atom: every position has the same formula and mass.
+// SMILES and InChI still see a * there; CXSMILES m: if they need the positions.
+static Document onePosition(Document doc) {
+    std::vector<int> points;
+    for (int i = 0; i < int(doc.atoms.size()); ++i) {
+        if (doc.atoms[i].attachments.empty()) continue;  // neighbors() scans every bond
+        if (const auto nbs = doc.neighbors(i); nbs.size() == 1 && doc.bondBetween(doc.atoms[i].attachments[0], nbs[0]) < 0) {
+            Bond& b = doc.bonds[doc.bondBetween(i, nbs[0])];
+            b.a = doc.atoms[i].attachments[0], b.b = nbs[0];
+            points.push_back(i);
+        }
+    }
+    if (!points.empty()) doc.removeAtoms(points);
+    return doc;
+}
+
+std::optional<Properties> properties(const Document& drawn) {
+    if (drawn.atoms.empty()) return std::nullopt;
+    const Document doc = onePosition(drawn);
     auto mol = toRDKit(doc);
     if (!perceive(*mol)) return std::nullopt;
     return Properties{RDKit::Descriptors::calcMolFormula(*mol, true),  // isotopes apart: C[13C]H6O, CDH3
@@ -1497,7 +1638,7 @@ std::optional<Properties> properties(const Document& doc) {
 std::optional<Profile> profile(const Document& doc) {
     auto basic = properties(doc);
     if (!basic) return std::nullopt;
-    auto mol = toRDKit(doc);
+    auto mol = toRDKit(onePosition(doc));
     if (!perceive(*mol)) return std::nullopt;
     Profile p{*basic};
     double mr = 0;
@@ -1602,7 +1743,7 @@ std::vector<Peak> isotopePattern(const Document& doc, Ion ion) {
     if (ion == Ion::MplusNa) ++natural[11], ++charge;
     if (ion == Ion::MminusH) --natural[1], --charge;
     if (natural[1] < 0) return {};
-    // ponytail: one atom at a time; square-and-multiply if thousand-atom polymers get slow.
+    // One atom at a time; square-and-multiply if thousand-atom polymers get slow.
     for (const auto& [z, n] : natural) {
         if (n == 0) continue;
         std::vector<Peak> one;
@@ -1942,10 +2083,10 @@ std::vector<Problem> checkStructure(const Document& doc) {
         if (info[i].valenceError)
             out.push_back({QObject::tr("Valence error: %1 has too many bonds").arg(name(i)), {i}});
     for (int i = 0; i < n; ++i)
-        if (!doc.atoms[i].label.isEmpty() && !abbreviationHead(doc.atoms[i].label))
-            out.push_back({QObject::tr("Unknown label \"%1\": drawn, but treated as an unknown group")
-                               .arg(doc.atoms[i].label),
-                           {i}});
+        if (const QString label = doc.atoms[i].label; !queryMeaning(doc.atoms[i]).isEmpty())
+            out.push_back({QObject::tr("Query atom %1: %2").arg(label, queryMeaning(doc.atoms[i])), {i}});
+        else if (!label.isEmpty() && doc.atoms[i].standsFor.isEmpty() && !abbreviationHead(label))
+            out.push_back({QObject::tr("Unknown label \"%1\": drawn, but treated as an unknown group").arg(label), {i}});
     for (int i = 0; i < n; ++i)
         for (int j = i + 1; j < n; ++j)
             if (QLineF(doc.atoms[i].pos, doc.atoms[j].pos).length() < 0.3 * kBondLength)
@@ -2058,7 +2199,7 @@ int atomicNumber(const std::string& sym) {
 
 namespace chem {
 
-// ponytail: depth always comes from an embedding; a MOL file's own z isn't kept
+// Depth always comes from an embedding; a MOL file's own z isn't kept
 // on import, so a drawn 3D structure gets a fresh conformer. Keep z to use it.
 std::optional<Pose3D> pose3D(const Document& doc, const std::vector<int>& atoms) {
     if (atoms.empty()) return std::nullopt;
@@ -2169,7 +2310,7 @@ long hoseRank(int z) {  // CDK's element ranks; other elements by their mass
     case 14: return 8500; case 5: return 8400; case 9: return 8300; case 17: return 8200; case 35: return 8100;
     case 53: return 7900; case 0: return 800000;
     }
-    // ponytail: rounded average mass, not the major isotope's mass number (PeriodicTable's inline
+    // Rounded average mass, not the major isotope's mass number (PeriodicTable's inline
     // lookups aren't exported by the Windows DLL); it only orders rare elements, the same way everywhere.
     return 800000 - std::lround(RDKit::Atom(z).getMass());
 }

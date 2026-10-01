@@ -8,6 +8,7 @@
 #include <QRegularExpression>
 #include <algorithm>
 #include <map>
+#include <set>
 #include <tuple>
 
 namespace edit {
@@ -89,7 +90,7 @@ QPointF snapToAnchor(const Document& doc, std::array<int, 2> at, QPointF p, QPoi
     return len(d) < 1e-6 ? c : c + unit(d) * gap;
 }
 
-// ponytail: an end that follows is shifted, not turned, with its atoms: an electron pair drawn
+// An end that follows is shifted, not turned, with its atoms: an electron pair drawn
 // beside an atom stays on the same side of it when only the structure is rotated.
 void followAnchors(const Document& before, Document& after) {
     if (before.atoms.size() != after.atoms.size() || before.arrows.size() != after.arrows.size()) return;
@@ -115,14 +116,13 @@ void followAnchors(const Document& before, Document& after) {
 }
 
 std::vector<int> moleculeOf(const Document& doc, int atom) {
-    const auto bondsAt = doc.bondsAt();
+    const auto joined = doc.joined();
     std::vector<bool> seen(doc.atoms.size());
     std::vector<int> out{atom};
     seen[atom] = true;
     for (size_t k = 0; k < out.size(); ++k)
-        for (int b : bondsAt[out[k]])
-            for (int nb : {doc.bonds[b].a, doc.bonds[b].b})
-                if (!seen[nb]) seen[nb] = true, out.push_back(nb);
+        for (int nb : joined[out[k]])
+            if (!seen[nb]) seen[nb] = true, out.push_back(nb);
     return out;
 }
 
@@ -162,6 +162,53 @@ CompoundCount renumberCompounds(Document& doc, CompoundCount count) {
         text = QString::number(n) + suffix;
     }
     return count;
+}
+
+std::vector<int> syncLegends(Document& doc) {
+    if (std::none_of(doc.atoms.begin(), doc.atoms.end(), [](const Atom& a) { return !a.standsFor.isEmpty(); }) &&
+        std::none_of(doc.texts.begin(), doc.texts.end(), [](const Text& t) { return t.legend; }))
+        return {};  // nothing to write or erase: skip the molecule scan on every commit
+    const int n = int(doc.atoms.size());
+    std::vector<int> mol(n, -1);  // each atom's molecule, numbered by its first atom
+    for (int i = 0; i < n; ++i)
+        if (mol[i] < 0)
+            for (int a : moleculeOf(doc, i)) mol[a] = i;
+    auto lines = [&](int m) {
+        QStringList out;
+        for (int a = 0; a < n; ++a)
+            if (const Atom& at = doc.atoms[a]; mol[a] == m && !at.label.isEmpty() && !at.standsFor.trimmed().isEmpty())
+                out << at.label + " = " + at.standsFor.trimmed();
+        out.removeDuplicates();
+        out.sort();
+        return out.join('\n');
+    };
+    std::set<int> hasLegend;
+    std::erase_if(doc.texts, [&](Text& t) {  // rewritten from the definitions; gone with the last one
+        if (!t.legend) return false;
+        const int m = t.anchor >= 0 && t.anchor < n ? mol[t.anchor] : -1;
+        if (m < 0 || hasLegend.count(m)) return true;
+        t.text = lines(m);
+        hasLegend.insert(m);
+        return t.text.isEmpty();
+    });
+    std::vector<int> placed;
+    for (int m = 0; m < n; ++m) {
+        if (mol[m] != m || hasLegend.count(m)) continue;
+        const QString text = lines(m);
+        if (text.isEmpty()) continue;
+        std::vector<int> atoms;
+        for (int a = 0; a < n; ++a)
+            if (mol[a] == m) atoms.push_back(a);
+        const QRectF box = atomBox(doc, atoms);
+        double y = box.bottom() + 1.3 * kBondLength;  // under the molecule, and under its compound number
+        for (const Text& t : doc.texts)
+            if (t.compound && t.anchor >= 0 && t.anchor < n && mol[t.anchor] == m) y = std::max(y, t.pos.y() + 1.2 * kBondLength);
+        Text t{{box.center().x(), y}, text};
+        t.legend = true, t.anchor = m;
+        doc.texts.push_back(t);
+        placed.push_back(int(doc.texts.size()) - 1);
+    }
+    return placed;
 }
 
 void followNumbers(const Document& before, Document& after) {
@@ -344,6 +391,7 @@ void mergeAtoms(Document& doc, const std::vector<std::pair<int, int>>& keepDrop)
         ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
     };
     for (auto& b : doc.brackets) moveOnto(b.atoms);
+    for (auto& a : doc.atoms) moveOnto(a.attachments);
     for (auto& ring : doc.aromaticCircleOverrides) moveOnto(ring);
     std::vector<int> drops;
     for (auto [keep, drop] : keepDrop) drops.push_back(drop);
@@ -583,7 +631,7 @@ Hotspot hotkey(Document& doc, Hotspot h, const QString& t) {
             return h;
         }
         if (t == "j" || t == "J") {  // η5-cyclopentadienyl / η6-benzene, bonded through the ring's centre
-            // ponytail: η-bonds have no SMILES or MOL form; the centroid is a bare dummy (*) there.
+            // η-bonds have no SMILES or MOL form; the centroid is a bare dummy (*) there.
             const int n = t == "j" ? 5 : 6;
             const QPointF centre = doc.atoms[at].pos + doc.awayDirection(at) * (1.6 * kBondLength);
             const auto ring = ringAt(doc, centre, n, n == 6);  // may reuse atoms already there
