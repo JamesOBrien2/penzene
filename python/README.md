@@ -16,6 +16,11 @@ doc                               # renders inline in Jupyter
 m = pz.Document()
 n = m.add_atom("N"); c = m.add_atom("C", x=14.4); m.add_bond(n, c)
 m.hotkeys(c, "42n152o")
+
+# Correct an imported drawing in place
+d = pz.read("scheme.cdxml")
+d.set_label(3, "OMe"); d.set_bond_order(5, 2)
+d.remove_atoms([7, 8])           # indices from before the call; later atoms move down
 ```
 
 Also: `pz.read(path)` for `.penz`, `.mol` and ChemDraw `.cdxml`; `to_smiles()`, `to_molblock()`, `to_inchi()`, `to_inchikey()`, `to_svg()`, `to_png(dpi)`; `doc.style = "RSC"` (or `"ACS 1996"`, `"JDP"`); abbreviations such as `add_atom("Boc")`.

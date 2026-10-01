@@ -74,6 +74,35 @@ except ValueError as e:
     assert "'RSC'" in str(e), e
 else:
     raise AssertionError("expected ValueError")
+# Editing an imported drawing in place (#430): relabel, change a bond, remove atoms and bonds.
+ed = pz.from_smiles("CC(=O)OC")  # methyl acetate
+ed.set_label(4, "Et")
+assert ed.atoms[4].symbol == "Et" and ed.formula == "C4H8O2"
+ed.set_label(4, "C")  # back to a plain carbon
+assert ed.atoms[4].symbol == "C" and ed.formula == "C3H6O2"
+double = next(i for i, b in enumerate(ed.bonds) if b.order == 2)
+ed.set_bond_order(double, 1)
+assert ed.bonds[double].order == 1 and ed.formula == "C3H8O2"
+gone = pz.from_smiles("CC(=O)OC")
+gone.remove_atoms([3, 1, 3])  # indices from before the call; duplicates are fine
+assert [a.symbol for a in gone.atoms] == ["C", "O", "C"] and len(gone.bonds) == 0
+ed.remove_atoms([4])  # the methyl
+assert len(ed.atoms) == 4 and all(b.a < 4 and b.b < 4 for b in ed.bonds)
+pairs = [(b.a, b.b) for b in ed.bonds]
+ed.remove_bonds([1, 0])
+assert [(b.a, b.b) for b in ed.bonds] == pairs[2:] and len(ed.atoms) == 4  # those two go; the atoms stay
+for bad in (lambda: ed.set_label(99, "N"), lambda: ed.remove_atoms([99]), lambda: ed.set_bond_order(99, 1)):
+    try:
+        bad()
+        raise AssertionError("an index out of range must raise")
+    except IndexError:
+        pass
+try:
+    ed.set_label(0, "notachem!!")
+    raise AssertionError("an unknown label must raise")
+except ValueError:
+    assert ed.atoms[0].symbol == "C"  # and leave the atom as it was
+
 print("python ok", pz.__version__)
 
 # Type stubs: in a development build, the committed ones match the module (regenerate with

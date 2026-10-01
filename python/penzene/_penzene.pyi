@@ -4,7 +4,9 @@ from collections.abc import Sequence
 
 
 class Atom:
-    """An atom of a Document (read-only; edit through Document). (since 0.4)"""
+    """
+    An atom of a Document (read-only; edit through Document: set_label, remove_atoms). (since 0.4)
+    """
 
     @property
     def symbol(self) -> str:
@@ -81,6 +83,26 @@ class Document:
 
     def add_bond(self, a: int, b: int, order: int = 1) -> None:
         """Bond atoms a and b (order 1, 2 or 3). (since 0.4)"""
+
+    def set_label(self, atom: int, label: str) -> None:
+        """
+        Relabel an atom, as add_atom takes a label: an element ("C" undoes a label), an abbreviation or a SMILES fragment (drawn out from it, its new atoms added at the end). (since 2.0)
+        """
+
+    def set_bond_order(self, bond: int, order: int) -> None:
+        """
+        Make a bond single, double or triple (a wedge or hash goes with a single bond). (since 2.0)
+        """
+
+    def remove_atoms(self, atoms: Sequence[int]) -> None:
+        """
+        Remove atoms and their bonds. The atoms after each one removed move down to fill its place, so indices taken before are stale: remove everything in one call. (since 2.0)
+        """
+
+    def remove_bonds(self, bonds: Sequence[int]) -> None:
+        """
+        Remove bonds; their atoms stay. Later bonds move down as in remove_atoms, and atom indices don't change. (since 2.0)
+        """
 
     def hotkeys(self, atom: int, keys: str, bond: int | None = None) -> tuple[int, int]:
         """
