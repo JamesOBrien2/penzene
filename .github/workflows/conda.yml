@@ -23,4 +23,4 @@ jobs:
         with:
           recipe-path: packaging/conda-forge/recipe.yaml
           upload-artifact: false
-          build-args: -c conda-forge --variant python=3.12
+          build-args: -c conda-forge -m packaging/conda-forge/variants.yaml
