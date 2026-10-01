@@ -46,8 +46,10 @@ jobs:
           winget validate --manifest $manifest --disable-interactivity
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           winget settings --enable LocalManifestFiles
-          winget install --manifest $manifest --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
+          winget install --manifest $manifest --scope user --silent --accept-package-agreements --accept-source-agreements --disable-interactivity
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          # The per-user installer (/CURRENTUSER), as the release workflow tests it: as machine scope
+          # (/ALLUSERS) the runner's installer never returns.
           # The ProductCode in the manifest is the uninstall entry Inno writes.
           $entry = Get-ItemProperty -ErrorAction SilentlyContinue `
             'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Penzene_is1',
