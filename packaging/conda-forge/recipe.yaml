@@ -11,6 +11,8 @@ package:
 source:
   url: https://github.com/JamesOBrien2/penzene/archive/refs/tags/v${{ version }}.tar.gz
   sha256: 8e4d21e1f866946e2bcf5ad27f5095628ba8e1c752f83c4a8107f25f3bef5353
+  patches:
+    - chemdraw-char16.patch  # libc++ 19+ (conda-forge's clang 21) has no char_traits<unsigned short>; upstream in #595
 
 build:
   number: 0
