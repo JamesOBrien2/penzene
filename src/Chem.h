@@ -47,7 +47,8 @@ QByteArray toCdx(const Document& doc);    // binary CDX: all that toCdxml writes
 QByteArray cdxToCdxml(const QByteArray& cdx);
 QByteArray cdxmlToCdx(const QByteArray& cdxml);
 std::string toSmiles(const Document& doc);  // "" if the structure isn't valid
-std::string toSmarts(const Document& doc);  // query atoms (A, Q, X, M, [N,O,S]) as queries
+std::string toSmarts(const Document& doc);  // query atoms (A, Q, M; X standing for N, O, S) as queries
+QString freeVariableName(const Document& doc);  // the first of X, Y, Z, W, V, U no atom is labelled; X when all are
 QString queryMeaning(const Atom& a);  // "a metal" for M, "one of N, O, S" for X standing for them; "" for no query
 
 // A drawn reaction: the molecules before, alongside and after its arrow.

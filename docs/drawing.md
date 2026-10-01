@@ -31,7 +31,8 @@ Space select.
 - **Stands for** (Atom Properties) says what a variable label means: `N, O, S` or `H, Me, OMe`. Penzene
   writes it under the molecule (X = N, O, S) and rewrites that line whenever a definition changes, so edit
   the definitions rather than the line. Elements only make the atom a query atom list in MOL files and
-  Edit → Copy As → SMARTS; groups stay a note. For searches, the MDL codes `A`, `Q`, `M` (and `AH`, `QH`,
+  Edit → Copy As → SMARTS; groups stay a note. Typing alternatives as the label (`N,O,S` or `N/O/S`)
+  does both at once: the atom becomes X (or the next free letter) standing for them. For searches, the MDL codes `A`, `Q`, `M` (and `AH`, `QH`,
   `XH`, `MH`) can be typed as labels too.
 - **Structure → Expand Abbreviations** draws them out in full.
 - Atom Properties (`/` on an atom) sets the charge, map number, lone pairs, radical electrons and δ±.
