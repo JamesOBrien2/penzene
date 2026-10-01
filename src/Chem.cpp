@@ -217,6 +217,12 @@ static bool isGenericQuery(const QString& label) {
            std::find(RDKit::complexQueries.begin(), RDKit::complexQueries.end(), label.toStdString()) != RDKit::complexQueries.end();
 }
 
+QString freeVariableName(const Document& doc) {
+    for (const char* name : {"X", "Y", "Z", "W", "V", "U"})
+        if (std::none_of(doc.atoms.begin(), doc.atoms.end(), [&](const Atom& o) { return o.label == name; })) return name;
+    return "X";
+}
+
 QString queryMeaning(const Atom& a) {
     static const QHash<QString, const char*> generic{
         {"A", QT_TRANSLATE_NOOP("QObject", "any atom but H")},       {"AH", QT_TRANSLATE_NOOP("QObject", "any atom")},
@@ -443,13 +449,8 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
         if (a->getAtomicNum() > 0) doc.atoms.back().isotope = int(a->getIsotope());  // on a dummy it's an R-group number
         doc.atoms.back().standsFor = standsFor;
     }
-    for (Atom& a : doc.atoms)  // unnamed atom lists: the first of X, Y, Z… not already used
-        if (!a.standsFor.isEmpty() && a.label.isEmpty())
-            for (const char* name : {"X", "Y", "Z", "W", "V", "U"})
-                if (std::none_of(doc.atoms.begin(), doc.atoms.end(), [&](const Atom& o) { return o.label == name; })) {
-                    a.label = name;
-                    break;
-                }
+    for (Atom& a : doc.atoms)  // unnamed atom lists
+        if (!a.standsFor.isEmpty() && a.label.isEmpty()) a.label = freeVariableName(doc);
     for (const auto* b : mol.bonds()) {
         Bond out{int(b->getBeginAtomIdx()), int(b->getEndAtomIdx())};
         out.order = b->getBondType() == RDKit::Bond::DOUBLE   ? 2

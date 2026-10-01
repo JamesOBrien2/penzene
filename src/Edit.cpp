@@ -559,6 +559,7 @@ QString labelHotkey(const QString& key) {
 // anyText, other text (R, X, MgEt) too: shown as written, its chemistry unspecified (z 0).
 bool applyLabel(Document& doc, int at, const QString& label, bool anyText) {
     Atom& a = doc.atoms[at];
+    if (label.trimmed() != a.label) a.standsFor.clear();  // a definition belongs to its label (#505)
     // Abbreviations first: in a drawing, Ac, Pr and Ts mean acetyl, propyl and
     // tosyl, not actinium, praseodymium and tennessine (#125).
     if (auto head = chem::abbreviationHead(label)) {
@@ -603,6 +604,17 @@ bool applyLabel(Document& doc, int at, const QString& label, bool anyText) {
     if (const auto [z, mass] = m.hasMatch() ? elementOf(m.captured("base")) : std::pair{0, 0}; z > 0) {
         a.z = z, a.isotope = mass, a.label.clear();
         a.charge = charge(m);
+        return true;
+    }
+    // Alternatives typed as one label (N,O,S, N/O/S, [N,O,S]): one variable atom standing for them (#587), not a chain.
+    static const QRegularExpression brackets("^\\[|\\]$"), separator("\\s*[,/]\\s*");
+    if (const QStringList parts = label.trimmed().remove(brackets).split(separator);
+        anyText && parts.size() > 1 && std::all_of(parts.begin(), parts.end(), [](const QString& p) {
+            const int z = chem::atomicNumber(p.toStdString());
+            return z > 0 && QString::fromStdString(chem::symbol(z)) == p;
+        })) {
+        a.z = 0, a.charge = 0, a.isotope = 0, a.label.clear();
+        a.label = chem::freeVariableName(doc), a.standsFor = parts.join(", ");
         return true;
     }
     if (chem::attach(doc, at, label.toStdString())) return true;

@@ -2085,6 +2085,34 @@ TEST_CASE("a molecule's predicted shifts don't depend on the others on the page 
     CHECK(chem::predictShifts(d).size() == chem::predictShifts(ethanol).size());  // the canvas's shift labels too
 }
 
+TEST_CASE("alternatives typed as one label make one variable atom, not a chain (#587)") {
+    Document d = *chem::fromSmiles("c1ccccc1CCC");
+    const size_t atoms = d.atoms.size(), bonds = d.bonds.size();
+    REQUIRE(edit::applyLabel(d, 6, "N,O,S", true));
+    REQUIRE(edit::applyLabel(d, 7, "N/O/S", true));
+    REQUIRE(edit::applyLabel(d, 8, "[Cl, Br]", true));
+    CHECK(d.atoms.size() == atoms);
+    CHECK(d.bonds.size() == bonds);
+    CHECK(d.atoms[6].label == "X");
+    CHECK(d.atoms[7].label == "Y");  // the next free name
+    CHECK(d.atoms[8].label == "Z");
+    CHECK(d.atoms[6].standsFor == "N, O, S");
+    CHECK(d.atoms[7].standsFor == "N, O, S");
+    CHECK(d.atoms[8].standsFor == "Cl, Br");
+    CHECK(d.atoms[6].z == 0);
+    REQUIRE(edit::applyLabel(d, 6, "O,S", true));
+    CHECK(d.atoms[6].label == "X");  // keeps its own name
+    CHECK(d.atoms[6].standsFor == "O, S");
+    REQUIRE(edit::applyLabel(d, 6, "OMe", true));
+    CHECK(d.atoms[6].standsFor.isEmpty());  // a new label drops the old definition
+    REQUIRE(edit::applyLabel(d, 7, "Y", true));
+    CHECK(d.atoms[7].standsFor == "N, O, S");  // the same label keeps it
+    Document strict = *chem::fromSmiles("CC");
+    CHECK_FALSE(strict.atoms[1].label == "X");
+    edit::applyLabel(strict, 1, "N,Q", true);  // Q isn't an element: not alternatives
+    CHECK(strict.atoms[1].standsFor.isEmpty());
+}
+
 TEST_CASE("a variable label stands for elements or groups: a legend, and an atom list in MOL and SMARTS (#505)") {
     Document d = *chem::fromSmiles("Clc1ccc(cc1)C(=O)NCCO");
     REQUIRE(edit::applyLabel(d, 0, "R", true));
