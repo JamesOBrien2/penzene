@@ -6,7 +6,8 @@ The rail on the left holds the tools in six groups: **Select** (select, rotate i
 double, triple, wedge, hash, interaction, partial, chain), **Rings**, **Atoms** (element,
 charges), **Arrows**, and **Shapes** (lines, boxes, ellipses, text). Click a group to open its tools
 beside the rail. They stay open, so you can keep several on screen and drag each by its title or
-any bare part of it, or drag a corner to resize it (the tools reflow to fit); close one with its **✕**. Clicking a group also
+any bare part of it, or drag a corner to resize it (the tools reflow to fit); close one with its **✕**. A new one opens
+beside those already open, and Penzene reopens them where you left them; **View → Reset Tool Layout** puts them back. Clicking a group also
 picks the tool you last used from it. Hover over a tool to see its key.
 
 Point at an atom or bond and it becomes the **hotspot**, marked in green. It stays put when the mouse
@@ -27,6 +28,11 @@ Space select.
   deuterium and tritium (`d` on an atom makes it D). They're drawn ¹³C, carried through SMILES
   (`[13CH4]`), MOL and ChemDraw files, and counted in the masses.
 - `x` and `r` on an atom label it X and R. `R1`, `R2`… export as MDL R-groups.
+- **Stands for** (Atom Properties) says what a variable label means: `N, O, S` or `H, Me, OMe`. Penzene
+  writes it under the molecule (X = N, O, S) and rewrites that line whenever a definition changes, so edit
+  the definitions rather than the line. Elements only make the atom a query atom list in MOL files and
+  Edit → Copy As → SMARTS; groups stay a note. For searches, the MDL codes `A`, `Q`, `M` (and `AH`, `QH`,
+  `XH`, `MH`) can be typed as labels too.
 - **Structure → Expand Abbreviations** draws them out in full.
 - Atom Properties (`/` on an atom) sets the charge, map number, lone pairs, radical electrons and δ±.
 - `:` cycles lone pairs, `*` toggles a radical dot, and the atom's context menu adds δ+ or δ−.
@@ -85,8 +91,15 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
 - **Arrange → Align and Distribute**, **Center on Page** (for the selection or the whole
   drawing), **Flip**, and **Arrange Scheme** (lines up a reaction scheme,
   with agents centred over their arrows).
+- **Arrange → Group** (Ctrl/Cmd+G) makes the selected molecules, arrows and text one object:
+  clicking any part selects it all, and Arrange Scheme, Align and Flip move it as one. Ctrl/Cmd+click
+  picks a single part inside a group. **Ungroup** (Shift+Ctrl/Cmd+G) splits it again. A selection
+  shows one box per molecule (one per group); drag from anywhere inside a box to move it.
 - **Structure → Brackets** puts square or round brackets, with a subscript such as *n*, around the
   selected atoms.
+- **Structure → Variable Attachment** draws a bond across the edge of the selected atoms (a ring's,
+  say) for a substituent on any one of them. Formula and mass count it once; MOL (V3000) and
+  ChemDraw files keep the positions.
 
 ## Arrows, text, shapes and colour
 

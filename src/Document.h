@@ -36,6 +36,10 @@ struct Atom {
     int isotope = 0;  // mass number (13 for ¹³C, 2 for D); 0 = natural abundance
     StereoGroup stereoGroup = StereoGroup::None;
     int stereoGroupNumber = 0;  // n of &n / orn
+    QString standsFor;  // a variable label's meaning ("N, O, S"; "H, Me, OMe"), shown in its molecule's legend
+    // A variable attachment: this bare point (z 0, no label) stands for a bond to any one of these atoms.
+    std::vector<int> attachments;
+    int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
 };
 
 struct Bond {
@@ -81,6 +85,7 @@ struct Arrow {
     // What a curved arrow's end starts or ends on, and moves with: one atom, a bond's two, or none (-1).
     std::array<int, 2> fromAt{-1, -1}, toAt{-1, -1};
     double head = 1;  // arrowhead size, relative to the usual
+    int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
     bool operator==(const Arrow&) const = default;
 };
 
@@ -93,6 +98,8 @@ struct Text {
     QColor color;
     bool compound = false;  // a compound number (#504): bold, renumbered in scheme order on every edit
     int anchor = -1;        // an atom of the molecule it numbers, which it follows; -1 = free
+    bool legend = false;    // its molecule's variable definitions (X = N, O, S), rewritten from them on every edit
+    int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
     bool operator==(const Text&) const = default;
 };
 
@@ -145,6 +152,7 @@ struct Document {
     std::vector<int> neighbors(int atom) const;
     // Each atom's bond indices, for loops over every atom (neighbors() scans all the bonds).
     std::vector<std::vector<int>> bondsAt() const;
+    std::vector<std::vector<int>> joined() const;  // each atom's bonded atoms, and a variable attachment's
     QPointF awayDirection(int atom) const;  // bisects the widest gap between its bonds
     void removeBond(int bond);  // also drops endpoints left isolated
     void removeAtom(int atom);  // also drops neighbours left isolated, as removeBond does
@@ -167,7 +175,8 @@ std::vector<Sheet> sheetsFromJson(const QByteArray& data);  // empty if it isn't
 inline bool operator==(const Atom& x, const Atom& y) {
     return x.pos == y.pos && x.z == y.z && x.charge == y.charge && x.label == y.label && x.color == y.color &&
            x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial &&
-           x.isotope == y.isotope && x.stereoGroup == y.stereoGroup && x.stereoGroupNumber == y.stereoGroupNumber;
+           x.isotope == y.isotope && x.stereoGroup == y.stereoGroup && x.stereoGroupNumber == y.stereoGroupNumber &&
+           x.standsFor == y.standsFor && x.attachments == y.attachments && x.group == y.group;
 }
 inline bool operator==(const Bond& x, const Bond& y) {
     return x.a == y.a && x.b == y.b && x.order == y.order && x.stereo == y.stereo &&
