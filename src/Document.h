@@ -85,6 +85,10 @@ struct Arrow {
     // What a curved arrow's end starts or ends on, and moves with: one atom, a bond's two, or none (-1).
     std::array<int, 2> fromAt{-1, -1}, toAt{-1, -1};
     double head = 1;  // arrowhead size, relative to the usual
+    bool filled = false;  // boxes and ellipses: filled with their colour, as a TLC spot
+    // A box that is a TLC plate (#506): the lines across it are its baseline (the lowest) and solvent
+    // front (the highest), and each spot on it gets its Rf beside it (edit::syncPlates).
+    bool plate = false;
     int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
     bool operator==(const Arrow&) const = default;
 };
@@ -99,6 +103,7 @@ struct Text {
     bool compound = false;  // a compound number (#504): bold, renumbered in scheme order on every edit
     int anchor = -1;        // an atom of the molecule it numbers, which it follows; -1 = free
     bool legend = false;    // its molecule's variable definitions (X = N, O, S), rewritten from them on every edit
+    bool rf = false;        // a TLC spot's Rf, rewritten beside it on every edit (#506)
     int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
     bool operator==(const Text&) const = default;
 };

@@ -567,6 +567,7 @@ static void drawArrow(QPainter& p, const Arrow& a) {
         p.setPen(dashes);
     }
     if (isShape(a.kind)) {
+        if (a.filled && a.kind != ArrowKind::Line && !isOrbital(a.kind)) p.fillPath(arrowPath(a), p.pen().color());
         p.drawPath(arrowPath(a));
         return;
     }

@@ -741,7 +741,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             text = &doc.texts.back();
             text->color = ink(at);
         } else if (tag == "graphic") {
-            // Plain lines, boxes and ellipses (not filled ones), and orbitals. A graphic ChemDraw
+            // Plain lines, boxes and ellipses (filled or not), and orbitals. A graphic ChemDraw
             // marks SupersededBy is the old copy of an <arrow> read above: skip it.
             const auto type = at.value("GraphicType");
             if (type == u"Orbital") {  // s, p, a single lobe or a hybrid; not ovals or d orbitals
@@ -760,8 +760,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
                 if (isOrbital(a.kind) && len(a.to - a.from) > 1e-6) pushArrow(a);
                 continue;
             }
-            if (at.hasAttribute("SupersededBy") || !at.value("ArrowType").isEmpty() || at.value("OvalType").contains(u"Filled"))
-                continue;
+            if (at.hasAttribute("SupersededBy") || !at.value("ArrowType").isEmpty()) continue;
             auto box = at.value("BoundingBox").split(' ');
             if (box.size() != 4) continue;
             if (type == u"Symbol") {  // charges and radical dots are the atoms' own; lone pairs are marks
@@ -774,12 +773,14 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
                 a.kind = ArrowKind::Line;
             } else if (type == u"Rectangle") {
                 a.kind = at.value("RectangleType").contains(u"RoundEdge") ? ArrowKind::RoundedBox : ArrowKind::Box;
+                a.filled = at.value("RectangleType").contains(u"Filled");
             } else if (type == u"Oval") {  // centre and two axis ends; the bounding box can be just a radius
                 const QPointF c = point(at.value("Center3D")), major = point(at.value("MajorAxisEnd3D")),
                               minor = point(at.value("MinorAxisEnd3D"));
                 const QPointF half(std::max(std::abs(major.x() - c.x()), std::abs(minor.x() - c.x())),
                                    std::max(std::abs(major.y() - c.y()), std::abs(minor.y() - c.y())));
                 a = {c - half, c + half, ArrowKind::Ellipse, 0, {}, a.dashed};
+                a.filled = at.value("OvalType").contains(u"Filled");
             } else {
                 continue;
             }
@@ -1346,12 +1347,16 @@ QByteArray toCdxml(const Document& doc) {
             } else if (a.kind == ArrowKind::Ellipse) {
                 const QRectF r = QRectF(a.from, a.to).normalized();
                 w.writeAttribute("GraphicType", "Oval");
+                if (a.filled) w.writeAttribute("OvalType", "Filled");
                 w.writeAttribute("Center3D", pt3(r.center()));
                 w.writeAttribute("MajorAxisEnd3D", pt3({r.right(), r.center().y()}));
                 w.writeAttribute("MinorAxisEnd3D", pt3({r.center().x(), r.bottom()}));
             } else {
                 w.writeAttribute("GraphicType", "Rectangle");
-                if (a.kind == ArrowKind::RoundedBox) w.writeAttribute("RectangleType", "RoundEdge");
+                QStringList type;
+                if (a.kind == ArrowKind::RoundedBox) type << "RoundEdge";
+                if (a.filled) type << "Filled";
+                if (!type.isEmpty()) w.writeAttribute("RectangleType", type.join(' '));
             }
             if (a.dashed) w.writeAttribute("LineType", "Dashed");
             paint(a.color);

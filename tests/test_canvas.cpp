@@ -4218,3 +4218,60 @@ TEST_CASE("a flyout opens beside the open ones, and the tool layout is remembere
     }
     QSettings().remove("toolLayout");
 }
+
+TEST_CASE("TLC plate: Rf beside each spot, kept up to date as spots and the front move (#506)") {
+    CHECK(std::abs(edit::rf(70, 100, 0) - 0.3) < 1e-12);
+    CHECK(std::isnan(edit::rf(70, 100, 100)));  // no distance run
+    const auto& all = builtinTemplates();
+    const auto tlc = std::find_if(all.begin(), all.end(), [](const Template& t) { return t.name == "TLC plate"; });
+    REQUIRE(tlc != all.end());
+    const Document plate = templateDocument(*tlc);
+    auto rfs = [](const Document& d) {
+        std::vector<QString> out;
+        for (const auto& t : d.texts)
+            if (t.rf) out.push_back(t.text);
+        return out;
+    };
+    CHECK(rfs(plate) == std::vector<QString>{"0.62", "0.62", "0.31", "0.31"});
+
+    Fixture f;
+    f.canvas.insert(plate, "Insert");
+    const Document placed = f.doc();
+    CHECK(rfs(placed) == rfs(plate));
+    std::vector<int> spots;
+    int frontLine = -1;
+    for (int i = 0; i < int(placed.arrows.size()); ++i) {
+        if (placed.arrows[i].kind == ArrowKind::Ellipse) spots.push_back(i);
+        if (placed.arrows[i].dashed) frontLine = i;
+    }
+    REQUIRE(spots.size() == 4);
+    REQUIRE(frontLine >= 0);
+    CHECK(std::all_of(placed.texts.begin(), placed.texts.end(), [&](const Text& t) { return t.group == placed.arrows[0].group; }));
+
+    Document next = placed;  // the first spot moved up to the front
+    const double front = next.arrows[frontLine].from.y();
+    const QPointF up(0, front - QRectF(next.arrows[spots[0]].from, next.arrows[spots[0]].to).center().y());
+    next.arrows[spots[0]].from += up, next.arrows[spots[0]].to += up;
+    f.canvas.commit(next, "Move");
+    CHECK(rfs(f.doc())[0] == "1.00");
+    CHECK(f.doc().texts.size() == placed.texts.size());  // rewritten in place
+
+    next = f.doc();  // the front moved down to halfway, so the other spots run further
+    for (QPointF* p : {&next.arrows[frontLine].from, &next.arrows[frontLine].to})
+        p->setY((front + next.arrows[1].from.y()) / 2);
+    f.canvas.commit(next, "Move");
+    CHECK(rfs(f.doc())[3] == "0.62");
+
+    next = f.doc();  // without a front there's no Rf
+    next.arrows.erase(next.arrows.begin() + frontLine);
+    f.canvas.commit(next, "Delete");
+    CHECK(rfs(f.doc()).empty());
+    CHECK(f.doc().texts.size() == 3);  // the lane labels stay
+
+    auto back = Document::fromJson(placed.toJson());
+    REQUIRE(back);
+    CHECK(*back == placed);
+    auto cdx = chem::fromChemDraw(chem::toCdxml(placed));
+    REQUIRE(cdx);
+    CHECK(std::count_if(cdx->arrows.begin(), cdx->arrows.end(), [](const Arrow& a) { return a.filled; }) == 4);
+}

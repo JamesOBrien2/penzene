@@ -77,6 +77,8 @@ QByteArray Document::toJson() const {
         if (a.behind) o["behind"] = true;
         if (a.crossed) o["crossed"] = true;
         if (a.head != 1) o["head"] = a.head;
+        if (a.filled) o["filled"] = true;
+        if (a.plate) o["plate"] = true;
         if (a.group >= 0) o["group"] = a.group;
         for (auto [key, at] : {std::pair{"fromAt", a.fromAt}, std::pair{"toAt", a.toAt}})
             if (at[0] >= 0) o[key] = at[1] >= 0 ? QJsonArray{at[0], at[1]} : QJsonArray{at[0]};
@@ -88,6 +90,7 @@ QByteArray Document::toJson() const {
         if (t.color.isValid()) o["color"] = t.color.name();
         if (t.compound) o["compound"] = true;
         if (t.legend) o["legend"] = true;
+        if (t.rf) o["rf"] = true;
         if (t.anchor >= 0) o["anchor"] = t.anchor;
         if (t.group >= 0) o["group"] = t.group;
         ts.append(o);
@@ -241,6 +244,8 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         a.behind = o["behind"].toBool();
         a.crossed = o["crossed"].toBool();
         if (const double head = o["head"].toDouble(1); std::isfinite(head)) a.head = std::clamp(head, 0.25, 4.0);
+        a.filled = o["filled"].toBool();
+        a.plate = o["plate"].toBool() && a.kind == ArrowKind::Box;
         a.group = std::max(-1, o["group"].toInt(-1));
         for (auto [key, at] : {std::pair{"fromAt", &a.fromAt}, std::pair{"toAt", &a.toAt}}) {
             const QJsonArray v = o[key].toArray();
@@ -257,6 +262,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         if (!(t.scale > 0)) t.scale = 1;  // files saved before #316 could hold 0
         t.compound = o["compound"].toBool();
         t.legend = o["legend"].toBool();
+        t.rf = o["rf"].toBool();
         t.group = std::max(-1, o["group"].toInt(-1));
         if (const int a = o["anchor"].toInt(-1); a >= 0 && a < int(doc.atoms.size())) t.anchor = a;
         if (!finite({t.pos.x(), t.pos.y(), t.scale})) return std::nullopt;

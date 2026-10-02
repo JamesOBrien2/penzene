@@ -350,6 +350,7 @@ void Canvas::commit(const Document& next, const QString& text) {
     followAnchors(doc_, after);  // whatever moved the atoms, curved arrows on them come along (#498)
     followNumbers(doc_, after);  // and compound numbers, which stay in scheme order (#504)
     joinGroups(after);
+    syncPlates(after);
     renumberCompounds(after, compoundStart_);
     for (int k : syncLegends(after)) {  // centred under the molecule
         Text& t = after.texts[k];
@@ -2176,6 +2177,21 @@ QMenu* Canvas::contextMenuAt(QPointF at) {
                 selectedArrows_ = QSet<int>(moved.begin(), moved.end());
                 viewport()->update();
             });
+        // Boxes and ellipses (TLC spots, #506) filled with their colour, or just outlined.
+        const bool area = std::all_of(layered.begin(), layered.end(), [&](int i) {
+            const ArrowKind k = doc_.arrows[i].kind;
+            return isShape(k) && !isOrbital(k) && k != ArrowKind::Line && !doc_.arrows[i].plate;
+        });
+        if (area) {
+            const bool filled = std::all_of(layered.begin(), layered.end(), [&](int i) { return doc_.arrows[i].filled; });
+            QAction* fill = menu->addAction(tr("Filled"), this, [this, layered, filled] {
+                Document next = doc_;
+                for (int i : layered) next.arrows[i].filled = !filled;
+                commit(next, tr("Fill"));
+            });
+            fill->setCheckable(true);
+            fill->setChecked(filled);
+        }
     }
     return menu;
 }
