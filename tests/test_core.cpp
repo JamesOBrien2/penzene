@@ -2168,3 +2168,21 @@ TEST_CASE("a variable label stands for elements or groups: a legend, and an atom
     CHECK(chem::toSmarts(d).find("!#6") != std::string::npos);
     CHECK(chem::fromMolBlock(chem::toMolBlock(d))->atoms[12].label == "Q");
 }
+
+TEST_CASE("SMILES wildcards [1*] and [*:1] come in as R sites, keeping other map numbers (#432)") {
+    auto site = [](const std::string& smiles) {
+        auto doc = chem::fromSmiles(smiles);
+        REQUIRE(doc);
+        for (const auto& a : doc->atoms)
+            if (a.z == 0) return std::pair{a.label.toStdString(), a.map};
+        return std::pair{std::string(), -1};
+    };
+    CHECK(site("[1*]c1ccccc1") == std::pair{std::string("R1"), 0});
+    CHECK(site("[*:2]c1ccccc1") == std::pair{std::string("R2"), 0});   // the map number was the site's
+    CHECK(site("[1*:5]c1ccccc1") == std::pair{std::string("R1"), 5});  // here it's a real atom map
+    CHECK(site("*c1ccccc1") == std::pair{std::string(), 0});           // a bare * is no site
+    Document d = *chem::fromSmiles("Cc1ccccc1");
+    REQUIRE(chem::attach(d, 0, "*OC"));  // the atom bonded to * attaches: methoxy, not a C-O-
+    CHECK(chem::toSmiles(d) == chem::toSmiles(*chem::fromSmiles("COc1ccccc1")));
+    CHECK_FALSE(chem::attach(d, 0, "*C*"));
+}

@@ -493,6 +493,7 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
         const auto& p = conf.getAtomPos(a->getIdx());
         QString label, standsFor;  // a generic atom's: its alias (X, Ar), or R-group number
         unsigned r = 0;
+        bool siteFromMap = false;
         std::string alias;
         a->getPropIfPresent(RDKit::common_properties::molFileAlias, alias);
         if (a->hasQuery() && isGenericQuery(QString::fromStdString(a->getQuery()->getTypeLabel())))  // before lists: Q is an OR too
@@ -509,10 +510,12 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
             label = QString::fromStdString(alias);
         else if (a->getAtomicNum() == 0 && a->getPropIfPresent(RDKit::common_properties::_MolFileRLabel, r) && r)
             label = QString("R%1").arg(r);
-        else if (a->getAtomicNum() == 0 && !a->hasQuery() && (a->getIsotope() || a->getAtomMapNum()))
-            label = QString("R%1").arg(a->getIsotope() ? a->getIsotope() : a->getAtomMapNum());  // SMILES [1*] or [*:1] (#432)
+        else if (a->getAtomicNum() == 0 && !a->hasQuery() && (a->getIsotope() || a->getAtomMapNum())) {
+            siteFromMap = !a->getIsotope();  // SMILES [1*] or [*:1] (#432); [*:1]'s map number becomes its label
+            label = QString("R%1").arg(siteFromMap ? a->getAtomMapNum() : a->getIsotope());
+        }
         doc.atoms.push_back({QPointF(p.x * scale, -p.y * scale), standsFor.isEmpty() ? int(a->getAtomicNum()) : 0,
-                             a->getFormalCharge(), label, {}, a->getAtomicNum() == 0 && !label.isEmpty() ? 0 : int(a->getAtomMapNum()), 0,
+                             a->getFormalCharge(), label, {}, siteFromMap ? 0 : int(a->getAtomMapNum()), 0,
                              int(std::min(2u, a->getNumRadicalElectrons()))});
         if (a->getAtomicNum() > 0) doc.atoms.back().isotope = int(a->getIsotope());  // on a dummy it's an R-group number
         doc.atoms.back().standsFor = standsFor;
