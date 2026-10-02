@@ -69,9 +69,25 @@ Type hotkeys with this atom as the hotspot (or atom=-1, bond=i for a bond). Retu
 
 Molecular weight (since 0.4)
 
+### `remove_atoms(self, atoms: collections.abc.Sequence[int]) -> None`
+
+Remove atoms and their bonds. The atoms after each one removed move down to fill its place, so indices taken before are stale: remove everything in one call. (since 2.0)
+
+### `remove_bonds(self, bonds: collections.abc.Sequence[int]) -> None`
+
+Remove bonds; their atoms stay. Later bonds move down as in remove_atoms, and atom indices don't change. (since 2.0)
+
 ### `save(self, path: str) -> None`
 
 Write .penz (full fidelity), .mol, or ChemDraw .cdxml or .cdx; images go through export(). (since 0.4)
+
+### `set_bond_order(self, bond: int, order: int) -> None`
+
+Make a bond single, double or triple (a wedge or hash goes with a single bond). (since 2.0)
+
+### `set_label(self, atom: int, label: str) -> None`
+
+Relabel an atom, as add_atom takes a label: an element ("C" undoes a label), an abbreviation or a SMILES fragment (drawn out from it, its new atoms added at the end). (since 2.0)
 
 ### `Document.style`
 
@@ -108,7 +124,7 @@ SVG, as the app exports it (the drawing embedded, so it reopens editable). (sinc
 
 ## Atom
 
-An atom of a Document (read-only; edit through Document). (since 0.4)
+An atom of a Document (read-only; edit through Document: set_label, remove_atoms). (since 0.4)
 
 ### `Atom.charge`
 

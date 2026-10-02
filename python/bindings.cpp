@@ -78,7 +78,7 @@ NB_MODULE(_penzene, m) {
     m.doc() = "Penzene: 2D chemical structures, drawn by the same engine as the app.";
     m.attr("__version__") = PENZENE_VERSION;
 
-    nb::class_<Atom>(m, "Atom", "An atom of a Document (read-only; edit through Document). (since 0.4)")
+    nb::class_<Atom>(m, "Atom", "An atom of a Document (read-only; edit through Document: set_label, remove_atoms). (since 0.4)")
         .def_prop_ro("symbol", &symbol, "Element symbol, or the abbreviation (Boc, OMe…) if it has one (since 0.4)")
         .def_prop_ro("x", [](const Atom& a) { return a.pos.x(); }, "Points, x right (since 0.4)")
         .def_prop_ro("y", [](const Atom& a) { return a.pos.y(); }, "Points, y down (since 0.4)")
@@ -131,6 +131,52 @@ NB_MODULE(_penzene, m) {
                 edit::link(d, a, b, order);
             },
             "a"_a, "b"_a, "order"_a = 1, "Bond atoms a and b (order 1, 2 or 3). (since 0.4)")
+        .def(
+            "set_label",
+            [](Document& d, int atom, const std::string& label) {
+                if (atom < 0 || atom >= int(d.atoms.size())) throw nb::index_error("no such atom");
+                Document next = d;
+                if (!edit::applyLabel(next, atom, qs(label)))
+                    throw nb::value_error(("not an element, abbreviation or SMILES: " + label).c_str());
+                d = next;
+            },
+            "atom"_a, "label"_a,
+            "Relabel an atom, as add_atom takes a label: an element (\"C\" undoes a label), an abbreviation or a "
+            "SMILES fragment (drawn out from it, its new atoms added at the end). (since 2.0)")
+        .def(
+            "set_bond_order",
+            [](Document& d, int bond, int order) {
+                if (bond < 0 || bond >= int(d.bonds.size())) throw nb::index_error("no such bond");
+                if (order < 1 || order > 3) throw nb::value_error("order must be 1, 2 or 3");
+                Bond& b = d.bonds[bond];
+                b.order = order;
+                if (order != 1) b.stereo = BondStereo::None;  // a wedge or hash is a single bond's
+            },
+            "bond"_a, "order"_a, "Make a bond single, double or triple (a wedge or hash goes with a single bond). (since 2.0)")
+        .def(
+            "remove_atoms",
+            [](Document& d, std::vector<int> atoms) {
+                for (int i : atoms)
+                    if (i < 0 || i >= int(d.atoms.size())) throw nb::index_error("no such atom");
+                std::sort(atoms.begin(), atoms.end());
+                atoms.erase(std::unique(atoms.begin(), atoms.end()), atoms.end());
+                d.removeAtoms(atoms);
+            },
+            "atoms"_a,
+            "Remove atoms and their bonds. The atoms after each one removed move down to fill its place, so "
+            "indices taken before are stale: remove everything in one call. (since 2.0)")
+        .def(
+            "remove_bonds",
+            [](Document& d, std::vector<int> bonds) {
+                for (int i : bonds)
+                    if (i < 0 || i >= int(d.bonds.size())) throw nb::index_error("no such bond");
+                std::sort(bonds.begin(), bonds.end());
+                bonds.erase(std::unique(bonds.begin(), bonds.end()), bonds.end());
+                for (auto k = bonds.rbegin(); k != bonds.rend(); ++k) d.bonds.erase(d.bonds.begin() + *k);
+            },
+            "bonds"_a,
+            "Remove bonds; their atoms stay. Later bonds move down as in remove_atoms, and atom indices "
+            "don't change. (since 2.0)")
         .def(
             "hotkeys",
             [](Document& d, int atom, const std::string& keys, std::optional<int> bond) {
