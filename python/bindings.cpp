@@ -9,6 +9,8 @@
 #include <QImage>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/optional.h>
+#include <algorithm>
+#include <map>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
 #include <nanobind/stl/vector.h>
@@ -177,6 +179,25 @@ NB_MODULE(_penzene, m) {
             "bonds"_a,
             "Remove bonds; their atoms stay. Later bonds move down as in remove_atoms, and atom indices "
             "don't change. (since 2.0)")
+        .def_prop_ro("r_sites", &chem::rSites,
+                     "The numbers of the R sites (atoms labelled R1, R2…, or [1*] and [*:1] in SMILES), sorted. (since 2.0)")
+        .def(
+            "substitute",
+            [](const Document& d, const nb::dict& fragments) {
+                std::map<int, std::string> sites;
+                for (auto [key, value] : fragments) {
+                    const std::string k = nb::isinstance<nb::int_>(key) ? "R" + std::to_string(nb::cast<int>(key)) : nb::cast<std::string>(key);
+                    if (k.size() < 2 || k[0] != 'R' || !std::all_of(k.begin() + 1, k.end(), ::isdigit))
+                        throw nb::value_error(("not an R site: " + k + " (use 1 or \"R1\")").c_str());
+                    sites[std::stoi(k.substr(1))] = nb::cast<std::string>(value);
+                }
+                return chem::substitute(d, sites);  // std::invalid_argument arrives as ValueError
+            },
+            "fragments"_a,
+            "A copy with each R site replaced, from a dict keyed by site (1 or \"R1\"): an abbreviation (OMe, Ph) "
+            "or SMILES whose first atom, or the atom bonded to its lone * (\"*OC\"), takes the site's place; \"H\" "
+            "removes it. The scaffold keeps its drawing and wedges. ValueError names a missing or unknown site, an R "
+            "site with more than one bond, or a fragment that doesn't parse. (since 2.0)")
         .def(
             "hotkeys",
             [](Document& d, int atom, const std::string& keys, std::optional<int> bond) {

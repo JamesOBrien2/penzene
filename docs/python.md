@@ -33,6 +33,33 @@ Penzene brings its own copy of Qt. Loading it into a process that already has Py
 
 Every function and property: [Python API reference](python-api.md).
 
+## R-group libraries
+
+A scaffold's R sites are atoms labelled R1, R2… in a drawing, or numbered wildcards in SMILES (`[1*]`
+or `[*:1]`). `substitute` fills them in. The fragment's first atom takes the site's place; with a `*`,
+the atom bonded to it does (`"*C(F)(F)F"`). An abbreviation such as `"OMe"` works too, and `"H"` removes
+the site. The scaffold keeps its drawing, so its wedges and stereochemistry survive.
+
+```python
+import csv
+import penzene as pz
+
+core = pz.from_smiles("[1*]c1ccc([2*])cc1")
+core.r_sites                                    # [1, 2]
+core.substitute({"R1": "OMe", "R2": "*C(F)(F)F"}).export("example.svg")
+
+# One SDF record per row; each column (ID, R1, R2…) is kept as a data field
+with open("substituents.csv") as f:
+    failed = pz.write_library(core, csv.DictReader(f), "library.sdf")
+# or every combination of value lists
+failed = pz.write_library(core, pz.combinations({"R1": ["H", "Cl", "OMe"], "R2": ["Me", "CN"]}), "grid.sdf")
+for row, reason in failed:                      # rows that made no record, and why
+    print(row, reason)
+```
+
+Records are written one at a time, so a long table never sits in memory. A row with a missing site,
+an unknown site or a fragment that doesn't parse is reported, not skipped silently.
+
 ## Stability
 
 From 1.0 the module follows [semantic versioning](https://semver.org):
