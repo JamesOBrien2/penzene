@@ -7,6 +7,7 @@
 #include <QRectF>
 #include <QRegularExpression>
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <set>
 #include <tuple>
@@ -225,6 +226,50 @@ void joinGroups(Document& doc) {
         for (int nb : joined[a])
             if (doc.atoms[nb].group < 0) doc.atoms[nb].group = doc.atoms[a].group, todo.push_back(nb);
     }
+}
+
+double rf(double spot, double baseline, double front) {
+    return baseline - front > 1e-6 ? (baseline - spot) / (baseline - front) : std::nan("");
+}
+
+void syncPlates(Document& doc) {
+    const bool any = std::any_of(doc.arrows.begin(), doc.arrows.end(), [](const Arrow& a) { return a.plate; });
+    if (!any && std::none_of(doc.texts.begin(), doc.texts.end(), [](const Text& t) { return t.rf; })) return;
+    std::vector<Text> labels;  // what the Rf texts should be, plate by plate
+    for (const Arrow& plate : doc.arrows) {
+        if (!plate.plate) continue;
+        const QRectF r = QRectF(plate.from, plate.to).normalized();
+        const double slack = 0.05 * r.width();
+        std::vector<double> lines;  // the y of each line drawn across the plate
+        for (const Arrow& a : doc.arrows) {
+            const QLineF l(a.from, a.to);
+            if (a.kind == ArrowKind::Line && std::abs(l.dy()) < 0.1 * std::abs(l.dx()) && std::abs(l.dx()) > 0.5 * r.width() &&
+                r.adjusted(-slack, -slack, slack, slack).contains(a.from) && r.adjusted(-slack, -slack, slack, slack).contains(a.to))
+                lines.push_back(l.center().y());
+        }
+        if (lines.size() < 2) continue;
+        const auto [front, baseline] = std::minmax_element(lines.begin(), lines.end());
+        for (const Arrow& a : doc.arrows) {
+            const QRectF s = QRectF(a.from, a.to).normalized();
+            const bool spot = (a.kind == ArrowKind::Ellipse || a.kind == ArrowKind::Box || a.kind == ArrowKind::RoundedBox) &&
+                              !a.plate && r.contains(s.center()) && s.width() < 0.5 * r.width();
+            if (!spot) continue;
+            const double v = rf(s.center().y(), *baseline, *front);
+            if (std::isnan(v)) continue;
+            Text t{{s.right() + 0.15 * kBondLength, s.center().y() + 0.17 * kBondLength}, QString::number(v, 'f', 2), 0.7};
+            t.rf = true, t.group = plate.group;
+            labels.push_back(t);
+        }
+    }
+    size_t k = 0;  // rewritten in place, so the other texts keep their indices
+    std::erase_if(doc.texts, [&](Text& t) {
+        if (!t.rf) return false;
+        if (k == labels.size()) return true;
+        const QColor color = t.color;  // a recoloured Rf keeps its colour
+        t = labels[k++], t.color = color;
+        return false;
+    });
+    doc.texts.insert(doc.texts.end(), labels.begin() + k, labels.end());
 }
 
 void followNumbers(const Document& before, Document& after) {

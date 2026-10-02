@@ -34,7 +34,11 @@ struct CompoundCount {
 CompoundCount renumberCompounds(Document& doc, CompoundCount from = {});
 // A compound number in `after` that wasn't moved itself follows the foot of its molecule from `before`.
 void followNumbers(const Document& before, Document& after);
-void joinGroups(Document& doc);  // atoms added to a grouped molecule join its group (#590)
+void joinGroups(Document& doc);
+// Each spot (a box or ellipse centred on a TLC plate) gets its Rf as a Text just right of it,
+// rewritten from where it sits between the plate's baseline and solvent front; stale ones go (#506).
+void syncPlates(Document& doc);
+double rf(double spot, double baseline, double front);  // y positions; NaN when the front isn't above the baseline  // atoms added to a grouped molecule join its group (#590)
 // Each molecule's variable definitions (X = N, O, S) as one legend Text under it, rewritten from
 // its atoms' standsFor; placed once (it may then be moved), dropped with the last definition.
 // Returns the legends it placed, for the caller to centre.

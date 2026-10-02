@@ -67,6 +67,12 @@ or a bond (fused). On a bond, `a z v 4–8 9 0` fuse rings, `9` and `0` chair cy
 and Haworth, Fischer and Newman projections. Haworth and Fischer drawings give the right stereo
 when converted to SMILES. **Structure → Save Selection as Template** adds your own.
 
+The **Lab** section has a TLC plate: a baseline, a dashed solvent front, and starting material,
+co-spot and product lanes. Each spot shows its Rf beside it, worked out from where it sits between the
+baseline and the front, and updated as you move a spot or the front (Ctrl/Cmd+click to move one part
+of the plate on its own). Copy a spot to add one, drag its handles to draw a streak, and edit the
+lane labels like any text.
+
 ```{image} _static/templates-light.png
 :alt: The Templates panel open beside aspirin, showing the amino acids
 :class: shot only-light
@@ -114,7 +120,7 @@ when converted to SMILES. **Structure → Save Selection as Template** adds your
   is set as a superscript (NH4+ → NH₄⁺, Cu2+ → Cu²⁺, [Fe(CN)6]3- → [Fe(CN)₆]³⁻). Where the digits
   could be either, mark the charge with ^: SO4^2- → SO₄²⁻.
 - Lines (solid or dashed), boxes, rounded boxes and ellipses for grouping; Shift draws a square or
-  circle.
+  circle. Right-click a box or ellipse and choose **Filled** to fill it with its colour.
 - Orbitals, in **Shapes**: s, p, lobe and hybrid, each outlined, shaded or with a gradient. Click
   an atom to centre one on it (drag to point it), or click an orbital to restyle it; the colour
   tool colours it. New orbitals sit over the drawing: right-click for **Bring to Front**, **Bring

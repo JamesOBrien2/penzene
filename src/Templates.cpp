@@ -85,6 +85,34 @@ Document newman(double backTurn, const QStringList& front, const QStringList& ba
     return d;
 }
 
+// A TLC plate (#506): starting material, co-spot and product lanes, its parts one group so it moves
+// as one (Ctrl/Cmd+click a spot or the front to move it alone, and its Rf follows).
+Document tlcPlate() {
+    Document d;
+    const double L = kBondLength, w = 7.2 * L, h = 9 * L, base = h - 1.3 * L, front = 0.9 * L;
+    Arrow plate{{0, 0}, {w, h}, ArrowKind::Box};
+    plate.plate = true;
+    d.arrows.push_back(plate);
+    d.arrows.push_back({{0, base}, {w, base}, ArrowKind::Line});
+    d.arrows.push_back({{0, front}, {w, front}, ArrowKind::Line, 0, {}, true});
+    const QString lanes[] = {"SM", "Co", "P"};
+    const std::vector<double> spots[] = {{0.62}, {0.62, 0.31}, {0.31}};
+    for (int k = 0; k < 3; ++k) {
+        const double x = (k + 0.3) * w / 3;  // left of centre, leaving room for the Rf
+        for (double rf : spots[k]) {
+            const QPointF c(x, base - rf * (base - front)), half(0.32 * L, 0.22 * L);
+            Arrow spot{c - half, c + half, ArrowKind::Ellipse};
+            spot.filled = true;
+            d.arrows.push_back(spot);
+        }
+        d.texts.push_back({{x - 0.3 * L * lanes[k].size(), h + 1.0 * L}, lanes[k], 0.8});
+    }
+    for (auto& a : d.arrows) a.group = 0;
+    for (auto& t : d.texts) t.group = 0;
+    edit::syncPlates(d);
+    return d;
+}
+
 }  // namespace
 
 Document templateDocument(const Template& t) {
@@ -166,6 +194,7 @@ const std::vector<Template>& builtinTemplates() {
         {"Projections", "Newman: butane, anti (staggered)", "",
          [] { return newman(60, {"CH3", "H", "H"}, {"H", "H", "CH3"}); }},
         {"Projections", "Newman: ethane, eclipsed", "", [] { return newman(24, {"H", "H", "H"}, {"H", "H", "H"}); }},
+        {"Lab", "TLC plate", "", tlcPlate},
     };
     return t;
 }
