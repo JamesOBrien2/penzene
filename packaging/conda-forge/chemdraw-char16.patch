@@ -1,0 +1,44 @@
+diff --git a/third_party/chemdraw/chemdraw/CDXUnicode.cpp b/third_party/chemdraw/chemdraw/CDXUnicode.cpp
+index f7cb0c1..6b7bacd 100644
+--- a/third_party/chemdraw/chemdraw/CDXUnicode.cpp
++++ b/third_party/chemdraw/chemdraw/CDXUnicode.cpp
+@@ -113,7 +113,7 @@ namespace
+         nWideChars = MultiByteToWideChar(codePage, MB_ERR_INVALID_CHARS, theText.data(), (int)theText.size(), wide_chars.ptr(), nWideChars);
+ 
+         // Now convert to UTF-8
+-        string utf8 = ConvertUTF16to8(UTF16_string((UINT16*)wide_chars.ptr(), nWideChars));
++        string utf8 = ConvertUTF16to8(UTF16_string((const UTF16_string::value_type*)wide_chars.ptr(), nWideChars));
+ 
+         return utf8;
+     }
+@@ -361,7 +361,7 @@ std::string StringToUnicode(const std::string &fontName, const std::string &theT
+ 		vector<wchar_t> w(n);
+ 		p = theText.data();
+ 		mbsrtowcs(&w[0], &p, theText.size(), 0);
+-		UTF16_string utf16((UINT16 *) &w[0], n);
++		UTF16_string utf16((const UTF16_string::value_type*)&w[0], n);
+ 		utf8 = ConvertUTF16to8(utf16);
+ 	}
+ */
+@@ -595,7 +595,7 @@ string TranscodeString(const string& inString, CDXCharSet inSourceEncoding, CDXC
+     if (inDestinationEncoding == kCDXCharSetUTF8)
+     {
+         // This typically used when open CDX file and convert the legacy string to UTF-8
+-        return ConvertUTF16to8(UTF16_string((UINT16*)wideCharBuffer.data(), wideCharsLength));
++        return ConvertUTF16to8(UTF16_string((const UTF16_string::value_type*)wideCharBuffer.data(), wideCharsLength));
+     }
+     else
+     {
+diff --git a/third_party/chemdraw/chemdraw/CDXUnicode.h b/third_party/chemdraw/chemdraw/CDXUnicode.h
+index 9b0cbce..3645de7 100644
+--- a/third_party/chemdraw/chemdraw/CDXUnicode.h
++++ b/third_party/chemdraw/chemdraw/CDXUnicode.h
+@@ -47,7 +47,7 @@ CORE_CHEMISTRY_API std::string StringToUnicode(const std::string &fontName, cons
+ #ifdef __linux
+ typedef std::basic_string<wchar_t> UTF16_string;
+ #else
+-typedef std::basic_string<UINT16> UTF16_string;
++typedef std::basic_string<char16_t> UTF16_string;  // libc++ 19+ has no char_traits<unsigned short>
+ #endif
+ 
+ CORE_CHEMISTRY_API UTF16_string ConvertUTF8to16(const std::string &utf8);
