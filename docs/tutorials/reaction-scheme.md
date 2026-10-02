@@ -29,7 +29,8 @@ spaced. Run it again after any change.
 
 ## 3. Reagents and conditions
 
-Press `t` (or choose the text tool from **Shapes**), click just above the arrow and type `H2SO4`.
+Press Esc, then `t` (with an atom under the pointer, `t` types a label instead), or choose the text
+tool from **Shapes**. Click just above the arrow and type `H2SO4`.
 Digits after a letter are set as subscripts, so it shows as H₂SO₄. Click below the arrow and type
 `90 °C`. **Edit → Copy As → Reaction SMILES** gives the scheme back as text, with salicylic acid and
 acetic anhydride as reactants and aspirin as the product.

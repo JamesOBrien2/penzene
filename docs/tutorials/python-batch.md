@@ -47,19 +47,14 @@ It writes `figures/aspirin.svg`, `figures/caffeine.svg` and so on. Here is `figu
 
 ## From an SDF instead
 
-`pz.read("library.sdf")` opens every record laid out as one grid, as the app does. To draw them
-one at a time, read the records with RDKit and pass each SMILES to `pz.from_smiles`:
+`pz.read("library.sdf")` opens every record, laid out together as one grid, as the app does; export
+that for a single overview image. For one image per record, the command line already does the loop:
 
-```python
-from rdkit import Chem
-import penzene as pz
-
-for mol in Chem.SDMolSupplier("library.sdf"):
-    if mol is None:
-        continue                                 # a record RDKit can't read
-    doc = pz.from_smiles(Chem.MolToSmiles(mol))
-    doc.export(f"figures/{mol.GetProp('_Name')}.svg")
+```sh
+penzene --render library.sdf --out figures --drawing-style RSC --clean
 ```
+
+See [Batch rendering from the command line](cli-batch.md).
 
 ## In Jupyter
 

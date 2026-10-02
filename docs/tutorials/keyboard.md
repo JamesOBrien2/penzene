@@ -33,7 +33,7 @@ Ctrl+Z) away.
 
 The keys you used:
 
-- On a bond: `5` fuses a ring of that size (`3`–`8` and `v` work too), `2` makes it double.
+- On a bond: `5` fuses a ring of that size (`4`–`8`, and `v` for three), `2` makes it double.
 - On an atom: `2` adds a C=O to a ring carbon, `n` makes it nitrogen, `1` sprouts a single bond.
 
 Every key is in [Keyboard shortcuts](../keys.md), and **Help → Keyboard Shortcuts** (F1) in the app.
