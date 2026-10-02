@@ -103,6 +103,33 @@ try:
 except ValueError:
     assert ed.atoms[0].symbol == "C"  # and leave the atom as it was
 
+# R-group libraries (#432): numbered wildcards are R sites, filled from fragments into an SDF.
+scaffold = pz.from_smiles("[1*]c1ccc([*:2])cc1")
+assert scaffold.r_sites == [1, 2]
+filled = scaffold.substitute({"R1": "OC", 2: "*C(F)(F)F"})
+assert filled.to_smiles() == pz.from_smiles("COc1ccc(C(F)(F)F)cc1").to_smiles()
+assert scaffold.substitute({1: "Cl", 2: "H"}).to_smiles() == pz.from_smiles("Clc1ccccc1").to_smiles()
+assert scaffold.substitute({1: "OMe", 2: "Ph"}).formula == "C13H12O"
+chiral = pz.from_smiles("C[C@H]([1*])N")  # the scaffold's stereocentre survives the substitution
+assert chiral.substitute({1: "O"}).to_smiles() == pz.from_smiles("C[C@H](O)N").to_smiles()
+for bad, why in [({1: "OC"}, "R2"), ({1: "OC", 2: "C", 3: "C"}, "R3"), ({1: "OC", 2: "C1CC"}, "R2"),
+                 ({1: "OC", 2: "*C*"}, "R2"), ({"X": "C"}, "X")]:
+    try:
+        scaffold.substitute(bad)
+        raise AssertionError(f"{bad} must raise")
+    except ValueError as e:
+        assert why in str(e), (bad, e)
+rows = list(pz.combinations({"R1": ["Cl", "OC"], "R2": ["H", "nonsense("]}))
+assert len(rows) == 4 and rows[0] == {"R1": "Cl", "R2": "H"}
+rows = [dict(r, ID=f"cpd-{k}") for k, r in enumerate(rows, 1)]
+library = os.path.join(out, "library.sdf")
+assert pz.write_library(scaffold, iter(rows), library) == [(2, "R2: not a fragment: nonsense("), (4, "R2: not a fragment: nonsense(")]
+records = pz.read(library)  # the two good rows, laid out as a grid
+assert records.to_smiles().count(".") == 1
+with open(library) as f:
+    sdf = f.read()
+assert sdf.count("$$$$") == 2 and "> <ID>\ncpd-3\n" in sdf and "> <R1>\nOC\n" in sdf
+
 print("python ok", pz.__version__)
 
 # Type stubs: in a development build, the committed ones match the module (regenerate with

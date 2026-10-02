@@ -44,7 +44,7 @@ def python_page():
     out = ["# Python API reference", "",
            "Generated from the `penzene` module's docstrings. A guide with examples: [Python](python.md).", "",
            "## Functions", ""]
-    for name in ("from_smiles", "read", "from_json", "drawing_styles"):
+    for name in ("from_smiles", "read", "from_json", "drawing_styles", "write_library", "combinations"):
         out += member(pz, name)
     for cls in (pz.Document, pz.Atom, pz.Bond):
         out += ["", f"## {cls.__name__}", "", (cls.__doc__ or "").strip(), ""]

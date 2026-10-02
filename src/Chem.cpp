@@ -82,9 +82,32 @@ std::optional<Atom> abbreviationHead(const QString& label) {
     return frag ? std::optional(frag->atoms[0]) : std::nullopt;
 }
 
+// A fragment written with its attachment point, "*OC": the atom bonded to the lone * becomes atom 0
+// and the * goes. False if there is more than one *, or it isn't bonded to exactly one atom.
+static bool rootAtStar(Document& frag) {
+    std::vector<int> stars;
+    for (int i = 0; i < int(frag.atoms.size()); ++i)
+        if (frag.atoms[i].z == 0 && frag.atoms[i].label.isEmpty()) stars.push_back(i);
+    if (stars.empty()) return true;
+    if (stars.size() > 1 || frag.atoms.size() < 2) return false;
+    const int star = stars[0];
+    const auto nb = frag.neighbors(star);
+    if (nb.size() != 1 || frag.bonds[frag.bondBetween(star, nb[0])].order != 1) return false;
+    std::vector<int> order{nb[0]}, to(frag.atoms.size(), -1);
+    for (int i = 0; i < int(frag.atoms.size()); ++i)
+        if (i != star && i != nb[0]) order.push_back(i);
+    Document out = frag;
+    out.atoms.clear(), out.bonds.clear();
+    for (int i : order) to[i] = int(out.atoms.size()), out.atoms.push_back(frag.atoms[i]);
+    for (Bond b : frag.bonds)
+        if (b.a != star && b.b != star) b.a = to[b.a], b.b = to[b.b], out.bonds.push_back(b);
+    frag = out;
+    return true;
+}
+
 bool attach(Document& doc, int at, const std::string& what) {
     auto frag = fromSmiles(groups().value(QString::fromStdString(what), QString::fromStdString(what)).toStdString());
-    if (!frag || frag->atoms.empty()) return false;
+    if (!frag || frag->atoms.empty() || !rootAtStar(*frag)) return false;
     doc.atoms[at].z = frag->atoms[0].z;
     doc.atoms[at].charge = frag->atoms[0].charge;
     doc.atoms[at].isotope = frag->atoms[0].isotope;
@@ -119,6 +142,46 @@ bool expandLabel(Document& doc, int at) {
     if (!attach(doc, at, was.label.toStdString())) return false;
     if (head) doc.atoms[at].charge += was.charge - head->charge;  // a charged group: N3- (#370, #589)
     return true;
+}
+
+static int rSite(const Atom& a) {
+    static const QRegularExpression r("^R(\\d+)$");
+    const auto m = r.match(a.label);
+    return a.z == 0 && m.hasMatch() ? m.captured(1).toInt() : 0;
+}
+
+std::vector<int> rSites(const Document& doc) {
+    std::set<int> sites;
+    for (const Atom& a : doc.atoms)
+        if (const int n = rSite(a)) sites.insert(n);
+    return {sites.begin(), sites.end()};
+}
+
+Document substitute(const Document& scaffold, const std::map<int, std::string>& fragments) {
+    auto fail = [](const QString& why) { throw std::invalid_argument(why.toStdString()); };
+    const auto sites = rSites(scaffold);
+    for (const auto& [n, frag] : fragments)
+        if (!std::binary_search(sites.begin(), sites.end(), n)) fail(QString("the scaffold has no R%1").arg(n));
+    Document out = scaffold;
+    std::vector<int> gone;  // sites left as implicit hydrogens, removed once the rest are attached
+    for (int i = 0; i < int(scaffold.atoms.size()); ++i) {
+        const int n = rSite(scaffold.atoms[i]);
+        if (!n) continue;
+        const auto it = fragments.find(n);
+        if (it == fragments.end()) fail(QString("no fragment for R%1").arg(n));
+        const auto nb = scaffold.neighbors(i);
+        if (nb.size() != 1 || scaffold.bonds[scaffold.bondBetween(i, nb[0])].order != 1)
+            fail(QString("R%1 isn't singly bonded to one atom").arg(n));
+        const QString frag = QString::fromStdString(it->second).trimmed();
+        if (frag == "H" || frag == "[H]" || frag == "*[H]" || frag == "[*][H]") {
+            if (scaffold.bonds[scaffold.bondBetween(i, nb[0])].stereo == BondStereo::None) gone.push_back(i);
+            else out.atoms[i].z = 1, out.atoms[i].label.clear();  // the wedge keeps its hydrogen
+        } else if (frag.isEmpty() || !attach(out, i, frag.toStdString())) {
+            fail(QString("R%1: not a fragment: %2").arg(n).arg(frag));
+        }
+    }
+    out.removeAtoms(gone);
+    return out;
 }
 
 Document expanded(const Document& doc) {
@@ -446,8 +509,10 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
             label = QString::fromStdString(alias);
         else if (a->getAtomicNum() == 0 && a->getPropIfPresent(RDKit::common_properties::_MolFileRLabel, r) && r)
             label = QString("R%1").arg(r);
+        else if (a->getAtomicNum() == 0 && !a->hasQuery() && (a->getIsotope() || a->getAtomMapNum()))
+            label = QString("R%1").arg(a->getIsotope() ? a->getIsotope() : a->getAtomMapNum());  // SMILES [1*] or [*:1] (#432)
         doc.atoms.push_back({QPointF(p.x * scale, -p.y * scale), standsFor.isEmpty() ? int(a->getAtomicNum()) : 0,
-                             a->getFormalCharge(), label, {}, int(a->getAtomMapNum()), 0,
+                             a->getFormalCharge(), label, {}, a->getAtomicNum() == 0 && !label.isEmpty() ? 0 : int(a->getAtomMapNum()), 0,
                              int(std::min(2u, a->getNumRadicalElectrons()))});
         if (a->getAtomicNum() > 0) doc.atoms.back().isotope = int(a->getIsotope());  // on a dummy it's an R-group number
         doc.atoms.back().standsFor = standsFor;
