@@ -4218,3 +4218,70 @@ TEST_CASE("a flyout opens beside the open ones, and the tool layout is remembere
     }
     QSettings().remove("toolLayout");
 }
+
+// The keyboard tutorial's caffeine (#433): one click for a ring, then only hotkeys. With
+// PENZENE_TUTORIAL_FRAMES set, each step is saved there as a frame for docs/tutorials/make-gif.py.
+TEST_CASE("caffeine drawn with hotkeys, as the keyboard tutorial shows") {
+    Fixture f;
+    f.canvas.resize(420, 340);
+    const QString dir = qEnvironmentVariable("PENZENE_TUTORIAL_FRAMES");
+    QStringList captions;
+    auto frame = [&](const QString& caption) {
+        if (dir.isEmpty()) return;
+        const QString name = QString("frame-%1.png").arg(captions.size(), 2, 10, QChar('0'));
+        f.canvas.grab().save(dir + "/" + name);
+        captions << name + "\t" + caption;
+    };
+    f.canvas.setTool(Canvas::Tool::Ring);
+    f.canvas.setRing(6, false);
+    f.click({0, 0});
+    REQUIRE(f.doc().atoms.size() == 6);
+    f.canvas.fitToDocument();
+    f.canvas.zoomBy(0.8);  // room for the five-membered ring and the methyls
+    f.canvas.setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    f.canvas.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    frame("Click once with the Ring tool (cyclohexane). The rest is keys: point, then type.");
+    auto mid = [&](int a, int b) { return (f.doc().atoms[a].pos + f.doc().atoms[b].pos) / 2; };
+    auto step = [&](QPointF at, const QString& keys, const QString& what) {
+        f.hover(at);
+        frame(what);
+        f.key(keys);
+        f.hover(at);
+        frame(what);
+    };
+    // The five-membered ring goes on the upper-right bond; walk the six-ring from its far end.
+    int c4 = 0, c5 = 1;
+    double best = -1e9;
+    for (const auto& b : f.doc().bonds)
+        if (const QPointF m = mid(b.a, b.b); m.x() - m.y() > best) best = m.x() - m.y(), c4 = b.a, c5 = b.b;
+    if (f.doc().atoms[c4].pos.y() > f.doc().atoms[c5].pos.y()) std::swap(c4, c5);  // c5 the lower
+    auto next = [&](int from, int prev) {
+        for (int n : f.doc().neighbors(from))
+            if (n != prev) return n;
+        return -1;
+    };
+    const int c6 = next(c5, c4), n1 = next(c6, c5), c2 = next(n1, c6), n3 = next(c2, n1);
+    step(mid(c4, c5), "5", "Bond: 5 fuses a five-membered ring");
+    const int n7 = int(f.doc().atoms.size()) - 1, n9 = n7 - 2, c8 = n7 - 1;  // the new ring's atoms, from c4's side
+    REQUIRE(f.doc().bondBetween(n9, c4) >= 0);
+    REQUIRE(f.doc().bondBetween(n7, c5) >= 0);
+    step(f.doc().atoms[c6].pos, "2", "Atom: 2 makes a C=O");
+    step(f.doc().atoms[c2].pos, "2", "Atom: 2 again for the second C=O");
+    step(f.doc().atoms[n1].pos, "n", "Atom: n makes it nitrogen");
+    step(f.doc().atoms[n1].pos, "1", "Atom: 1 sprouts a methyl");
+    step(f.doc().atoms[n3].pos, "n", "Atom: n");
+    step(f.doc().atoms[n3].pos, "1", "Atom: 1");
+    step(f.doc().atoms[n7].pos, "n", "Atom: n");
+    step(f.doc().atoms[n7].pos, "1", "Atom: 1");
+    step(f.doc().atoms[n9].pos, "n", "Atom: n");
+    step(mid(c4, c5), "2", "Bond: 2 makes it double");
+    step(mid(c8, n9), "2", "Bond: 2");
+    QTest::keyClick(f.canvas.viewport(), Qt::Key_Escape);  // no hotspot on the finished drawing
+    frame("Caffeine: one click and 12 keys");
+    CHECK(chem::toSmiles(f.doc()) == chem::toSmiles(*chem::fromSmiles("Cn1c(=O)c2c(ncn2C)n(C)c1=O")));
+    if (!dir.isEmpty()) {
+        QFile list(dir + "/frames.txt");
+        REQUIRE(list.open(QIODevice::WriteOnly | QIODevice::Text));
+        list.write((captions.join('\n') + '\n').toUtf8());
+    }
+}

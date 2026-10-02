@@ -19,6 +19,13 @@ molecule atom → bond → atom. Every key is listed in [Keyboard shortcuts](key
 With no hotspot (press Esc), keys pick tools: `x` bond, `X` chain, `j` benzene, `e` arrow, `t` text,
 Space select.
 
+```{image} _static/tutorials/caffeine-keys.gif
+:alt: Caffeine drawn with one click and twelve hotkeys
+:width: 420px
+```
+
+Caffeine from one click and twelve keys, step by step: [Caffeine from the keyboard](tutorials/keyboard.md).
+
 ## Atoms and labels
 
 - Press **Enter**, `=` or `t` on an atom (or click it with the Text tool) to type a label: an element

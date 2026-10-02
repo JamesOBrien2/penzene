@@ -13,6 +13,13 @@ come out at the style's real size.
 
 Preferences sets the style for new documents.
 
+```{image} _static/tutorials/caffeine-figure.svg
+:alt: Caffeine in the RSC style with nitrogens in blue and oxygens in red
+```
+
+Caffeine in the RSC style, coloured with the colour tool: [A publication figure](tutorials/publication-figure.md)
+goes from style to export checklist.
+
 ## Export, copy and print
 
 ::::{container} features-grid
@@ -76,7 +83,13 @@ Print then take the whole page. A selection still exports just itself.
 ## Reaction schemes
 
 Draw molecules either side of a reaction arrow, with reagents over or under it, and use
-**Arrange → Arrange Scheme** to line them up. **Edit → Copy As → Reaction SMILES** and saving as
+**Arrange → Arrange Scheme** to line them up.
+
+```{image} _static/tutorials/aspirin-synthesis.svg
+:alt: Salicylic acid plus acetic anhydride, with H2SO4 over the arrow and 90 °C under it, gives aspirin
+```
+
+Step by step: [A reaction scheme](tutorials/reaction-scheme.md). **Edit → Copy As → Reaction SMILES** and saving as
 `.rxn` treat everything before the arrow as reactants, things over or under it as agents, and
 things after it as products.
 
