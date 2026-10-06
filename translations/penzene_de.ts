@@ -2181,6 +2181,10 @@ moves off, so you can keep typing.&lt;/p&gt;
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>none of %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Valence error: %1 has too many bonds</source>
         <translation type="unfinished"></translation>
     </message>

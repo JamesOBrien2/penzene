@@ -267,14 +267,21 @@ Document projectionsAsWedges(const Document& in) {
 }
 
 // A definition made only of elements ("N, O, S"): the atom list a variable label stands for.
-static std::optional<std::vector<int>> elementList(const QString& standsFor) {
+// "not N, O" excludes them instead (#610).
+struct ElementList {
+    std::vector<int> zs;
+    bool negated = false;
+};
+static std::optional<ElementList> elementList(QString standsFor) {
+    const bool negated = standsFor.startsWith("not ", Qt::CaseInsensitive);
+    if (negated) standsFor = standsFor.mid(4);
     std::vector<int> zs;
     for (const QString& s : standsFor.split(',', Qt::SkipEmptyParts)) {
         const int z = atomicNumber(s.trimmed().toStdString());
         if (z <= 0 || QString::fromStdString(symbol(z)) != s.trimmed()) return std::nullopt;
         zs.push_back(z);
     }
-    return zs.empty() ? std::nullopt : std::optional(zs);
+    return zs.empty() ? std::nullopt : std::optional(ElementList{zs, negated});
 }
 
 // MDL's query codes, typed as labels for search queries; X is left out, as figures use it as a variable.
@@ -297,7 +304,8 @@ QString queryMeaning(const Atom& a) {
         {"M", QT_TRANSLATE_NOOP("QObject", "a metal")},              {"MH", QT_TRANSLATE_NOOP("QObject", "a metal or H")}};
     if (a.label.isEmpty()) return {};
     if (generic.contains(a.label)) return QObject::tr(generic[a.label]);
-    if (elementList(a.standsFor)) return QObject::tr("one of %1").arg(a.standsFor);
+    if (const auto list = elementList(a.standsFor))
+        return list->negated ? QObject::tr("none of %1").arg(a.standsFor.mid(4)) : QObject::tr("one of %1").arg(a.standsFor);
     return {};
 }
 
@@ -310,10 +318,11 @@ static RDKit::Atom* queryAtom(const Atom& a) {
         RDKit::convertComplexNameToQuery(q, a.label.toStdString());
         return q;
     }
-    const auto zs = elementList(a.standsFor);
-    if (!zs) return nullptr;
-    auto* q = new RDKit::QueryAtom((*zs)[0]);
-    for (size_t k = 1; k < zs->size(); ++k) q->expandQuery(RDKit::makeAtomNumQuery((*zs)[k]), Queries::COMPOSITE_OR);
+    const auto list = elementList(a.standsFor);
+    if (!list) return nullptr;
+    auto* q = new RDKit::QueryAtom(list->zs[0]);
+    for (size_t k = 1; k < list->zs.size(); ++k) q->expandQuery(RDKit::makeAtomNumQuery(list->zs[k]), Queries::COMPOSITE_OR);
+    q->getQuery()->setNegation(list->negated);
     q->setProp(RDKit::common_properties::molFileAlias, a.label.toStdString());
     return q;
 }
@@ -504,6 +513,7 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
             QStringList symbols;
             for (int z : zs) symbols << QString::fromStdString(symbol(z));
             label = QString::fromStdString(alias), standsFor = symbols.join(", ");
+            if (a->getQuery()->getNegation()) standsFor = "not " + standsFor;  // "NOT [N,O]" (#610)
         } else if (a->hasQuery() && a->getQuery()->getTypeLabel() == "X") {  // MDL's halogen
             label = "X", standsFor = "F, Cl, Br, I";
         } else if (a->getAtomicNum() == 0 && !alias.empty())

@@ -2186,3 +2186,25 @@ TEST_CASE("SMILES wildcards [1*] and [*:1] come in as R sites, keeping other map
     CHECK(chem::toSmiles(d) == chem::toSmiles(*chem::fromSmiles("COc1ccccc1")));
     CHECK_FALSE(chem::attach(d, 0, "*C*"));
 }
+
+TEST_CASE("a negated atom list stays negated through MOL and SMARTS (#610)") {
+    const auto d = chem::fromMolBlock("Negated atom list\n     RDKit          2D\n\n"
+                                      "  0  0  0  0  0  0  0  0  0  0999 V3000\n"
+                                      "M  V30 BEGIN CTAB\nM  V30 COUNTS 2 1 0 0 0\nM  V30 BEGIN ATOM\n"
+                                      "M  V30 1 \"NOT [N,O]\" 0.000000 0.000000 0.000000 0\n"
+                                      "M  V30 2 C 1.299038 0.750000 0.000000 0\nM  V30 END ATOM\n"
+                                      "M  V30 BEGIN BOND\nM  V30 1 1 1 2\nM  V30 END BOND\nM  V30 END CTAB\nM  END\n");
+    REQUIRE(d);
+    CHECK(d->atoms[0].standsFor == "not N, O");
+    const std::string smarts = chem::toSmarts(*d);
+    INFO(smarts);
+    CHECK(smarts.find('!') != std::string::npos);
+    for (bool v3000 : {false, true}) {  // V2000 writes it as a negated M  ALS
+        auto back = chem::fromMolBlock(chem::toMolBlock(*d, v3000));
+        REQUIRE(back);
+        CHECK(back->atoms[0].standsFor == "not N, O");
+    }
+    std::vector<QString> problems;
+    for (const auto& p : chem::checkStructure(*d)) problems.push_back(p.message);
+    CHECK(std::find(problems.begin(), problems.end(), "Query atom X: none of N, O") != problems.end());
+}
