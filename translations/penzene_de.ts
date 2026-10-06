@@ -857,6 +857,13 @@
         <source>%1 can&apos;t be opened for reading.</source>
         <translation type="unfinished"></translation>
     </message>
+    <message numerus="yes">
+        <source>%n record(s) of %1 couldn&apos;t be read and were left out: %2</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
     <message>
         <source>A reaction file needs a reaction arrow in the drawing.</source>
         <translation type="unfinished"></translation>

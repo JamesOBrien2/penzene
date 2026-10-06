@@ -1085,10 +1085,11 @@ static QRectF atomBox(const Document& d) {
 }
 
 // Records side by side, row by row, each centred in a cell as big as the largest.
-static std::optional<Document> grid(const std::vector<Record>& records) {
+static std::optional<Document> grid(const std::vector<Record>& records, QStringList* unreadable) {
     std::vector<Document> docs;
     for (const auto& r : records)
         if (r.doc && !r.doc->empty()) docs.push_back(*r.doc);
+        else if (unreadable) *unreadable << r.name;
     if (docs.size() <= 1) return docs.empty() ? std::nullopt : std::optional(docs[0]);
     auto box = atomBox;
     QSizeF cell;
@@ -1335,9 +1336,9 @@ std::optional<Document> fromRdf(const std::string& text) {
     return layoutReaction(steps);
 }
 
-std::optional<Document> readFile(const QString& path) {
+std::optional<Document> readFile(const QString& path, QStringList* unreadable) {
     const QString ext = QFileInfo(path).suffix().toLower();
-    if (ext == "sdf" || ext == "smi" || ext == "inchi") return grid(readRecords(path));
+    if (ext == "sdf" || ext == "smi" || ext == "inchi") return grid(readRecords(path), unreadable);
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly)) return std::nullopt;
     const QByteArray data = f.readAll();

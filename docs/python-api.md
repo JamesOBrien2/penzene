@@ -10,7 +10,7 @@ A structure from SMILES, laid out in 2D. (since 0.4)
 
 ### `read(path: str) -> Document`
 
-Open a file: .penz, MOL, ChemDraw .cdxml/.cdx, .rxn, a Penzene SVG/PNG, or every record of an SDF, .smi or .inchi file laid out as a grid. (since 0.4)
+Open a file: .penz, MOL, ChemDraw .cdxml/.cdx, .rxn, a Penzene SVG/PNG, or every record of an SDF, .smi or .inchi file laid out as a grid; records that can't be read are left out with a UserWarning naming them. (since 0.4)
 
 ### `from_json(json: str) -> Document`
 

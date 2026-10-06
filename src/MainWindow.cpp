@@ -1067,10 +1067,11 @@ void MainWindow::moveSelectionToPage(int i) {
 bool MainWindow::openFile(const QString& path) {
     const QString ext = QFileInfo(path).suffix().toLower();
     std::vector<Sheet> sheets;
+    QStringList unreadable;
     if (ext == "penz") {
         QFile f(path);
         if (f.open(QIODevice::ReadOnly)) sheets = sheetsFromJson(f.readAll());
-    } else if (auto doc = chem::readFile(path)) {
+    } else if (auto doc = chem::readFile(path, &unreadable)) {
         sheets = {{tr("Page 1"), *doc}};
     }
     if (sheets.empty()) {
@@ -1093,6 +1094,10 @@ bool MainWindow::openFile(const QString& path) {
     path_ = ext == "penz" || ext == "mol" ? path : QString();
     remember(path);
     updateTitle();
+    if (!unreadable.isEmpty())  // never a silently incomplete library (#584)
+        QMessageBox::warning(this, tr("Open"),
+                             tr("%n record(s) of %1 couldn't be read and were left out: %2", "", int(unreadable.size()))
+                                 .arg(QFileInfo(path).fileName(), unreadable.join(", ")));
     return true;
 }
 
