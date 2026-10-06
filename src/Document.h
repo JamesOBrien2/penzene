@@ -105,6 +105,7 @@ struct Text {
     bool legend = false;    // its molecule's variable definitions (X = N, O, S), rewritten from them on every edit
     bool rf = false;        // a TLC spot's Rf, rewritten beside it on every edit (#506)
     int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
+    int series = 0;  // lettered compound numbers sharing one number (2a, 2b), on any page; 0 = none (#583)
     bool operator==(const Text&) const = default;
 };
 

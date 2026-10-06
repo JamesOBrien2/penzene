@@ -152,17 +152,33 @@ CompoundCount renumberCompounds(Document& doc, CompoundCount count) {
         std::stable_sort(items.begin() + row, items.begin() + end, [](const Item& a, const Item& b) { return a.x < b.x; });
         row = end;
     }
+    noteSeries(doc, count);
     int& next = count.last;
-    auto& series = count.series;
     for (const Item& item : items) {
-        QString& text = doc.texts[item.text].text;
+        Text& t = doc.texts[item.text];
         int digits = 0;
-        while (digits < text.size() && text[digits].isDigit()) ++digits;
-        const QString old = text.left(digits), suffix = text.mid(digits);
-        const int n = suffix.isEmpty() ? ++next : series.count(old) ? series[old] : (series[old] = ++next);
-        text = QString::number(n) + suffix;
+        while (digits < t.text.size() && t.text[digits].isDigit()) ++digits;
+        const QString old = t.text.left(digits), suffix = t.text.mid(digits);
+        if (suffix.isEmpty()) {
+            t.series = 0, t.text = QString::number(++next);
+            continue;
+        }
+        if (!t.series) t.series = count.series.count(old) ? count.series[old] : (count.series[old] = ++count.lastSeries);
+        const auto [n, fresh] = count.numbers.try_emplace(t.series, next + 1);
+        if (fresh) ++next;
+        t.text = QString::number(n->second) + suffix;
     }
     return count;
+}
+
+void noteSeries(const Document& doc, CompoundCount& count) {
+    for (const Text& t : doc.texts) {
+        if (!t.compound || !t.series) continue;
+        int digits = 0;
+        while (digits < t.text.size() && t.text[digits].isDigit()) ++digits;
+        count.series.try_emplace(t.text.left(digits), t.series);
+        count.lastSeries = std::max(count.lastSeries, t.series);
+    }
 }
 
 std::vector<int> syncLegends(Document& doc) {

@@ -139,6 +139,7 @@
         "scale": {"type": "number", "exclusiveMinimum": 0, "default": 1},
         "color": {"$ref": "#/$defs/color"},
         "compound": {"type": "boolean", "description": "A compound number: bold, renumbered in scheme order as the drawing is edited."},
+        "series": {"type": "integer", "minimum": 1, "description": "Lettered compound numbers (2a, 2b) with the same series share one number as they renumber, on any page."},
         "legend": {"type": "boolean", "description": "Its molecule's variable definitions (X = N, O, S), rewritten from the atoms' standsFor as the drawing is edited."},
         "rf": {"type": "boolean", "description": "A TLC spot's Rf, rewritten beside the spot as the drawing is edited."},
         "anchor": {"$ref": "#/$defs/index", "description": "The atom of the molecule a compound number or legend belongs to; it moves with the molecule."},
