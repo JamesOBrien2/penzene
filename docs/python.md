@@ -31,7 +31,8 @@ Also: `pz.read(path)` for `.penz`, MOL, ChemDraw `.cdxml`/`.cdx` and more; `to_s
 
 Penzene brings its own copy of Qt. Loading it into a process that already has PySide6 or PyQt (for example Jupyter with a Qt event loop) may conflict; the plain Jupyter kernel is fine.
 
-Every function and property: [Python API reference](python-api.md).
+Every function and property: [Python API reference](python-api.md). A worked example with sample
+files: [Batch rendering from Python](tutorials/python-batch.md).
 
 ## Stability
 
