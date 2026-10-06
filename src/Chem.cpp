@@ -1002,6 +1002,109 @@ static Document cleanFragment(const Document& doc) {
     return out;
 }
 
+// RDKit never sees interactions (H-bonds, contacts, coordination), so it packs the
+// pieces they join anywhere and the dotted line cuts across the drawing. Instead the
+// largest covalent piece stays put and each piece reached through an interaction is
+// turned and slid (never mirrored: that would flip its wedges) to where it clashes least.
+static void placeInteractionPieces(Document& out, const std::vector<int>& ids) {
+    const int n = int(out.atoms.size());
+    std::vector<int> piece(n, -1);
+    int pieces = 0;
+    for (int s : ids) {
+        if (piece[s] >= 0) continue;
+        std::vector<int> stack{s};
+        piece[s] = pieces;
+        while (!stack.empty()) {
+            const int i = stack.back();
+            stack.pop_back();
+            for (const auto& b : out.bonds)
+                if (chemicalOrder(b) > 0 && (b.a == i || b.b == i))
+                    if (int o = b.a == i ? b.b : b.a; piece[o] < 0) piece[o] = pieces, stack.push_back(o);
+        }
+        ++pieces;
+    }
+    if (pieces < 2) return;
+    std::vector<std::vector<int>> members(pieces);
+    for (int i : ids) members[piece[i]].push_back(i);
+    std::vector<const Bond*> links;  // order-0 bonds between different pieces
+    for (const auto& b : out.bonds)
+        if (chemicalOrder(b) == 0 && piece[b.a] >= 0 && piece[b.b] >= 0 && piece[b.a] != piece[b.b]) links.push_back(&b);
+
+    QPointF before;
+    for (int i : ids) before += out.atoms[i].pos / double(ids.size());
+    std::vector<bool> placed(pieces);
+    placed[std::max_element(members.begin(), members.end(), [](auto& x, auto& y) { return x.size() < y.size(); }) -
+           members.begin()] = true;
+
+    auto segmentDistance = [](QPointF p, QPointF a, QPointF b) {
+        const QPointF ab = b - a;
+        const double t = std::clamp(QPointF::dotProduct(p - a, ab) / std::max(1e-9, QPointF::dotProduct(ab, ab)), 0.0, 1.0);
+        return len(a + ab * t - p);
+    };
+    // The direction a new bond from `i` would take: straight on from a single neighbour
+    // (X–H···Y is near-linear), else away from the neighbours.
+    auto outward = [&](int i) {
+        QPointF sum;
+        for (const auto& b : out.bonds)
+            if (chemicalOrder(b) > 0 && (b.a == i || b.b == i)) sum += unit(out.atoms[i].pos - out.atoms[b.a == i ? b.b : b.a].pos);
+        return len(sum) > 1e-6 ? unit(sum) : QPointF(1, 0);
+    };
+
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (const Bond* link : links) {
+            const bool aIn = placed[piece[link->a]], bIn = placed[piece[link->b]];
+            if (aIn == bIn) continue;
+            const int from = aIn ? link->a : link->b, to = aIn ? link->b : link->a, p = piece[to];
+            const std::vector<int>& mine = members[p];
+            std::vector<QPointF> original;
+            for (int i : mine) original.push_back(out.atoms[i].pos);
+            const QPointF toPos = out.atoms[to].pos, toOut = outward(to);
+            double best = std::numeric_limits<double>::infinity();
+            std::vector<QPointF> bestPos = original;
+            // ponytail: brute force (angles × turns × lengths × atom pairs); fine for drawings, a grid if pieces get huge.
+            for (int da = -150; da <= 180; da += 30)
+                for (int turn = -60; turn <= 60; turn += 30)
+                    for (double length : {1.0, 1.3, 1.6}) {
+                        const QPointF dir = rotated(outward(from), da), target = out.atoms[from].pos + dir * (length * kBondLength);
+                        // The acceptor's own bonds point away from the donor, give or take `turn`.
+                        const double spin = qRadiansToDegrees(std::atan2(dir.y(), dir.x()) - std::atan2(toOut.y(), toOut.x())) + turn;
+                        std::vector<QPointF> pos;
+                        for (QPointF q : original) pos.push_back(target + rotated(q - toPos, spin));
+                        double score = std::abs(da) / 180.0 + 0.3 * std::abs(turn) / 60.0 + std::abs(length - 1.3);
+                        for (size_t k = 0; k < mine.size(); ++k)
+                            for (int j : ids)
+                                if (piece[j] != p && placed[piece[j]]) {
+                                    const double gap = len(pos[k] - out.atoms[j].pos) / kBondLength;
+                                    if (gap < 1.2) score += 50 * (1.2 - gap) * (1.2 - gap);
+                                }
+                        // Every interaction line into the placed part: close to length, clear of other atoms.
+                        for (const Bond* l : links) {
+                            const bool mineA = piece[l->a] == p, mineB = piece[l->b] == p;
+                            if (mineA == mineB || !placed[piece[mineA ? l->b : l->a]]) continue;
+                            const int m = mineA ? l->a : l->b, other = mineA ? l->b : l->a;
+                            const QPointF x = pos[std::find(mine.begin(), mine.end(), m) - mine.begin()], y = out.atoms[other].pos;
+                            if (l != link) score += 2 * std::abs(len(x - y) / kBondLength - 1.3);
+                            for (int j : ids) {
+                                if (j == m || j == other) continue;
+                                const QPointF q = piece[j] == p ? pos[std::find(mine.begin(), mine.end(), j) - mine.begin()]
+                                                                : out.atoms[j].pos;
+                                if (piece[j] != p && !placed[piece[j]]) continue;
+                                const double gap = segmentDistance(q, x, y) / kBondLength;
+                                if (gap < 0.5) score += 20 * (0.5 - gap);
+                            }
+                        }
+                        if (score < best) best = score, bestPos = pos;
+                    }
+            for (size_t k = 0; k < mine.size(); ++k) out.atoms[mine[k]].pos = bestPos[k];
+            placed[p] = grew = true;
+        }
+    }
+    QPointF after;
+    for (int i : ids) after += out.atoms[i].pos / double(ids.size());
+    for (int i : ids) out.atoms[i].pos += before - after;
+}
+
 // Each fragment is cleaned in place, so a reaction scheme keeps its layout;
 // arrows and text pass through untouched.
 Document clean2D(const Document& doc, const std::vector<int>& only) {
@@ -1055,6 +1158,7 @@ Document clean2D(const Document& doc, const std::vector<int>& only) {
         // Interactions and partial bonds, which RDKit never saw, as drawn.
         for (const auto& b : doc.bonds)
             if (comp[b.a] == c && chemicalOrder(b) != b.order) out.bonds.push_back(b);
+        placeInteractionPieces(out, ids);
     }
     return out;
 }

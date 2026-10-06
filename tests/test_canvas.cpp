@@ -1583,3 +1583,25 @@ TEST_CASE("the colour swatch opens CPK colours; the pick paints atoms and bonds 
     CHECK(canvas->document().atoms[1].color == blue);
     CHECK(canvas->document().bonds[0].color == blue);
 }
+
+TEST_CASE("a selection moves from anywhere in its box, and survives a drop that fuses atoms") {
+    Fixture f;
+    Document d;
+    for (QPointF p : {QPointF(0, 0), QPointF(40, 0), QPointF(20, 40)}) d.addAtom(p);
+    d.bonds = {{0, 1}, {1, 2}, {2, 0}};
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Select);
+    f.canvas.selectAll();
+    f.drag({20, 15}, {20, 35});  // empty space inside the triangle, not an atom or bond
+    CHECK(f.canvas.selection().size() == 3);
+    CHECK(std::abs(f.doc().atoms[0].pos.y() - 20) < 0.5);
+
+    Document two;
+    for (QPointF p : {QPointF(0, 0), QPointF(kBondLength, 0), QPointF(60, 0), QPointF(60 + kBondLength, 0)}) two.addAtom(p);
+    two.bonds = {{0, 1}, {2, 3}};
+    f.canvas.setDocumentSilently(two);
+    f.canvas.setSelection({2, 3});
+    f.drag({60, 0}, {kBondLength, 0});  // atom 2 lands on atom 1 and fuses with it
+    REQUIRE(f.doc().atoms.size() == 3);
+    CHECK(f.canvas.selection() == QSet<int>{1, 2});  // the moved piece, renumbered, still selected
+}

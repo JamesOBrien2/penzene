@@ -48,6 +48,8 @@ const DrawingStyle& drawingStyle(const QString& name);  // unknown or empty: ACS
 // Paints a document in its drawing style. Shared by the canvas and export.
 void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style = {});
 QRectF documentBounds(const Document& doc);
+// Each atom's drawn label box (symbol, H, charge, abbreviation); empty for skeletal atoms.
+std::vector<QRectF> labelRects(const Document& doc);
 // Pages for laying a figure out at final size: paper, or a journal's column
 // widths at its maximum figure height. Sizes and margins in points.
 struct PageSize {

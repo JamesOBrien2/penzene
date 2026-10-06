@@ -105,6 +105,8 @@ private:
 
     Document doc_;
     QPicture picture_;
+    std::vector<QRectF> labelRects_;  // per atom, from the last refresh; empty for skeletal atoms
+    void highlightAtom(QPainter* p, int atom, double radius) const;  // a dot, or the whole label
     Theme theme_;
     std::vector<QPointF> preview_;
     QUndoStack* undo_;

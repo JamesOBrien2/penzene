@@ -22,16 +22,16 @@ constexpr double kJdp = kBondLength / 14.17, kRsc = kBondLength / 12.2;
 
 const std::vector<DrawingStyle>& drawingStyles() {
     // Wedge width and hash spacing keep ACS's proportion to the bold width and
-    // hash setting (4.5/2.0 and 2.2/2.5); label radius is half a glyph plus the margin.
+    // hash setting (3.6/2.0 and 2.2/2.5; ACS's own 4.5 crowded labels); label radius is half a glyph plus the margin.
     static const std::vector<DrawingStyle> styles{
-        {"ACS 1996", 14.4, 0.6, 2.0, 4.5, 2.2, 0.18, 5.5, "Arial", QFont::Normal, 10},
+        {"ACS 1996", 14.4, 0.6, 2.0, 3.6, 2.2, 0.18, 5.5, "Arial", QFont::Normal, 10},
         // JDPReport.cds: bond 14.17 (0.5 cm), line 0.879, bold 1.814, hash 1.814, margin 1.162,
         // IBM Plex Sans Light 10 pt.
-        {"JDP", 14.17, 0.879 * kJdp, 1.814 * kJdp, 4.5 * 1.814 / 2.0 * kJdp, 2.2 * 1.814 / 2.5 * kJdp, 0.18,
+        {"JDP", 14.17, 0.879 * kJdp, 1.814 * kJdp, 3.6 * 1.814 / 2.0 * kJdp, 2.2 * 1.814 / 2.5 * kJdp, 0.18,
          (3.9 + 1.162) * kJdp, "IBM Plex Sans", QFont::Light, 10 * kJdp},
         // RSC (1 Column).cds (2 Column only differs in page size): bond 12.2, line 0.449, bold 1.602,
         // hash 1.75, margin 1.25, spacing 20%, Helvetica 7 pt.
-        {"RSC", 12.2, 0.449 * kRsc, 1.602 * kRsc, 4.5 * 1.602 / 2.0 * kRsc, 2.2 * 1.75 / 2.5 * kRsc, 0.20,
+        {"RSC", 12.2, 0.449 * kRsc, 1.602 * kRsc, 3.6 * 1.602 / 2.0 * kRsc, 2.2 * 1.75 / 2.5 * kRsc, 0.20,
          (3.9 * 0.7 + 1.25) * kRsc, "Helvetica", QFont::Normal, 7 * kRsc},
     };
     return styles;
@@ -77,31 +77,34 @@ static QString reversedLabel(const QString& s) {
 }
 
 // Abbreviation centred on its attaching letter (the first, or the last when written from the right).
-static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const DrawingStyle& st) {
+static QPainterPath abbreviationPath(const Atom& a, bool fromRight, const DrawingStyle& st) {
     QFontMetricsF fm(labelFont(st));
     const QString s = fromRight ? reversedLabel(a.label) : a.label;
     const double base = a.pos.y() + fm.capHeight() / 2;
     QPainterPath path = textPath({{0, base}, s}, st);
     const double x = fromRight ? a.pos.x() + fm.horizontalAdvance(s.back()) / 2 - path.boundingRect().right()
                                : a.pos.x() - fm.horizontalAdvance(s.front()) / 2;
-    p.fillPath(path.translated(x, 0), p.pen().color());
+    return path.translated(x, 0);
 }
 
 // Where a label's implicit H goes: after the symbol, before it, or stacked
 // below/above when bonds leave neither side free (a middle CH2).
 enum class HSide { Right, Left, Below, Above };
 
-static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HSide side, const DrawingStyle& st) {
+// The label as outlines: symbol, implicit H and charge.
+static QPainterPath labelPath(const Document& doc, int i, int hydrogens, HSide side, const DrawingStyle& st) {
     const bool hLeft = side == HSide::Left;
     const auto& a = doc.atoms[i];
-    if (!a.label.isEmpty()) return drawAbbreviation(p, a, hLeft, st);
+    if (!a.label.isEmpty()) return abbreviationPath(a, hLeft, st);
+    QPainterPath p;
+    auto add = [&](const QString& text, QPointF baselineLeft, const QFont& font) { p.addText(baselineLeft, font, text); };
     QFont f = labelFont(st), sub = labelFont(st, 0.7);
     QFontMetricsF fm(f), sm(sub);
     QString sym = QString::fromStdString(chem::symbol(a.z));
     double w = fm.horizontalAdvance(sym);
     double base = a.pos.y() + fm.capHeight() / 2;
     double x = a.pos.x() - w / 2;
-    drawText(p, sym, {x, base}, f);
+    add(sym, {x, base}, f);
 
     double right = x + w;
     if (hydrogens > 0) {
@@ -109,24 +112,63 @@ static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HS
         double hw = fm.horizontalAdvance("H"), nw = sm.horizontalAdvance(n);
         if (side == HSide::Below || side == HSide::Above) {
             const double hx = a.pos.x() - (hw + nw) / 2, dy = fm.capHeight() * 1.35 * (side == HSide::Below ? 1 : -1);
-            drawText(p, "H", {hx, base + dy}, f);
-            if (!n.isEmpty()) drawText(p, n, {hx + hw, base + dy + fm.capHeight() * 0.35}, sub);
+            add("H", {hx, base + dy}, f);
+            if (!n.isEmpty()) add(n, {hx + hw, base + dy + fm.capHeight() * 0.35}, sub);
         } else {
             double hx = hLeft ? x - hw - nw : right;
-            drawText(p, "H", {hx, base}, f);
-            if (!n.isEmpty()) drawText(p, n, {hx + hw, base + fm.capHeight() * 0.35}, sub);
+            add("H", {hx, base}, f);
+            if (!n.isEmpty()) add(n, {hx + hw, base + fm.capHeight() * 0.35}, sub);
             if (!hLeft) right += hw + nw;
         }
     }
     if (a.charge) {
         QString c = QString(a.charge > 0 ? "+" : "−");
         if (std::abs(a.charge) > 1) c.prepend(QString::number(std::abs(a.charge)));
-        drawText(p, c, {right, base - fm.capHeight() * 0.7}, sub);
+        add(c, {right, base - fm.capHeight() * 0.7}, sub);
     }
+    return p;
+}
+
+// H goes on the side away from the bonds; if bonds leave from both
+// left and right, above or below, whichever is clear.
+static HSide hSide(const Document& doc, int i) {
+    double dx = 0;
+    bool left = false, right = false, up = false;
+    for (int nb : doc.neighbors(i)) {
+        const QPointF d = doc.atoms[nb].pos - doc.atoms[i].pos;
+        dx += d.x();
+        left |= d.x() < -0.3 * kBondLength, right |= d.x() > 0.3 * kBondLength, up |= d.y() < -0.3 * kBondLength;
+    }
+    return left && right ? (up ? HSide::Below : HSide::Above) : dx > 0.1 ? HSide::Left : HSide::Right;
+}
+
+// Every atom's label outline; empty for skeletal atoms.
+static std::vector<QPainterPath> labelPaths(const Document& doc, const std::vector<bool>& labeled,
+                                            const std::vector<chem::AtomInfo>& info) {
+    const DrawingStyle& st = drawingStyle(doc.style);
+    std::vector<QPainterPath> out(doc.atoms.size());
+    for (size_t i = 0; i < doc.atoms.size(); ++i)
+        if (labeled[i]) out[i] = labelPath(doc, int(i), doc.hideImplicitH ? 0 : info[i].hydrogens, hSide(doc, int(i)), st);
+    return out;
+}
+
+static std::vector<bool> labeledAtoms(const Document& doc) {
+    std::vector<int> degree(doc.atoms.size(), 0);
+    for (const auto& b : doc.bonds) ++degree[b.a], ++degree[b.b];
+    std::vector<bool> labeled(doc.atoms.size());
+    for (size_t i = 0; i < doc.atoms.size(); ++i) labeled[i] = hasLabel(doc, int(i), degree);
+    return labeled;
+}
+
+std::vector<QRectF> labelRects(const Document& doc) {
+    std::vector<QRectF> out;
+    for (const auto& path : labelPaths(doc, labeledAtoms(doc), chem::atomInfo(doc))) out.push_back(path.boundingRect());
+    return out;
 }
 
 static void drawBond(QPainter& p, const Document& doc, const Bond& b, const DrawingStyle& st, const std::vector<int>& degree,
-                     const std::vector<bool>& labeled, const std::vector<QPointF>& gaps = {}) {
+                     const std::vector<bool>& labeled, const std::vector<QPainterPath>& labels,
+                     const std::vector<QPointF>& gaps = {}) {
     QPointF pa = doc.atoms[b.a].pos, pb = doc.atoms[b.b].pos;
     QPointF d = unit(pb - pa), n = perp(d);
     const double gap = st.bondSpacing * kBondLength;  // double-bond spacing
@@ -134,6 +176,12 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     QPointF a = labeled[b.a] ? pa + d * st.labelRadius : pa;
     QPointF e = labeled[b.b] ? pb - d * st.labelRadius : pb;
 
+    if ((b.stereo == BondStereo::Wedge || b.stereo == BondStereo::Hash) && labeled[b.b]) {
+        // The wide end stops short of the label's box, not just its centre: "Ph" is wider than a circle.
+        const QRectF box = labels[b.b].boundingRect().adjusted(-1, -1, 1, 1);
+        auto touches = [&] { return box.contains(e + n * st.wedgeWidth / 2) || box.contains(e - n * st.wedgeWidth / 2); };
+        while (touches() && len(e - a) > 0.5 * len(pb - pa)) e -= d * 0.25;
+    }
     if (b.stereo == BondStereo::Wedge) {
         QPolygonF tri{a, e + n * st.wedgeWidth / 2, e - n * st.wedgeWidth / 2};
         p.setBrush(p.pen().color());
@@ -372,9 +420,9 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
     p.setRenderHint(QPainter::Antialiasing);
     std::vector<int> degree(doc.atoms.size(), 0);
     for (const auto& b : doc.bonds) ++degree[b.a], ++degree[b.b];
-    std::vector<bool> labeled(doc.atoms.size());
-    for (size_t i = 0; i < doc.atoms.size(); ++i) labeled[i] = hasLabel(doc, int(i), degree);
+    const std::vector<bool> labeled = labeledAtoms(doc);
     auto info = chem::atomInfo(doc);
+    const auto labels = labelPaths(doc, labeled, info);
 
     p.setPen(Qt::NoPen);
     for (const auto& f : doc.fills) {  // under everything else
@@ -419,9 +467,9 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         if (inCircle.contains(bi) && b.order == 2 && b.stereo == BondStereo::None) {
             Bond single = b;
             single.order = 1;
-            drawBond(p, doc, single, st, degree, labeled, gaps[bi]);
+            drawBond(p, doc, single, st, degree, labeled, labels, gaps[bi]);
         } else {
-            drawBond(p, doc, b, st, degree, labeled, gaps[bi]);
+            drawBond(p, doc, b, st, degree, labeled, labels, gaps[bi]);
         }
     }
     p.setPen(QPen(style.ink, lineWidth));
@@ -432,23 +480,11 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         p.drawEllipse(c, 0.62 * apothem, 0.62 * apothem);
     }
 
-    // H goes on the side away from the bonds; if bonds leave from both
-    // left and right, above or below, whichever is clear.
-    auto hSide = [&](int i) {
-        double dx = 0;
-        bool left = false, right = false, up = false;
-        for (int nb : doc.neighbors(i)) {
-            const QPointF d = doc.atoms[nb].pos - doc.atoms[i].pos;
-            dx += d.x();
-            left |= d.x() < -0.3 * kBondLength, right |= d.x() > 0.3 * kBondLength, up |= d.y() < -0.3 * kBondLength;
-        }
-        return left && right ? (up ? HSide::Below : HSide::Above) : dx > 0.1 ? HSide::Left : HSide::Right;
-    };
     for (size_t i = 0; i < doc.atoms.size(); ++i) {
         const auto& a = doc.atoms[i];
         p.setPen(QPen(info[i].valenceError ? style.error : ink(a.color), lineWidth));
         if (labeled[i]) {
-            drawLabel(p, doc, int(i), doc.hideImplicitH ? 0 : info[i].hydrogens, hSide(int(i)), st);
+            p.fillPath(labels[i], p.pen().color());
         } else if (a.charge) {
             QFont sub = labelFont(st, 0.7);
             QString c = QString(a.charge > 0 ? "+" : "−");
@@ -492,7 +528,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         for (int nb : doc.neighbors(int(i)))
             taken.push_back(std::atan2(doc.atoms[nb].pos.y() - a.pos.y(), doc.atoms[nb].pos.x() - a.pos.x()));
         if (labeled[i] && info[i].hydrogens && !doc.hideImplicitH) {
-            const HSide s = hSide(int(i));
+            const HSide s = hSide(doc, int(i));
             taken.push_back(s == HSide::Right ? 0 : s == HSide::Left ? std::numbers::pi : s == HSide::Below ? std::numbers::pi / 2 : -std::numbers::pi / 2);
         }
         if (a.charge) taken.push_back(-std::numbers::pi / 4);  // up and to the right

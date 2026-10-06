@@ -3,6 +3,7 @@
 #include "Render.h"
 
 #include <QFile>
+#include <QLineF>
 #include <QTemporaryDir>
 
 #include <catch2/catch_test_macros.hpp>
@@ -695,4 +696,28 @@ TEST_CASE("CDXML: superseded graphics aren't doubled; lone-pair symbols land on 
     int pairs = 0;
     for (const auto& a : doc->atoms) pairs += a.z == 8 ? a.lonePairs : 0;
     CHECK(pairs == 1);
+}
+
+TEST_CASE("clean places pieces joined by an interaction clear of each other") {
+    auto d = chem::fromSmiles("OC(=O)c1ccccc1C(=O)NC.ClCCC");
+    REQUIRE(d);
+    int o = 0, cl = -1;
+    for (int i = 0; i < int(d->atoms.size()); ++i)
+        if (d->atoms[i].z == 17) cl = i;
+    REQUIRE(cl >= 0);
+    Bond hb{o, cl};
+    hb.stereo = BondStereo::Interaction;
+    d->bonds.push_back(hb);
+    for (int i = cl; i < int(d->atoms.size()); ++i) d->atoms[i].pos = d->atoms[5].pos + QPointF(i, 0);  // piled on the ring
+    Document c = chem::clean2D(*d);
+    auto closest = kBondLength * 100;
+    for (int i = 0; i < cl; ++i)
+        for (int j = cl; j < int(c.atoms.size()); ++j)
+            closest = std::min(closest, std::hypot((c.atoms[i].pos - c.atoms[j].pos).x(), (c.atoms[i].pos - c.atoms[j].pos).y()));
+    CHECK(closest > 0.8 * kBondLength);
+    const QLineF line(c.atoms[o].pos, c.atoms[cl].pos);
+    CHECK(line.length() < 2 * kBondLength);
+    for (const auto& b : c.bonds)  // the dotted line crosses no bond
+        if (b.a != o && b.b != o && b.a != cl && b.b != cl)
+            CHECK(line.intersects(QLineF(c.atoms[b.a].pos, c.atoms[b.b].pos)) != QLineF::BoundedIntersection);
 }

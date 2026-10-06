@@ -193,6 +193,7 @@ void Canvas::refresh() {
     QPainter p(&picture_);
     paintDocument(p, doc_, {theme_.ink, theme_.error});
     p.end();
+    labelRects_ = labelRects(doc_);
     viewport()->update();
 }
 
@@ -214,6 +215,16 @@ void Canvas::drawBackground(QPainter* p, const QRectF& rect) {
     picture_.play(p);
 }
 
+void Canvas::highlightAtom(QPainter* p, int atom, double radius) const {
+    const QRectF label = atom < int(labelRects_.size()) ? labelRects_[atom] : QRectF();
+    const QPointF c = doc_.atoms[atom].pos;
+    if (label.isEmpty()) return p->drawEllipse(c, radius, radius);
+    // The whole label ("Ph", "CO2Me"), at least as big as the dot.
+    const double pad = radius - 2.5;
+    const QRectF r = label.adjusted(-pad, -pad, pad, pad).united(QRectF(c - QPointF(radius, radius), c + QPointF(radius, radius)));
+    p->drawRoundedRect(r, radius, radius);
+}
+
 void Canvas::drawForeground(QPainter* p, const QRectF&) {
     QColor sel = theme_.accent, hover = theme_.accent, line = theme_.accent;
     sel.setAlpha(90), hover.setAlpha(60);
@@ -226,14 +237,14 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
         }
     p->setPen(Qt::NoPen);
     p->setBrush(sel);
-    for (int i : selectedAtoms_) p->drawEllipse(doc_.atoms[i].pos, 4, 4);
+    for (int i : selectedAtoms_) highlightAtom(p, i, 4);
 
     for (int i : selectedArrows_) p->strokePath(arrowPath(doc_.arrows[i]), QPen(sel, 4, Qt::SolidLine, Qt::RoundCap));
     for (int i : selectedTexts_) p->drawRect(textPath(doc_.texts[i], drawingStyle(doc_.style)).boundingRect().adjusted(-1.5, -1.5, 1.5, 1.5));
 
     p->setBrush(hover);
     if (hoverAtom_ >= 0) {
-        p->drawEllipse(doc_.atoms[hoverAtom_].pos, 5, 5);
+        highlightAtom(p, hoverAtom_, 5);
         p->setBrush(theme_.hotspot);
         p->drawEllipse(doc_.atoms[hoverAtom_].pos, 1.2, 1.2);
     } else if (hoverBond_ >= 0) {
@@ -395,6 +406,8 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
             else if (!already) selectedAtoms_ = atoms, selectedArrows_ = arrows, selectedTexts_ = texts;
             drag_ = !(e->modifiers() & Qt::AltModifier) ? Drag::Move : shift ? Drag::Rotate3D : Drag::Rotate;
             if (drag_ == Drag::Rotate3D && !(pose_ = chem::pose3D(doc_, moleculesOfSelection()))) drag_ = Drag::Rotate;
+        } else if (!shift && selectionBox().contains(pressPos_)) {  // anywhere in the box drags the selection
+            drag_ = e->modifiers() & Qt::AltModifier ? Drag::Rotate : Drag::Move;
         } else {
             if (!shift) selectedAtoms_.clear(), selectedArrows_.clear(), selectedTexts_.clear();
             drag_ = Drag::Rubber;
@@ -541,9 +554,19 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
             for (int i : selectedAtoms_)
                 if (int j = atomNear(moved, moved.atoms[i].pos, kMergeRadius, i); j >= 0 && !selectedAtoms_.contains(j))
                     fuse.push_back({j, i});
-            if (!fuse.empty()) selectedAtoms_.clear(), hoverAtom_ = hoverBond_ = -1;
             mergeAtoms(moved, fuse);
+            QSet<int> sel = selectedAtoms_;
+            if (!fuse.empty()) {  // the selection survives the merge: each atom shifts down past the dropped ones
+                QSet<int> dropped, kept;
+                for (auto [keep, drop] : fuse) dropped.insert(drop), kept.insert(keep);
+                auto shifted = [&](int i) { return i - int(std::count_if(dropped.begin(), dropped.end(), [&](int d) { return d < i; })); };
+                sel.clear();
+                for (int i : selectedAtoms_ | kept)
+                    if (!dropped.contains(i)) sel.insert(shifted(i));
+                hoverAtom_ = hoverBond_ = -1;
+            }
             commit(moved, !fuse.empty() ? tr("Merge") : drag == Drag::Move ? tr("Move") : tr("Rotate"));
+            selectedAtoms_ = sel;  // after the commit, which drops a renumbered selection (#275)
         }
         return;
     } else if (drag == Drag::Rubber) {
@@ -944,9 +967,12 @@ QRectF Canvas::selectionBox() const {
     for (int i : selectedAtoms_) pts << doc_.atoms[i].pos;
     for (int i : selectedArrows_) pts << doc_.arrows[i].from << doc_.arrows[i].to;
     for (int i : selectedTexts_) pts << doc_.texts[i].pos;
-    const QRectF r = pts.boundingRect();
+    QRectF r = pts.boundingRect();
     if (pts.size() < 2 || (r.width() < 1e-6 && r.height() < 1e-6)) return {};
-    return r.adjusted(-6, -6, 6, 6);  // clear of the atoms' labels' centres
+    r.adjust(-6, -6, 6, 6);  // clear of the atoms' labels' centres
+    for (int i : selectedAtoms_)  // and of long labels such as "Ph"
+        if (i < int(labelRects_.size()) && !labelRects_[i].isEmpty()) r |= labelRects_[i].adjusted(-2, -2, 2, 2);
+    return r;
 }
 
 int Canvas::handleAt(QPointF p) const {
