@@ -104,6 +104,17 @@ class Document:
         Remove bonds; their atoms stay. Later bonds move down as in remove_atoms, and atom indices don't change. (since 2.0)
         """
 
+    @property
+    def r_sites(self) -> list[int]:
+        """
+        The numbers of the R sites (atoms labelled R1, R2…, or [1*] and [*:1] in SMILES), sorted. (since 2.0)
+        """
+
+    def substitute(self, fragments: dict) -> Document:
+        """
+        A copy with each R site replaced, from a dict keyed by site (1 or "R1"): an abbreviation (OMe, Ph) or SMILES whose first atom, or the atom bonded to its lone * ("*OC"), takes the site's place; "H" removes it. The scaffold keeps its drawing and wedges. ValueError names a missing or unknown site, an R site with more than one bond, or a fragment that doesn't parse. (since 2.0)
+        """
+
     def hotkeys(self, atom: int, keys: str, bond: int | None = None) -> tuple[int, int]:
         """
         Type hotkeys with this atom as the hotspot (or atom=-1, bond=i for a bond). Returns the final (atom, bond) hotspot. (since 0.4)

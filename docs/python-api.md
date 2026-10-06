@@ -20,6 +20,19 @@ A Document from .penz JSON (as to_json writes). (since 0.4)
 
 The drawing style names Document.style takes. (since 0.4)
 
+### `write_library(scaffold: Document, assignments: Iterable[Mapping[str, str]], path: str) -> list[tuple[int, str]]`
+
+An SDF file of the scaffold with its R sites filled in, one record per assignment, written as each is
+read so a long table never sits in memory. An assignment maps sites ("R1", or 1) to fragments, as
+Document.substitute takes them; its other keys (an ID, a name) are metadata. Every key is kept as a
+data field of the record. Rows from ``csv.DictReader`` work as they are, or combinations() makes
+them. Returns the assignments that made no record, as (row, reason), rows counted from 1. (since 2.0)
+
+### `combinations(sites: dict[str, list[str]]) -> Iterator[dict[str, str]]`
+
+Every assignment that takes one fragment for each site, from a list per site:
+``combinations({"R1": ["Me", "OMe"], "R2": ["Cl", "H"]})`` gives four, for write_library. (since 2.0)
+
 
 ## Document
 
@@ -69,6 +82,10 @@ Type hotkeys with this atom as the hotspot (or atom=-1, bond=i for a bond). Retu
 
 Molecular weight (since 0.4)
 
+### `Document.r_sites`
+
+The numbers of the R sites (atoms labelled R1, R2…, or [1*] and [*:1] in SMILES), sorted. (since 2.0)
+
 ### `remove_atoms(self, atoms: collections.abc.Sequence[int]) -> None`
 
 Remove atoms and their bonds. The atoms after each one removed move down to fill its place, so indices taken before are stale: remove everything in one call. (since 2.0)
@@ -92,6 +109,10 @@ Relabel an atom, as add_atom takes a label: an element ("C" undoes a label), an 
 ### `Document.style`
 
 Drawing style: 'ACS 1996' (default), 'JDP' or 'RSC' (since 0.4)
+
+### `substitute(self, fragments: dict) -> Document`
+
+A copy with each R site replaced, from a dict keyed by site (1 or "R1"): an abbreviation (OMe, Ph) or SMILES whose first atom, or the atom bonded to its lone * ("*OC"), takes the site's place; "H" removes it. The scaffold keeps its drawing and wedges. ValueError names a missing or unknown site, an R site with more than one bond, or a fragment that doesn't parse. (since 2.0)
 
 ### `to_inchi(self) -> str`
 

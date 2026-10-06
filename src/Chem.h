@@ -3,6 +3,7 @@
 #include "Document.h"
 #include <QStringList>
 #include <array>
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -145,7 +146,15 @@ QStringList abbreviations();
 // Replaces `atom` with the first atom of `smiles` (or an abbreviation) and lays
 // the rest out away from its bonds. New atoms are appended, so indices stay valid.
 bool attach(Document& doc, int atom, const std::string& smilesOrAbbreviation);
-bool expandLabel(Document& doc, int atom);  // one label drawn out in full, a charged group keeping its charge (N3-)
+bool expandLabel(Document& doc, int atom);
+// R-group libraries (#432). A scaffold's R sites are atoms labelled R1, R2… (from SMILES [1*] or [*:1]).
+std::vector<int> rSites(const Document& doc);  // their numbers, sorted, each once
+// Each Rn replaced by its fragment: an abbreviation or a SMILES whose first atom, or the atom bonded to
+// its lone *, takes the site's place, laid out away from the scaffold, which keeps its drawing and so
+// its wedges. "H" leaves the site's bond to an implicit hydrogen, or an H when the bond is a wedge.
+// Throws std::invalid_argument naming the problem: a site with no fragment, a fragment for no site,
+// a site not singly bonded to exactly one atom, or a fragment that isn't one.
+Document substitute(const Document& scaffold, const std::map<int, std::string>& fragments);  // one label drawn out in full, a charged group keeping its charge (N3-)
 Document expanded(const Document& doc);  // abbreviations drawn out in full
 // Fischer crossings and Haworth rings redrawn with the wedges they mean (chemistry uses this).
 Document projectionsAsWedges(const Document& doc);
