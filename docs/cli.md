@@ -9,6 +9,8 @@ penzene --render "CC(=O)Oc1ccccc1C(=O)O" aspirin.pdf        # a SMILES string
 penzene --render library.sdf hits.smi --out figs --format png --drawing-style RSC --clean
 ```
 
+A worked example with sample files: [Batch rendering from the command line](tutorials/cli-batch.md).
+
 Inputs can be SMILES strings or `.smi`, `.sdf`, `.inchi`, `.mol`, `.penz`, `.rxn` and `.cdxml` files.
 With `--out`, each record of a `.smi`, `.sdf` or `.inchi` becomes its own file, named after the
 record; into a single output file (`penzene --render library.sdf all.svg`), the records are laid out

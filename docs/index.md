@@ -19,6 +19,9 @@ It runs on macOS, Linux and Windows, and does its chemistry with [RDKit](https:/
 
 ::::
 
+New to Penzene? The [tutorials](tutorials/index.md) walk through complete workflows, from drawing
+caffeine with the keyboard to rendering a whole dataset from Python.
+
 The same drawing from a script:
 
 ```sh
@@ -74,6 +77,13 @@ Start with [Installing](install.md), then [Drawing](drawing.md).
 install
 drawing
 keys
+```
+
+```{toctree}
+:caption: Tutorials
+:hidden:
+
+tutorials/index
 ```
 
 ```{toctree}
