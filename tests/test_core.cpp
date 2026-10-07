@@ -1936,6 +1936,21 @@ TEST_CASE("predicted spectra: one stick per set of equivalent atoms, for the cho
     CHECK(chem::nmrSticks(d, true).size() == proton.size() + 3);  // everything
 }
 
+TEST_CASE("a spectrum counts the atoms inside an abbreviation, the same as drawn out (#611)") {
+    Document d = *chem::fromSmiles("CO");
+    REQUIRE(edit::applyLabel(d, 0, "tBu", true));
+    const Document full = chem::expanded(d);
+    for (bool proton : {true, false}) {
+        INFO(chem::nmrLine(d, proton).toStdString());
+        CHECK(chem::nmrLine(d, proton) == chem::nmrLine(full, proton));
+    }
+    CHECK(chem::nmrLine(d, true).contains("9H"));
+    const auto methyls = chem::nmrSticks(d, false, {0});  // the label's atom stands for its hidden ones
+    REQUIRE(methyls.size() == 2);
+    for (const auto& k : methyls) CHECK(k.atoms == std::vector<int>{0});
+    CHECK(chem::predictShifts(d).size() == chem::predictShifts(d).back().atom + 1u);  // per drawn atom only
+}
+
 TEST_CASE("predicted shifts follow the bonds, not where the atoms are drawn") {
     auto doc = *chem::fromSmiles("CCO");
     const auto before = chem::predictShifts(doc);

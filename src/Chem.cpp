@@ -184,11 +184,14 @@ Document substitute(const Document& scaffold, const std::map<int, std::string>& 
     return out;
 }
 
-Document expanded(const Document& doc) {
+Document expanded(const Document& doc, std::vector<int>* owner) {
     Document out = doc;
-    for (int i = 0; i < int(doc.atoms.size()); ++i)
+    if (owner) owner->resize(doc.atoms.size()), std::iota(owner->begin(), owner->end(), 0);
+    for (int i = 0; i < int(doc.atoms.size()); ++i) {
         if (!doc.atoms[i].label.isEmpty() && !expandLabel(out, i))
             out.atoms[i].label.clear();  // unknown label (e.g. from a newer file): keep the atom as is
+        if (owner) owner->resize(out.atoms.size(), i);
+    }
     return out;
 }
 
@@ -2611,19 +2614,23 @@ std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSphe
     return hoseCodes(doc, maxSpheres, nullptr);
 }
 
-std::vector<Shift> predictShifts(const Document& doc) {
+// Predicted for the molecule with its abbreviations drawn out (#611): atom i of the drawing is atom i
+// here, and owner maps every atom, drawn or hidden in an abbreviation, back to the drawing's atom.
+static const std::vector<Shift>& predictAllShifts(const Document& drawn, std::vector<int>& owner) {
     static const ShiftTable table;
     // Shifts follow the bonding, not where atoms are drawn, so dragging an atom reuses the last answer.
     std::string key;
-    for (const Atom& a : doc.atoms)
+    for (const Atom& a : drawn.atoms)
         key += std::to_string(a.z) + ',' + std::to_string(a.charge) + ',' + std::to_string(a.radicals) + ',' +
                std::to_string(a.isotope) + ',' + a.label.toStdString() + ';';
-    for (const Bond& b : doc.bonds)
+    for (const Bond& b : drawn.bonds)
         key += std::to_string(b.a) + '-' + std::to_string(b.b) + ',' + std::to_string(b.order) + ',' +
                std::to_string(int(b.stereo)) + ';';
     static thread_local std::string lastKey;
     static thread_local std::vector<Shift> last;
-    if (!last.empty() && key == lastKey) return last;
+    static thread_local std::vector<int> lastOwner;
+    if (!last.empty() && key == lastKey) return owner = lastOwner, last;
+    const Document doc = expanded(drawn, &owner);
     std::vector<Shift> out;
     std::vector<int> classes;
     const auto codes = hoseCodes(doc, 4, &classes);
@@ -2648,19 +2655,29 @@ std::vector<Shift> predictShifts(const Document& doc) {
         if (hydrogens[i] && doc.atoms[i].z != 1) look(1, s.proton, s.protonSpheres);
         if (s.carbonSpheres || s.protonSpheres) out.push_back(s);
     }
-    lastKey = key, last = out;
+    lastKey = key, last = std::move(out), lastOwner = owner;
+    return last;
+}
+
+std::vector<Shift> predictShifts(const Document& doc) {
+    std::vector<int> owner;
+    std::vector<Shift> out;
+    for (const Shift& s : predictAllShifts(doc, owner))
+        if (s.atom < int(doc.atoms.size())) out.push_back(s);  // drawn atoms only
     return out;
 }
 
 std::vector<NmrStick> nmrSticks(const Document& doc, bool proton, const std::vector<int>& only) {
     const std::set<int> wanted(only.begin(), only.end());
     std::map<int, NmrStick> byClass;  // atoms the molecule can't tell apart make one stick
-    for (const Shift& s : predictShifts(doc)) {
-        if (!(proton ? s.protonSpheres : s.carbonSpheres) || (!wanted.empty() && !wanted.count(s.atom))) continue;
+    std::vector<int> owner;
+    for (const Shift& s : predictAllShifts(doc, owner)) {
+        const int atom = owner[s.atom];  // an abbreviation's hidden atoms count under its label
+        if (!(proton ? s.protonSpheres : s.carbonSpheres) || (!wanted.empty() && !wanted.count(atom))) continue;
         NmrStick& k = byClass[s.symmetry];
         k.ppm = proton ? s.proton : s.carbon;
         k.count += proton ? s.hydrogens : 1;
-        k.atoms.push_back(s.atom);
+        if (std::find(k.atoms.begin(), k.atoms.end(), atom) == k.atoms.end()) k.atoms.push_back(atom);
         k.weak = (proton ? s.protonSpheres : s.carbonSpheres) < 3;
         k.coupled = s.coupled;
     }

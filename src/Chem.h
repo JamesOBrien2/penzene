@@ -146,7 +146,7 @@ QStringList abbreviations();
 // Replaces `atom` with the first atom of `smiles` (or an abbreviation) and lays
 // the rest out away from its bonds. New atoms are appended, so indices stay valid.
 bool attach(Document& doc, int atom, const std::string& smilesOrAbbreviation);
-bool expandLabel(Document& doc, int atom);
+bool expandLabel(Document& doc, int atom);  // one label drawn out in full, a charged group keeping its charge (N3-)
 // R-group libraries (#432). A scaffold's R sites are atoms labelled R1, R2… (from SMILES [1*] or [*:1]).
 std::vector<int> rSites(const Document& doc);  // their numbers, sorted, each once
 // Each Rn replaced by its fragment: an abbreviation or a SMILES whose first atom, or the atom bonded to
@@ -154,8 +154,9 @@ std::vector<int> rSites(const Document& doc);  // their numbers, sorted, each on
 // its wedges. "H" leaves the site's bond to an implicit hydrogen, or an H when the bond is a wedge.
 // Throws std::invalid_argument naming the problem: a site with no fragment, a fragment for no site,
 // a site not singly bonded to exactly one atom, or a fragment that isn't one.
-Document substitute(const Document& scaffold, const std::map<int, std::string>& fragments);  // one label drawn out in full, a charged group keeping its charge (N3-)
-Document expanded(const Document& doc);  // abbreviations drawn out in full
+Document substitute(const Document& scaffold, const std::map<int, std::string>& fragments);
+// Abbreviations drawn out in full; owner[i]: the drawing's atom that atom i is, or came from.
+Document expanded(const Document& doc, std::vector<int>* owner = nullptr);
 // Fischer crossings and Haworth rings redrawn with the wedges they mean (chemistry uses this).
 Document projectionsAsWedges(const Document& doc);
 
@@ -173,9 +174,9 @@ struct Shift {
     int symmetry = -1;  // equal for atoms the molecule can't tell apart
     int coupled = 0;    // H on neighbouring carbons outside the atom's own set: n in the n + 1 rule (#552)
 };
-std::vector<Shift> predictShifts(const Document& doc);  // one per atom with a prediction, in atom order
+std::vector<Shift> predictShifts(const Document& doc);  // one per drawn atom with a prediction, in atom order
 // A predicted 13C or 1H spectrum as sticks, one per set of equivalent atoms, highest ppm first; count is the
-// carbons or hydrogens under it. `only`: just these atoms (predicted in the whole drawing, as bonded there).
+// carbons or hydrogens under it, an abbreviation's hidden atoms included under its label. `only`: just these atoms (predicted in the whole drawing, as bonded there).
 struct NmrStick {
     double ppm = 0;
     int count = 0;
