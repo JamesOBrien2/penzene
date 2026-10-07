@@ -4342,3 +4342,19 @@ TEST_CASE("caffeine drawn with hotkeys, as the keyboard tutorial shows") {
         list.write((captions.join('\n') + '\n').toUtf8());
     }
 }
+
+TEST_CASE("Open says which records of a library it couldn't read (#584)") {
+    QStringList unreadable;
+    const auto doc = chem::readFile(QString(PENZENE_TEST_DATA) + "/broken.smi", &unreadable);
+    REQUIRE(doc);
+    CHECK(unreadable == QStringList{"broken"});
+
+    MainWindow w;
+    QString shown;
+    QTimer::singleShot(0, &w, [&] {
+        if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) shown = box->text(), box->accept();
+    });
+    REQUIRE(w.openFile(QString(PENZENE_TEST_DATA) + "/broken.smi"));
+    CHECK(shown.contains("broken"));
+    CHECK(chem::toSmiles(w.findChild<Canvas*>()->document()) == "CCO");
+}

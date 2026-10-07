@@ -68,6 +68,12 @@ except FileNotFoundError as e:
     assert isinstance(e, ValueError), "a missing file is still a ValueError"
 else:
     raise AssertionError("expected FileNotFoundError")
+import warnings
+with warnings.catch_warnings(record=True) as caught:  # a partial library warns, naming the record (#584)
+    warnings.simplefilter("always")
+    partial = pz.read(os.path.join(os.environ["PENZENE_TEST_DATA"], "broken.smi"))
+assert partial.formula == "C2H6O"
+assert any(issubclass(w.category, UserWarning) and "broken" in str(w.message) for w in caught), caught
 try:
     pz.Document().style = "nope"
 except ValueError as e:

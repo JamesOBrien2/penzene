@@ -19,7 +19,8 @@ std::optional<Document> fromSequence(const QString& sequence);
 std::optional<Document> fromChemDraw(const QByteArray& data);
 // .penz, .cdxml/.cdx, a Penzene SVG/PNG, MOL, or every record of an SDF,
 // .smi or .inchi file laid out as a grid, by extension.
-std::optional<Document> readFile(const QString& path);
+// unreadable: the names of a library's records that couldn't be read, left out of the grid (#584).
+std::optional<Document> readFile(const QString& path, QStringList* unreadable = nullptr);
 // Each record of a multi-record file (SDF, .smi "SMILES name" lines, .inchi
 // lines), named by the file (its title or name column) or as base-N.
 struct Record {

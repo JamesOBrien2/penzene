@@ -53,8 +53,13 @@ Document fromSmiles(const std::string& smiles) {
 
 Document readPath(const std::string& path) {
     if (!QFileInfo::exists(qs(path))) missingFile(path);
-    auto doc = chem::readFile(qs(path));
+    QStringList unreadable;
+    auto doc = chem::readFile(qs(path), &unreadable);
     if (!doc) throw nb::value_error(("cannot read " + path).c_str());
+    if (!unreadable.isEmpty()) {  // a partial library is never a plain success (#584)
+        const std::string message = "left out unreadable records of " + path + ": " + unreadable.join(", ").toStdString();
+        if (PyErr_WarnEx(PyExc_UserWarning, message.c_str(), 1) < 0) throw nb::python_error();
+    }
     return *doc;
 }
 
@@ -258,7 +263,8 @@ NB_MODULE(_penzene, m) {
     }, "json"_a, "A Document from .penz JSON (as to_json writes). (since 0.4)");
     m.def("read", &readPath, "path"_a,
           "Open a file: .penz, MOL, ChemDraw .cdxml/.cdx, .rxn, a Penzene SVG/PNG, or every record of an "
-          "SDF, .smi or .inchi file laid out as a grid. (since 0.4)");
+          "SDF, .smi or .inchi file laid out as a grid; records that can't be read are left out with a UserWarning "
+          "naming them. (since 0.4)");
     // Private: cmake/nmr-table.py builds the NMR shift table with the app's own HOSE codes (#403).
     m.def("_hose_codes", [](const std::string& molblock, int spheres) { return chem::hoseCodes(molblock, spheres); },
           "molblock"_a, "spheres"_a = 4);
