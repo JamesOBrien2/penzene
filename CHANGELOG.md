@@ -6,6 +6,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Bonds keep clear of wide element labels such as Pt and Fe, on screen and in exports (#617).
+
 - A MOL query atom list marked NOT ("NOT [N,O]") stays an exclusion, shown as "not N, O", instead of turning into its opposite (#610).
 - The predicted NMR spectrum and its SI line count the atoms inside an abbreviation such as tBu, as if it were drawn out (#611).
 - Opening an SDF or SMILES library with records Penzene can't read names them instead of leaving them out silently; Python's `read` warns (#584).

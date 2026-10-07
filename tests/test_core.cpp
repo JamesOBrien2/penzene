@@ -6,6 +6,7 @@
 #include <QDir>
 #include <QFile>
 #include <QImage>
+#include <QFontMetricsF>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -1251,6 +1252,46 @@ TEST_CASE("a charge sits clear of the bonds around its atom (#494)") {
             for (int x = near.left(); x <= near.right(); ++x) clash += qGray(without.pixel(x, y)) < 128;
         CHECK(clash == 0);
     }
+}
+
+TEST_CASE("bonds leave a margin around wide element symbols in every drawing style (#617)") {
+    for (const auto& st : drawingStyles())
+        for (int z : {78, 26, 44, 17, 35, 42})
+            for (QPointF toward : {QPointF(1, 0), QPointF(-1, 0), QPointF(0, 1), QPointF(0, -1)}) {
+                INFO(st.name.toStdString() << " " << chem::symbol(z) << " toward " << toward.x() << "," << toward.y());
+                Document d;
+                d.style = st.name;
+                d.atoms = {{{0, 0}, z}, {{toward * kBondLength}, 6}};
+                d.bonds = {{0, 1}};
+                d.bonds[0].color = Qt::blue;
+                QFontMetricsF fm(labelFont(st));
+                QPainterPath symbol;
+                const QString text = QString::fromStdString(chem::symbol(z));
+                symbol.addText({-fm.horizontalAdvance(text) / 2, fm.capHeight() / 2}, labelFont(st), text);
+                const QRectF box = symbol.boundingRect();
+                const double edge = toward.x() > 0 ? box.right() : toward.x() < 0 ? -box.left() :
+                                    toward.y() > 0 ? box.bottom() : -box.top();
+                QImage img(800, 800, QImage::Format_ARGB32);
+                img.fill(Qt::white);
+                QPainter p(&img);
+                p.translate(400, 400);
+                p.scale(20, 20);
+                paintDocument(p, d, {Qt::black, Qt::black});
+                p.end();
+                double first = kBondLength;
+                int pixels = 0;
+                for (int y = 0; y < img.height(); ++y)
+                    for (int x = 0; x < img.width(); ++x) {
+                        const QColor c = img.pixelColor(x, y);
+                        if (c.blue() > 200 && c.red() < 100 && c.green() < 100) {
+                            first = std::min(first, QPointF::dotProduct((QPointF(x, y) - QPointF(400, 400)) / 20, toward));
+                            ++pixels;
+                        }
+                    }
+                REQUIRE(pixels > 0);
+                CHECK(first >= edge + 1 - st.lineWidth / 2 - 0.1);  // a point of margin, less the round cap and raster rounding
+                CHECK(first >= st.labelRadius - st.lineWidth / 2 - 0.1);
+            }
 }
 
 TEST_CASE("a bond between two labels closer than their clearances isn't drawn over them (#496)") {
