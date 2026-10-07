@@ -3517,6 +3517,64 @@ TEST_CASE("compound numbers run on across the pages, in page order (#569)") {
     CHECK(numbers(1) == "1b 2");
 }
 
+TEST_CASE("a series shared across pages keeps one number through an insert, undo and redo (#583)") {
+    App app;
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    auto* tabs = w.findChild<QTabBar*>("pageTabs");
+    QAction *number = nullptr, *undo = nullptr, *redo = nullptr;
+    for (auto* a : w.findChildren<QAction*>()) {
+        if (a->text() == "&Number Compounds") number = a;
+        if (a->shortcut() == QKeySequence::Undo) undo = a;
+        if (a->shortcut() == QKeySequence::Redo) redo = a;
+    }
+    REQUIRE(number);
+    REQUIRE(undo);
+    REQUIRE(redo);
+    auto numbers = [&](int page) {
+        QStringList out;  // the page on the canvas is the canvas's
+        const Document d = page == tabs->currentIndex() ? canvas->document() : w.sheets()[page].doc;
+        for (const Text& t : d.texts) out << t.text;
+        out.sort();
+        return out.join(' ').toStdString();
+    };
+    Document first = *chem::fromSmiles("CCO");
+    first.append(*chem::fromSmiles("CN"), {20 * kBondLength, 0});
+    canvas->setDocumentSilently(first);
+    number->trigger();
+    Document lettered = canvas->document();
+    for (Text& t : lettered.texts)
+        if (t.text == "2") t.text = "2a";
+    canvas->commit(lettered, "Edit");
+    w.findChild<QToolButton*>("addPage")->click();
+    canvas->setDocumentSilently(*chem::fromSmiles("c1ccccc1"));
+    number->trigger();
+    Document shared = canvas->document();
+    shared.texts[0].text = "2b";
+    canvas->commit(shared, "Edit");
+    REQUIRE(numbers(0) == "1 2a");
+    REQUIRE(numbers(1) == "2b");
+
+    tabs->setCurrentIndex(0);  // a step inserted between 1 and 2a
+    Document inserted = canvas->document();
+    inserted.append(*chem::fromSmiles("CCl"), {10 * kBondLength, 0});
+    canvas->commit(inserted, "Draw");
+    number->trigger();
+    CHECK(numbers(0) == "1 2 3a");
+    CHECK(numbers(1) == "3b");
+    undo->trigger();
+    undo->trigger();
+    CHECK(numbers(0) == "1 2a");
+    CHECK(numbers(1) == "2b");
+    redo->trigger();
+    redo->trigger();
+    CHECK(numbers(0) == "1 2 3a");
+    CHECK(numbers(1) == "3b");
+    tabs->setCurrentIndex(1);
+    tabs->setCurrentIndex(0);
+    CHECK(numbers(1) == "3b");
+}
+
 TEST_CASE("opening a file while on a later page doesn't touch freed undo stacks (#359)") {
     App app;
     QTemporaryDir dir;

@@ -1899,7 +1899,7 @@ void Canvas::editText(int i, QPointF pos) {
     Document next = doc_;
     if (i < 0 && !s.isEmpty()) next.texts.push_back({pos, s});
     else if (i >= 0 && s.isEmpty()) next.texts.erase(next.texts.begin() + i);
-    else if (i >= 0) next.texts[i].text = s;
+    else if (i >= 0 && s != doc_.texts[i].text) next.texts[i].text = s, next.texts[i].series = 0;  // retyped: joins what it now reads as
     if (!(next == doc_)) commit(next, tr("Text"));
 }
 

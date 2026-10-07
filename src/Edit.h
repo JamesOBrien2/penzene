@@ -25,12 +25,18 @@ QPointF snapToAnchor(const Document& doc, std::array<int, 2> at, QPointF p, QPoi
 void followAnchors(const Document& before, Document& after);
 std::vector<int> moleculeOf(const Document& doc, int atom);  // the atoms bonded to it, directly or not, itself included
 // Compound numbers (#504) in scheme order: rows top to bottom, left to right along each. A number's
-// suffix is kept, and suffixed numbers that shared a number (2a, 2b) still share one. `from`: the
-// numbers taken on the pages before (#569); returns them with this page's added.
+// suffix is kept, and suffixed numbers of one series (2a, 2b) still share one; a suffixed number
+// without a series joins the one its number reads as, or starts one. `from`: the numbers taken on
+// the pages before (#569); returns them with this page's added.
 struct CompoundCount {
     int last = 0;
-    std::map<QString, int> series;  // a suffixed number's old number: its new one
+    std::map<int, int> numbers;     // a series' new number
+    std::map<QString, int> series;  // the series a number reads as (on any page, before renumbering)
+    int lastSeries = 0;             // the highest series in use, on any page
 };
+// Each lettered compound number's series and number as it reads now, so numbers typed (or files from
+// before series) can join them; for the pages besides the one being renumbered.
+void noteSeries(const Document& doc, CompoundCount& count);
 CompoundCount renumberCompounds(Document& doc, CompoundCount from = {});
 // A compound number in `after` that wasn't moved itself follows the foot of its molecule from `before`.
 void followNumbers(const Document& before, Document& after);

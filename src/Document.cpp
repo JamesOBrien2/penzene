@@ -89,6 +89,7 @@ QByteArray Document::toJson() const {
         if (t.scale != 1) o["scale"] = t.scale;
         if (t.color.isValid()) o["color"] = t.color.name();
         if (t.compound) o["compound"] = true;
+        if (t.series) o["series"] = t.series;
         if (t.legend) o["legend"] = true;
         if (t.rf) o["rf"] = true;
         if (t.anchor >= 0) o["anchor"] = t.anchor;
@@ -261,6 +262,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
                QColor(o["color"].toString())};
         if (!(t.scale > 0)) t.scale = 1;  // files saved before #316 could hold 0
         t.compound = o["compound"].toBool();
+        t.series = std::max(0, o["series"].toInt());
         t.legend = o["legend"].toBool();
         t.rf = o["rf"].toBool();
         t.group = std::max(-1, o["group"].toInt(-1));

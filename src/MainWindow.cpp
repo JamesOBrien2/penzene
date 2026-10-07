@@ -974,7 +974,8 @@ void MainWindow::setPages(const std::vector<Sheet>& sheets) {
 // Each page's numbers start where the page before's stop. Only the page on the canvas is edited,
 // so the others are renumbered here, outside their undo history: numbers follow the pages.
 void MainWindow::renumberPages() {
-    edit::CompoundCount count;
+    edit::CompoundCount count;  // series found on every page, so a number typed on one joins its series on another (#583)
+    for (int i = 0; i < int(pages_.size()); ++i) edit::noteSeries(i == page_ ? canvas_->document() : pages_[i].doc, count);
     for (int i = 0; i < int(pages_.size()); ++i) {
         if (i != page_) {
             count = edit::renumberCompounds(pages_[i].doc, count);
