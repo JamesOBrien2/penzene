@@ -1700,7 +1700,7 @@ void MainWindow::paste() {
     if (text.empty()) return;
     auto doc = text.find("M  END") != std::string::npos ? chem::fromMolBlock(text)
                : text.starts_with("InChI=")         ? chem::fromInchi(text)
-               : text.find('>') != std::string::npos ? chem::fromReactionSmiles(text)
+               : chem::isReactionSmiles(text)        ? chem::fromReactionSmiles(text)
                                                     : chem::fromSmiles(text);
     if (doc) canvas_->insert(*doc, tr("Paste"));
     else statusBar()->showMessage(tr("Clipboard has no structure or SMILES"), 4000);
@@ -2177,6 +2177,9 @@ void MainWindow::buildTools() {
         tr("Interaction bond (H-bond, contact, coordination): dotted, not a covalent bond — i on a bond. "
            "Drag between atoms, also of different molecules"),
         styled(1, BondStereo::Interaction));
+    add(bondIcon(1, BondStereo::Dative),
+        tr("Dative bond: an arrow from the donor to the acceptor, which takes none of the donor's hydrogens — k on a bond"),
+        styled(1, BondStereo::Dative));
     add(bondIcon(1, BondStereo::Partial),
         tr("Partial bond, forming or breaking (transition states): dashed, not counted — p on a bond; P for a partial double"),
         styled(1, BondStereo::Partial));
@@ -2825,6 +2828,7 @@ moves off, so you can keep typing.</p>
 <tr><td><b>d b y</b></td><td>dashed, bold, wavy</td></tr>
 <tr><td><b>D</b> / <b>B</b></td><td>dashed double / bold double</td></tr>
 <tr><td><b>i</b></td><td>interaction: H-bond or contact, dotted, not a bond</td></tr>
+<tr><td><b>k</b></td><td>dative bond, an arrow to the acceptor (press again to flip)</td></tr>
 <tr><td><b>p</b> / <b>P</b></td><td>partial bond forming or breaking / partial double (transition states)</td></tr>
 <tr><td><b>l c r</b></td><td>double bond's second line left / centred / right</td></tr>
 <tr><td><b>f</b></td><td>bring to front: bonds it crosses get a gap</td></tr>

@@ -1171,7 +1171,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
     } else if (click) {
         switch (tool_) {
         case Tool::Atom:
-            if (pressAtom_ >= 0) next.atoms[pressAtom_].z = element_, next.atoms[pressAtom_].label.clear();  // "Ph" -> N
+            if (pressAtom_ >= 0) next.atoms[pressAtom_].z = element_, next.atoms[pressAtom_].label.clear(), next.atoms[pressAtom_].hydrogens = -1;  // "Ph" -> N
             else if (bond < 0) next.addAtom(pressPos_, element_);
             what = tr("Set atom");
             break;
@@ -1947,7 +1947,7 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
             // ChemDraw: removes a label first; a plain carbon (or a bare attachment point) is deleted.
             const bool bare = a.z == 0 && a.label.isEmpty();
             if (!bare && (a.z != 6 || a.charge || !a.label.isEmpty() || a.isotope))
-                a.z = 6, a.charge = 0, a.label.clear(), a.isotope = 0;
+                a.z = 6, a.charge = 0, a.label.clear(), a.isotope = 0, a.hydrogens = -1;
             else next.removeAtom(hoverAtom_), hoverAtom_ = -1;
         } else if (hoverBond_ >= 0) {
             next.removeBond(hoverBond_);

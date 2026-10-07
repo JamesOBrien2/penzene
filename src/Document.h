@@ -16,7 +16,10 @@ constexpr double kBondLength = 14.4;
 // forming or breaking in a transition state) are drawn, not chemistry: neither
 // an interaction nor a partial single counts, and a partial double counts as the
 // double it was, so hydrogens (and the formula) stay those of the reactants.
-enum class BondStereo { None, Wedge, Hash, Bold, Dashed, Wavy, Interaction, Partial };
+// Dative is a coordinate bond drawn as an arrow from its donor (a) to its acceptor (b):
+// it takes none of the donor's hydrogens. A plain line to a metal is read as one too
+// where the donor has no bond to spare (PPh3, NMe3, pyridine; see chem::toRDKit).
+enum class BondStereo { None, Wedge, Hash, Bold, Dashed, Wavy, Interaction, Partial, Dative };
 enum class BondPosition { Auto, Left, Centre, Right };  // double bond's second line, seen from a to b
 // Enhanced stereo (MDL/ChemDraw): a stereocentre as drawn (abs), or one of a group
 // whose centres are all as drawn or all inverted, as a mixture (&n) or unknown which (orn).
@@ -40,6 +43,9 @@ struct Atom {
     // A variable attachment: this bare point (z 0, no label) stands for a bond to any one of these atoms.
     std::vector<int> attachments;
     int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
+    // Hydrogens as typed on a ligand ("NH3", "OH2" bonded to a metal), which can't be
+    // told from an amide or hydroxide by valence alone; -1 = implicit, as everywhere else.
+    int hydrogens = -1;
 };
 
 struct Bond {
@@ -182,7 +188,8 @@ inline bool operator==(const Atom& x, const Atom& y) {
     return x.pos == y.pos && x.z == y.z && x.charge == y.charge && x.label == y.label && x.color == y.color &&
            x.map == y.map && x.lonePairs == y.lonePairs && x.radicals == y.radicals && x.partial == y.partial &&
            x.isotope == y.isotope && x.stereoGroup == y.stereoGroup && x.stereoGroupNumber == y.stereoGroupNumber &&
-           x.standsFor == y.standsFor && x.attachments == y.attachments && x.group == y.group;
+           x.standsFor == y.standsFor && x.attachments == y.attachments && x.group == y.group &&
+           x.hydrogens == y.hydrogens;
 }
 inline bool operator==(const Bond& x, const Bond& y) {
     return x.a == y.a && x.b == y.b && x.order == y.order && x.stereo == y.stereo &&

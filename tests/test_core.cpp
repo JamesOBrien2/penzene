@@ -2223,3 +2223,114 @@ TEST_CASE("a negated atom list stays negated through MOL and SMARTS (#610)") {
     for (const auto& p : chem::checkStructure(*d)) problems.push_back(p.message);
     CHECK(std::find(problems.begin(), problems.end(), "Query atom X: none of N, O") != problems.end());
 }
+
+TEST_CASE("metal complexes keep their ligands' hydrogens through every format (#616)") {
+    QFile f(QString(PENZENE_TEST_DATA) + "/metals.smi");
+    REQUIRE(f.open(QIODevice::ReadOnly));
+    int read = 0;
+    for (const QString& line : QString::fromUtf8(f.readAll()).split('\n', Qt::SkipEmptyParts)) {
+        if (line.startsWith('#')) continue;
+        const QStringList cols = line.split('\t');
+        REQUIRE(cols.size() >= 3);
+        INFO(cols[1].toStdString());
+        auto doc = chem::fromSmiles(cols[0].toStdString());
+        REQUIRE(doc);
+        ++read;
+        CHECK(chem::properties(*doc)->formula == cols[2]);
+        const auto info = chem::atomInfo(*doc);
+        QStringList donors;
+        for (int i = 0; i < int(doc->atoms.size()); ++i) {
+            CHECK_FALSE(info[i].valenceError);
+            const int z = doc->atoms[i].z;
+            const auto nbs = doc->neighbors(i);
+            if ((z == 7 || z == 8 || z == 15) && std::any_of(nbs.begin(), nbs.end(), [&](int n) { return chem::isMetal(doc->atoms[n].z); }))
+                donors << QString("%1=%2").arg(QString::fromStdString(chem::symbol(z))).arg(info[i].hydrogens);
+        }
+        donors.sort();
+        CHECK(donors.join(',') == (cols.size() > 3 ? cols[3] : QString()));
+        // Coordination to a metal is drawn as a plain line, and comes back the same from every format.
+        for (const Bond& b : doc->bonds) CHECK(b.stereo != BondStereo::Dative);
+        auto again = chem::fromSmiles(chem::toSmiles(*doc));
+        REQUIRE(again);
+        CHECK(chem::properties(*again)->formula == cols[2]);
+        auto mol = chem::fromMolBlock(chem::toMolBlock(*doc, true));
+        REQUIRE(mol);
+        CHECK(chem::properties(*mol)->formula == cols[2]);
+        auto cdxml = chem::fromChemDraw(chem::toCdxml(*doc));
+        REQUIRE(cdxml);
+        CHECK(chem::properties(*cdxml)->formula == cols[2]);
+        auto penz = Document::fromJson(doc->toJson());
+        REQUIRE(penz);
+        CHECK(*penz == *doc);
+    }
+    CHECK(read >= 15);
+}
+
+TEST_CASE("a ligand typed with its hydrogens keeps them; a phosphine on a metal gains none (#616)") {
+    Document doc;
+    const int pt = doc.addAtom({0, 0}, 78), n = doc.addAtom({kBondLength, 0}, 7), o = doc.addAtom({-kBondLength, 0}, 8);
+    doc.bonds.push_back({pt, n});
+    doc.bonds.push_back({pt, o});
+    CHECK(chem::atomInfo(doc)[n].hydrogens == 2);  // a plain line: an amide, as drawn
+    REQUIRE(edit::applyLabel(doc, n, "NH3"));
+    REQUIRE(edit::applyLabel(doc, o, "H2O"));
+    CHECK(doc.atoms[o].z == 8);
+    CHECK(edit::atomText(doc.atoms[n]) == "NH3");
+    auto info = chem::atomInfo(doc);
+    CHECK(info[n].hydrogens == 3);
+    CHECK(info[o].hydrogens == 2);
+    CHECK_FALSE(info[n].valenceError);
+    CHECK(chem::properties(doc)->formula == "H5NOPt");
+    REQUIRE(edit::applyLabel(doc, n, "N"));  // typed again without them: implicit again
+    CHECK(chem::atomInfo(doc)[n].hydrogens == 2);
+    // Off a metal, NH3 is still just N.
+    Document chain;
+    chain.addAtom({0, 0});
+    const int end = chain.addAtom({kBondLength, 0});
+    chain.bonds.push_back({0, end});
+    REQUIRE(edit::applyLabel(chain, end, "NH3"));
+    CHECK(chain.atoms[end].hydrogens == -1);
+
+    REQUIRE(edit::applyLabel(doc, o, "PPh3"));
+    const auto expanded = chem::expanded(doc);
+    for (int i = 0; i < int(expanded.atoms.size()); ++i)
+        if (expanded.atoms[i].z == 15) CHECK(chem::atomInfo(expanded)[i].hydrogens == 0);
+    CHECK(chem::properties(doc)->formula == "C18H17NPPt");  // the N typed back to an amide
+}
+
+TEST_CASE("a square-planar metal drawn as a + isn't a Fischer projection (#616)") {
+    Document doc;
+    const int pt = doc.addAtom({0, 0}, 78);
+    const QPointF at[] = {{kBondLength, 0}, {-kBondLength, 0}, {0, kBondLength}, {0, -kBondLength}};
+    const int z[] = {17, 35, 53, 7};
+    for (int k = 0; k < 4; ++k) doc.bonds.push_back({pt, doc.addAtom(at[k], z[k])});
+    CHECK(chem::toSmiles(doc).find('@') == std::string::npos);
+    const auto cleaned = chem::clean2D(doc);
+    for (const Bond& b : cleaned.bonds) CHECK(b.stereo == BondStereo::None);
+}
+
+TEST_CASE("dative bonds: drawn as arrows, read from SMILES, kept in .penz and CDXML (#616)") {
+    CHECK_FALSE(chem::isReactionSmiles("[NH3]->[Pt](<-[NH3])(Cl)Cl"));
+    CHECK(chem::isReactionSmiles("CC=O>>CCO"));
+    CHECK(chem::isReactionSmiles("[NH3]->[BH3]>>N.B"));
+    Document doc;
+    const int n = doc.addAtom({0, 0}, 7), b = doc.addAtom({kBondLength, 0}, 5);
+    doc.bonds.push_back({b, n});
+    REQUIRE(edit::hotkey(doc, {-1, 0}, "k").valid());
+    CHECK(doc.bonds[0].stereo == BondStereo::Dative);
+    REQUIRE(edit::hotkey(doc, {-1, 0}, "k").valid());  // again: the other way
+    CHECK(doc.bonds[0].a == n);
+    CHECK(chem::atomInfo(doc)[n].hydrogens == 3);  // the donor gives no hydrogen to the bond
+    auto penz = Document::fromJson(doc.toJson());
+    REQUIRE(penz);
+    CHECK(penz->bonds[0].stereo == BondStereo::Dative);
+    auto cdxml = chem::fromChemDraw(chem::toCdxml(doc));
+    REQUIRE(cdxml);
+    REQUIRE(cdxml->bonds.size() == 1);
+    CHECK(cdxml->bonds[0].stereo == BondStereo::Dative);
+    CHECK(chem::toSmiles(doc) == "B<-N");
+    QImage image(200, 100, QImage::Format_ARGB32);
+    image.fill(Qt::white);
+    QPainter p(&image);
+    paintDocument(p, doc);  // the arrowhead path
+}
