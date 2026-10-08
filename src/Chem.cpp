@@ -330,7 +330,7 @@ static RDKit::Atom* queryAtom(const Atom& a) {
     return q;
 }
 
-static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
+static std::unique_ptr<RWMol> drawingMol(const Document& in, bool expand = true) {
     const Document doc = projectionsAsWedges(expand ? expanded(in) : in);
     auto mol = std::make_unique<RWMol>();
     auto* conf = new RDKit::Conformer(doc.atoms.size());
@@ -406,6 +406,67 @@ static std::unique_ptr<RWMol> toRDKit(const Document& in, bool expand = true) {
     conf->set3D(false);
     mol->addConformer(conf, true);
     return mol;
+}
+
+// The j/J drawing convention: a bare metal-bound point at a carbon ring's centre.
+// ponytail: legacy files identify eta points by position; add explicit ring references if centres must survive separate ring drags.
+struct HapticLigand {
+    int point, metal;
+    std::vector<int> ring;
+};
+
+static std::vector<HapticLigand> hapticLigands(const Document& doc) {
+    std::vector<HapticLigand> out;
+    if (std::none_of(doc.atoms.begin(), doc.atoms.end(), [](const Atom& a) {
+            return a.z == 0 && a.label.isEmpty() && a.attachments.empty();
+        })) return out;
+    const auto cycles = rings(doc);
+    const auto at = doc.bondsAt();
+    std::set<int> used;
+    for (int i = 0; i < int(doc.atoms.size()); ++i) {
+        const Atom& point = doc.atoms[i];
+        if (point.z != 0 || point.charge || point.radicals || point.isotope || point.map || !point.label.isEmpty() ||
+            !point.standsFor.isEmpty() || !point.attachments.empty() || at[i].size() != 1) continue;
+        const int metal = neighbors(doc, at, i)[0], z = doc.atoms[metal].z;
+        const bool isMetal = z == 3 || z == 4 || z == 11 || z == 12 || z == 13 || z == 19 || z == 20 ||
+                             z == 31 || z == 37 || z == 38 || z == 49 || z == 50 || z == 55 || z == 56 ||
+                             z == 81 || z == 82 || z == 83 || (z >= 21 && z <= 30) || (z >= 39 && z <= 48) ||
+                             (z >= 57 && z <= 80) || z >= 87;
+        if (!isMetal) continue;
+        for (const auto& ring : cycles) {
+            if ((ring.size() != 5 && ring.size() != 6) || used.count(ring[0])) continue;
+            if (!std::all_of(ring.begin(), ring.end(), [&](int j) { return doc.atoms[j].z == 6; })) continue;
+            int doubles = 0;
+            for (size_t j = 0; j < ring.size(); ++j)
+                doubles += doc.bonds[doc.bondBetween(ring[j], ring[(j + 1) % ring.size()])].order == 2;
+            if (doubles != int(ring.size() / 2)) continue;
+            QPointF centre;
+            for (int j : ring) centre += doc.atoms[j].pos;
+            centre /= double(ring.size());
+            if (len(point.pos - centre) >= 0.5) continue;
+            out.push_back({i, metal, ring});
+            used.insert(ring.begin(), ring.end());
+            break;
+        }
+    }
+    return out;
+}
+
+// Chemical exports and descriptors omit drawing-only eta points. Drawing-facing callers
+// use drawingMol instead, whose atom indices still match the document.
+static std::unique_ptr<RWMol> toRDKit(const Document& in) {
+    const auto ligands = hapticLigands(in);
+    if (ligands.empty()) return drawingMol(in);
+    Document doc = in;
+    std::vector<int> points;
+    for (const auto& ligand : ligands) {
+        points.push_back(ligand.point);
+        int charge = 0;
+        for (int i : ligand.ring) charge += in.atoms[i].charge;
+        if (ligand.ring.size() == 5 && charge == -1) ++doc.atoms[ligand.metal].charge;  // Cp− balances the metal's oxidation state
+    }
+    doc.removeAtoms(points);
+    return drawingMol(doc);
 }
 
 // Best-effort sanitize + stereo from wedges. Drawings in progress are often
@@ -2033,7 +2094,7 @@ std::string toInchiKey(const Document& doc) {
 static Document cleanFragment(const Document& doc) {
     // Abbreviations stay single nodes, as in ChemDraw: expanding a ring onto a
     // crowded atom squeezes the depictor's layout (#85).
-    auto mol = toRDKit(doc, false);
+    auto mol = drawingMol(doc, false);
     perceive(*mol, false);  // keeps the drawn Kekulé form (#322)
     layout(*mol);
     RDKit::Chirality::wedgeMolBonds(*mol, &mol->getConformer());
@@ -2052,6 +2113,7 @@ static Document cleanFragment(const Document& doc) {
 // Each fragment is cleaned in place, so a reaction scheme keeps its layout;
 // arrows and text pass through untouched.
 Document clean2D(const Document& doc, const std::vector<int>& only) {
+    const auto ligands = hapticLigands(doc);
     const int n = int(doc.atoms.size());
     std::vector<int> comp(n, -1);
     int count = 0;
@@ -2104,6 +2166,11 @@ Document clean2D(const Document& doc, const std::vector<int>& only) {
         for (const auto& b : doc.bonds)
             if (comp[b.a] == c && chemicalOrder(b) != b.order) out.bonds.push_back(b);
     }
+    for (const auto& ligand : ligands) {
+        QPointF centre;
+        for (int i : ligand.ring) centre += out.atoms[i].pos;
+        out.atoms[ligand.point].pos = centre / double(ligand.ring.size());
+    }
     return out;
 }
 
@@ -2111,7 +2178,7 @@ Document addHydrogens(const Document& doc) {
     Document out = doc;
     const int n = int(doc.atoms.size());
     if (!n) return out;
-    auto mol = toRDKit(doc);
+    auto mol = drawingMol(doc);
     perceive(*mol);
     const int before = int(mol->getNumAtoms());
     try {
@@ -2149,7 +2216,7 @@ Document removeHydrogens(const Document& doc) {
 std::vector<StereoLabel> stereoLabels(const Document& doc) {
     std::vector<StereoLabel> out;
     if (doc.atoms.empty()) return out;
-    auto mol = toRDKit(doc);
+    auto mol = drawingMol(doc);
     if (!perceive(*mol)) return out;
     try {
         RDKit::CIPLabeler::assignCIPLabels(*mol);
@@ -2190,7 +2257,7 @@ std::vector<Problem> checkStructure(const Document& doc) {
             if (QLineF(doc.atoms[i].pos, doc.atoms[j].pos).length() < 0.3 * kBondLength)
                 out.push_back({QObject::tr("Overlapping atoms: %1 and %2").arg(name(i), name(j)), {i, j}});
 
-    auto mol = toRDKit(doc);
+    auto mol = drawingMol(doc);
     if (n && perceive(*mol)) {
         QSet<int> centres;
         for (const auto& s : RDKit::Chirality::findPotentialStereo(*mol)) {
@@ -2212,7 +2279,7 @@ std::vector<std::vector<int>> aromaticRings(const Document& doc) {
     std::vector<std::vector<int>> out;
     const int n = int(doc.atoms.size());
     if (!n) return out;
-    auto mol = toRDKit(doc);
+    auto mol = drawingMol(doc);
     if (!perceive(*mol)) return out;
     for (const auto& r : mol->getRingInfo()->atomRings())
         if (std::all_of(r.begin(), r.end(), [&](int i) { return i < n && mol->getAtomWithIdx(i)->getIsAromatic(); }))
@@ -2221,7 +2288,7 @@ std::vector<std::vector<int>> aromaticRings(const Document& doc) {
 }
 
 std::vector<std::vector<int>> rings(const Document& doc) {
-    auto mol = toRDKit(doc);
+    auto mol = drawingMol(doc);
     std::vector<std::vector<int>> out;
     try {
         RDKit::MolOps::findSSSR(*mol);
@@ -2235,7 +2302,7 @@ std::vector<std::vector<int>> rings(const Document& doc) {
 }
 
 std::vector<AtomInfo> atomInfo(const Document& doc) {
-    auto mol = toRDKit(doc);
+    auto mol = drawingMol(doc);
     std::vector<AtomInfo> info(doc.atoms.size());
     for (auto* a : mol->atoms()) {
         if (a->getIdx() >= info.size()) break;  // expanded abbreviation atoms
@@ -2301,7 +2368,7 @@ namespace chem {
 // on import, so a drawn 3D structure gets a fresh conformer. Keep z to use it.
 std::optional<Pose3D> pose3D(const Document& doc, const std::vector<int>& atoms) {
     if (atoms.empty()) return std::nullopt;
-    auto mol = toRDKit(doc);
+    auto mol = drawingMol(doc);
     perceive(*mol);  // chiral tags from the wedges, which the embedding keeps
     RWMol withH(*mol);
     try {
@@ -2355,7 +2422,7 @@ Document project3D(const Document& doc, const Pose3D& pose, double aboutX, doubl
         out.atoms[pose.atoms[k]].pos = QPointF((x2 + pose.centre[0]) * kScale, -(y1 + pose.centre[1]) * kScale);
     }
     // Wedges for the new view: the drawing's own stereo (chiral tags), placed by RDKit.
-    auto mol = toRDKit(doc);
+    auto mol = drawingMol(doc);
     if (!perceive(*mol)) return out;
     auto& conf = mol->getConformer();
     for (int i = 0; i < int(out.atoms.size()); ++i)
@@ -2599,7 +2666,7 @@ static std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int 
         for (int i = 0; i < n; ++i) (piece[i] == p ? kept : others).push_back(i);
         Document part = doc;
         part.removeAtoms(others);
-        auto mol = toRDKit(part);
+        auto mol = drawingMol(part);
         if (!perceive(*mol)) continue;  // half-perceived: codes the table can't match
         std::vector<int> ranks;
         auto codes = hoseCodesOf(*mol, maxSpheres, classes ? &ranks : nullptr);

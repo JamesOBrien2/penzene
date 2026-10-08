@@ -2264,3 +2264,88 @@ TEST_CASE("a negated atom list stays negated through MOL and SMARTS (#610)") {
     for (const auto& p : chem::checkStructure(*d)) problems.push_back(p.message);
     CHECK(std::find(problems.begin(), problems.end(), "Query atom X: none of N, O") != problems.end());
 }
+
+TEST_CASE("eta complexes have chemical formula and mass without drawing centroids (#619)") {
+    Document doc;
+    const int fe = doc.addAtom({0, 0}, 26);
+    edit::hotkey(doc, {fe, -1}, "j");
+    edit::hotkey(doc, {fe, -1}, "j");
+    const QByteArray drawn = doc.toJson();
+    const auto p = chem::properties(doc);
+    REQUIRE(p);
+    CHECK(p->formula == "C10H10Fe");
+    CHECK(p->exactMass == Catch::Approx(186.0132).margin(0.0001));
+    CHECK(chem::hrmsLine(doc, chem::Ion::M).contains("C10H10Fe 186.0126"));
+    CHECK_FALSE(chem::isotopePattern(doc, chem::Ion::M).empty());
+    CHECK(doc.toJson() == drawn);
+
+    const auto ringIds = chem::rings(doc);
+    REQUIRE(ringIds.size() == 2);
+    Document clean = chem::clean2D(doc);
+    CHECK(clean.atoms.size() == doc.atoms.size());
+    CHECK(clean.bonds.size() == doc.bonds.size());
+    for (const auto& ring : ringIds) {
+        QPointF before, after;
+        for (int i : ring) before += doc.atoms[i].pos, after += clean.atoms[i].pos;
+        before /= double(ring.size()), after /= double(ring.size());
+        auto dummy = std::find_if(doc.atoms.begin(), doc.atoms.end(), [&](const Atom& a) {
+            return a.z == 0 && len(a.pos - before) < 0.5;
+        });
+        REQUIRE(dummy != doc.atoms.end());
+        const int i = int(dummy - doc.atoms.begin());
+        CHECK(len(clean.atoms[i].pos - after) < 0.5);
+        CHECK(clean.atoms[i].z == 0);
+        CHECK(clean.atoms[i].charge == 0);
+    }
+    REQUIRE(chem::properties(clean));
+    CHECK(chem::properties(clean)->formula == "C10H10Fe");
+    CHECK_FALSE(chem::hrmsLine(clean, chem::Ion::M).isEmpty());
+}
+
+TEST_CASE("eta recognition keeps real wildcard atoms and original drawing indices (#619)") {
+    SECTION("mixed Cp and benzene on a metal: only Cp changes the oxidation state") {
+        Document doc;
+        doc.addAtom({0, 0}, 26);
+        edit::hotkey(doc, {0, -1}, "j");
+        edit::hotkey(doc, {0, -1}, "J");
+        doc = *Document::fromJson(doc.toJson());  // existing .penz drawing convention, no new metadata
+        REQUIRE(chem::properties(doc));
+        CHECK(chem::properties(doc)->formula == "C11H11Fe");
+        CHECK_FALSE(chem::hrmsLine(doc, chem::Ion::M).isEmpty());
+        auto exported = chem::fromSmiles(chem::toSmiles(doc));
+        REQUIRE(exported);
+        CHECK(chem::properties(*exported)->formula == "C11H11Fe");
+        CHECK(doc.atoms[0].charge == 0);
+        CHECK(chem::rings(doc).size() == 2);
+        CHECK(chem::atomInfo(doc).size() == doc.atoms.size());
+        const int base = int(doc.atoms.size());
+        doc.append(*chem::fromSmiles("F[C@H](Cl)Br"), {100, 0});
+        const auto stereo = chem::stereoLabels(doc);
+        REQUIRE(stereo.size() == 1);
+        CHECK(stereo[0].atom == base + 1);
+        const Document withH = chem::addHydrogens(doc);
+        REQUIRE(chem::properties(withH));
+        CHECK(chem::properties(withH)->formula == chem::properties(doc)->formula);
+        CHECK(chem::checkStructure(doc).empty());
+    }
+    SECTION("a plain attachment point away from a ring is not an eta centroid") {
+        Document doc;
+        doc.addAtom({0, 0}, 26);
+        edit::hotkey(doc, {0, -1}, "j");
+        edit::hotkey(doc, {0, -1}, ".");
+        REQUIRE(chem::properties(doc));
+        CHECK(chem::properties(doc)->formula.find('*') != std::string::npos);
+        CHECK(chem::hrmsLine(doc, chem::Ion::M).isEmpty());
+    }
+    SECTION("a named or variable attachment at a ring centre keeps its meaning") {
+        for (bool variable : {false, true}) {
+            Document doc;
+            doc.addAtom({0, 0}, 26);
+            edit::hotkey(doc, {0, -1}, "j");
+            auto& dummy = doc.atoms.back();
+            if (variable) dummy.attachments = {1, 2};
+            else dummy.label = "R1";
+            CHECK(chem::toSmiles(doc).find('*') != std::string::npos);
+        }
+    }
+}
