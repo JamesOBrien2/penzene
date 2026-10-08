@@ -1,0 +1,30 @@
+# CI only, not part of the staged-recipes submission: the compiler and C library pins
+# conda-forge's own build setup supplies (conda-forge-pinning), which stdlib('c') needs.
+c_stdlib:
+  - if: linux
+    then: sysroot
+  - if: osx
+    then: macosx_deployment_target
+  - if: win
+    then: vs
+c_stdlib_version:
+  - if: linux
+    then: "2.17"
+  - if: osx
+    then: "11.0"
+c_compiler:
+  - if: linux
+    then: gcc
+  - if: osx
+    then: clang
+  - if: win
+    then: vs2022
+cxx_compiler:
+  - if: linux
+    then: gxx
+  - if: osx
+    then: clangxx
+  - if: win
+    then: vs2022
+python:
+  - "3.12"
