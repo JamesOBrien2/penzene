@@ -83,6 +83,12 @@ static void drawText(QPainter& p, const QString& s, QPointF baselineLeft, const 
     p.fillPath(path, p.pen().color());
 }
 
+// Deuterium and tritium use letters; other isotopes keep their element's symbol.
+static QString atomSymbol(const Atom& a) {
+    if (a.z == 1 && (a.isotope == 2 || a.isotope == 3)) return a.isotope == 2 ? "D" : "T";
+    return QString::fromStdString(chem::symbol(a.z));
+}
+
 // An isotope's mass number, written before the symbol (¹³C); none for D and T, which have letters.
 static QString massNumber(const Atom& a) {
     return a.isotope && a.label.isEmpty() && !(a.z == 1 && (a.isotope == 2 || a.isotope == 3)) ? QString::number(a.isotope) : QString();
@@ -206,9 +212,7 @@ static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HS
     if (!a.label.isEmpty()) return drawAbbreviation(p, a, hLeft, st);
     QFont f = labelFont(st), sub = labelFont(st, 0.7);
     QFontMetricsF fm(f), sm(sub);
-    // Deuterium and tritium by their own letters; any other isotope as a mass number before the symbol (¹³C).
-    const bool heavyH = a.z == 1 && (a.isotope == 2 || a.isotope == 3);
-    QString sym = heavyH ? (a.isotope == 2 ? "D" : "T") : QString::fromStdString(chem::symbol(a.z));
+    const QString sym = atomSymbol(a);
     const QString mass = massNumber(a);
     double w = fm.horizontalAdvance(sym);
     double base = a.pos.y() + fm.capHeight() / 2;
@@ -247,11 +251,20 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     QPointF pa = doc.atoms[b.a].pos, pb = doc.atoms[b.b].pos;
     QPointF d = unit(pb - pa), n = perp(d);
     const double gap = st.bondSpacing * kBondLength;  // double-bond spacing
-    // Trim at labels.
-    // A bond that would cross an isotope's raised mass number (¹³C) stops beyond it; a level one passes beneath.
+    // Keep a point of margin beyond the symbol in the bond's direction, and at least the style's radius.
+    // Abbreviations attach at one letter rather than their whole label's centre, so keep their usual clearance.
+    // A bond crossing an isotope's raised mass number (¹³C) also stops beyond it; a level one passes beneath.
     auto trim = [&](int atom, QPointF toward) {
-        const QString mass = massNumber(doc.atoms[atom]);
-        return mass.isEmpty() ? st.labelRadius : std::max(st.labelRadius, 1 + exitAlong(massBox(doc.atoms[atom], st), toward));
+        const Atom& a = doc.atoms[atom];
+        double clear = st.labelRadius;
+        if (a.label.isEmpty()) {
+            QFontMetricsF fm(labelFont(st));
+            const QString sym = atomSymbol(a);
+            const QRectF box = fm.tightBoundingRect(sym).translated(-fm.horizontalAdvance(sym) / 2, fm.capHeight() / 2);
+            clear = std::max(clear, 1 + exitAlong(box, toward));
+        }
+        if (!massNumber(a).isEmpty()) clear = std::max(clear, 1 + exitAlong(massBox(a, st), toward));
+        return clear;
     };
     QPointF a = labeled[b.a] ? pa + d * trim(b.a, d) : pa;
     QPointF e = labeled[b.b] ? pb - d * trim(b.b, -d) : pb;
