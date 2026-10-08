@@ -1341,6 +1341,99 @@ TEST_CASE("preferences: default style for new documents, export resolution and b
     QSettings().remove("exportDpi");
 }
 
+TEST_CASE("valence error colouring is a persisted view preference (#620)") {
+    App app;
+    QSettings().remove("markValenceErrors");
+    const QVariant oldTheme = QSettings().value("theme");
+    QSettings().setValue("theme", "Light");
+    auto hasColour = [](const QImage& img, bool red) {
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x) {
+                const QColor c = img.pixelColor(x, y);
+                if (c.alpha() > 200 && (red ? c.red() > 150 && c.green() < 90 && c.blue() < 100
+                                          : c.blue() > 150 && c.red() < 100 && c.green() < 150)) return true;
+            }
+        return false;
+    };
+    Document d;
+    d.addAtom({0, 0});
+    d.atoms[0].charge = 1;
+    d.atoms[0].color = QColor(32, 90, 214);
+    for (QPointF v : {QPointF(1, 0), QPointF(0, 1), QPointF(-1, 0), QPointF(0, -1)}) {
+        d.addAtom(v * kBondLength);
+        d.bonds.push_back({0, int(d.atoms.size()) - 1});
+    }
+    REQUIRE(chem::atomInfo(d)[0].valenceError);
+    const auto problems = chem::checkStructure(d);
+    REQUIRE(!problems.empty());
+    ExportOptions off;
+    off.markValenceErrors = false;
+    for (auto labels : {Document::CarbonLabels::None, Document::CarbonLabels::All}) {
+        d.carbonLabels = labels;
+        CHECK(hasColour(renderImage(d), true));
+        CHECK_FALSE(hasColour(renderImage(d, off), true));
+        CHECK(hasColour(renderImage(d, off), false));
+        CHECK(renderSvg(d).contains("#dc2828"));
+        CHECK_FALSE(renderSvg(d, off).contains("#dc2828"));
+        CHECK(hasColour(QImage::fromData(renderPng(d, off)), false));
+        CHECK_FALSE(hasColour(QImage::fromData(renderPng(d, off)), true));
+    }
+    MainWindow w;
+    w.resize(1000, 700);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    REQUIRE(canvas);
+    canvas->setDocumentSilently(d);
+    canvas->setGuides(false, false);
+    canvas->zoomBy(2);
+    canvas->centerOn(0, 0);
+    QAction* toggle = nullptr;
+    QAction* copy = nullptr;
+    for (auto* a : w.findChildren<QAction*>()) {
+        if (a->text() == "Mark &Valence Errors") toggle = a;
+        if (a->shortcut() == QKeySequence::Copy) copy = a;
+    }
+    REQUIRE(toggle);
+    REQUIRE(copy);
+    CHECK(toggle->isChecked());
+    const auto* undo = w.findChild<QUndoGroup*>()->activeStack();
+    const int history = undo->count();
+    const QByteArray original = canvas->document().toJson();
+    QApplication::processEvents();
+    CHECK(hasColour(canvas->viewport()->grab().toImage(), true));
+    const QString preview = qEnvironmentVariable("PENZENE_VALENCE_PREVIEW_DIR");
+    if (!preview.isEmpty()) {
+        REQUIRE(writeWhole(preview + "/charged-carbon.penz", d.toJson()));
+        REQUIRE(w.grab().save(preview + "/on.png"));
+    }
+    toggle->trigger();
+    QApplication::processEvents();
+    CHECK_FALSE(toggle->isChecked());
+    CHECK_FALSE(QSettings().value("markValenceErrors").toBool());
+    CHECK(canvas->document().toJson() == original);
+    CHECK(undo->count() == history);
+    CHECK(undo->isClean());
+    CHECK_FALSE(hasColour(canvas->viewport()->grab().toImage(), true));
+    CHECK(hasColour(canvas->viewport()->grab().toImage(), false));
+    CHECK(hasColour(renderImage(d), true));  // standalone rendering retains its default
+    QWidget* dialog = w.checkStructure();
+    auto* list = dialog->findChild<QListWidget*>();
+    REQUIRE(list);
+    CHECK(list->count() == int(problems.size()));
+    dialog->close();
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/off.png"));
+    canvas->selectAll();
+    copy->trigger();
+    CHECK_FALSE(hasColour(QImage::fromData(QApplication::clipboard()->mimeData()->data("image/png")), true));
+    CHECK_FALSE(QApplication::clipboard()->mimeData()->data("image/svg+xml").contains("#dc2828"));
+    MainWindow reopened;
+    for (auto* a : reopened.findChildren<QAction*>())
+        if (a->text() == "Mark &Valence Errors") CHECK_FALSE(a->isChecked());
+    QSettings().remove("markValenceErrors");
+    if (oldTheme.isValid()) QSettings().setValue("theme", oldTheme);
+    else QSettings().remove("theme");
+}
+
 TEST_CASE("Check Structure dialog selects the problem's atoms (#95)") {
     App app;
     MainWindow w;

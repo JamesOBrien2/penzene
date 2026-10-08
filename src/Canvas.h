@@ -87,6 +87,7 @@ public:
         arrowKind_ = kind, arrowCurved_ = curved, arrowDashed_ = dashed, arrowLook_ = look, arrowCrossed_ = crossed;
     }
     void setTheme(const Theme& t) { theme_ = t, refresh(); }
+    void setMarkValenceErrors(bool mark) { markValenceErrors_ = mark, refresh(); }
     void setGuides(bool grid, bool rulers) { grid_ = grid, rulers_ = rulers, viewport()->update(); }  // View menu
     void setFillColor(QColor c) { fillColor_ = c; }
     QColor fillColor() const { return fillColor_; }
@@ -143,6 +144,7 @@ private:
     QPicture picture_;
     std::vector<QRectF> labels_;  // each atom's drawn label box, as painted into picture_
     Theme theme_;
+    bool markValenceErrors_ = true;
     bool grid_ = false, rulers_ = false;
     std::vector<QPointF> preview_;
     QUndoStack* undo_;

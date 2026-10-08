@@ -516,7 +516,7 @@ void Canvas::refresh() {
     picture_ = QPicture();
     QPainter p(&picture_);
     labels_.assign(doc_.atoms.size(), {});
-    paintDocument(p, doc_, {theme_.ink, theme_.error, 0, &labels_});
+    paintDocument(p, doc_, {theme_.ink, theme_.error, 0, &labels_, markValenceErrors_});
     p.end();
     // The scene grows to hold the drawing and its page with room to spare, never shrinking under the view (#326).
     const QRectF drawn = documentBounds(doc_).united(pageRect(doc_)).adjusted(-2000, -2000, 2000, 2000);

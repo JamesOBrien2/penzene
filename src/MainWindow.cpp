@@ -240,7 +240,10 @@ protected:
         p.translate(legend.rect.topLeft());
         p.scale(fit, fit);
         p.translate(-bounds.topLeft());
-        paintDocument(p, molecule, {ink});
+        RenderStyle style;
+        style.ink = ink;
+        style.markValenceErrors = QSettings().value("markValenceErrors", true).toBool();
+        paintDocument(p, molecule, style);
         if (current >= 0) {  // the stick in hand's atoms, ringed
             p.setPen(QPen(palette().color(QPalette::Highlight), 1.5 / fit));
             p.setBrush(Qt::NoBrush);
@@ -1294,7 +1297,7 @@ static QColor exportBackground() {
 static ExportOptions exportOptions() {
     QSettings s;
     return {exportDpi(), exportBackground(), s.value("exportScale", 100).toDouble() / 100,
-            s.value("exportMargin", 0).toDouble()};
+            s.value("exportMargin", 0).toDouble(), s.value("markValenceErrors", true).toBool()};
 }
 
 QStringList MainWindow::languages() {
@@ -1438,7 +1441,9 @@ bool printDocument(QPrinter& printer, const Document& doc) {
     p.translate(page.width() / 2, page.height() / 2);  // the painter's origin is the printable area's corner
     p.scale(s, s);
     p.translate(-r.center());
-    paintDocument(p, doc);
+    RenderStyle style;
+    style.markValenceErrors = QSettings().value("markValenceErrors", true).toBool();
+    paintDocument(p, doc, style);
     return p.end();
 }
 
@@ -2742,6 +2747,15 @@ void MainWindow::buildMenus() {
         });
     }
     canvas_->setGuides(grid->isChecked(), rulers->isChecked());
+    auto* valenceErrors = view->addAction(tr("Mark &Valence Errors"));
+    valenceErrors->setCheckable(true);
+    valenceErrors->setChecked(QSettings().value("markValenceErrors", true).toBool());
+    connect(valenceErrors, &QAction::toggled, this, [this](bool mark) {
+        QSettings().setValue("markValenceErrors", mark);
+        canvas_->setMarkValenceErrors(mark);
+        nmr_->update();
+    });
+    canvas_->setMarkValenceErrors(valenceErrors->isChecked());
     view->addAction(tr("Reset Tool &Layout"), this, [this] {
         for (auto* f : flyouts_) {
             f->fly->hide();
