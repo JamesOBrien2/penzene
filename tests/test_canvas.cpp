@@ -896,9 +896,10 @@ TEST_CASE("arrowhead size goes out to ChemDraw and comes back (#538)") {
     d.arrows.push_back({{40, 0}, {100, 0}});
     d.arrows[0].head = 1.5;
     const QByteArray xml = chem::toCdxml(d);
-    CHECK(xml.contains("HeadSize=\"900\""));  // 9 pt at ChemDraw's 1 pt line: 1.5 × our 6
-    CHECK(xml.contains("ArrowheadCenterSize=\"788\""));
-    CHECK(xml.contains("ArrowheadWidth=\"225\""));
+    CHECK(xml.contains("LineWidth=\"0.6\""));
+    CHECK(xml.contains("HeadSize=\"1500\""));  // 9 pt at the style's 0.6 pt line: 1.5 × our 6
+    CHECK(xml.contains("ArrowheadCenterSize=\"1313\""));
+    CHECK(xml.contains("ArrowheadWidth=\"375\""));
     CHECK(std::abs(chem::fromChemDraw(xml)->arrows[0].head - 1.5) < 1e-9);
     CHECK(std::abs(chem::fromChemDraw(chem::toCdx(d))->arrows[0].head - 1.5) < 1e-9);
 
@@ -996,6 +997,99 @@ TEST_CASE("exports come out at the drawing style's own bond length (#92)") {
     const QRectF model = documentBounds(*d);
     CHECK(std::abs(rsc.width() - model.width() * 12.2 / 14.4) <= 1);
     CHECK(rsc.width() < acs.width());
+}
+
+TEST_CASE("canvas drawing style uses physical bond length without changing model coordinates (#624)") {
+    Fixture f;
+    const Document acs = *chem::fromSmiles("CCO");
+    f.canvas.setDocumentSilently(acs);
+    f.canvas.centerOn(20, 30);
+    const QPointF centre = f.canvas.mapToScene(f.canvas.viewport()->rect().center());
+    const double zoom = f.canvas.transform().m11();
+    Document rsc = acs;
+    rsc.style = "RSC";
+    f.canvas.commit(rsc, "Drawing style");
+    CHECK(std::abs(f.canvas.transform().m11() / zoom - 12.2 / 14.4) < 1e-10);
+    CHECK(len(f.canvas.mapToScene(f.canvas.viewport()->rect().center()) - centre) < 1);
+    for (size_t i = 0; i < acs.atoms.size(); ++i) CHECK(f.doc().atoms[i].pos == acs.atoms[i].pos);
+    f.undo.undo();
+    CHECK(std::abs(f.canvas.transform().m11() - zoom) < 1e-10);
+    f.undo.redo();
+    CHECK(std::abs(f.canvas.transform().m11() / exportScale(rsc) - zoom) < 1e-10);
+    f.canvas.setTool(Canvas::Tool::Select);
+    f.click(rsc.atoms[2].pos);
+    CHECK(f.canvas.selection().contains(2));
+    f.canvas.zoomBy(0.21 / zoom);
+    CHECK(std::abs(f.canvas.transform().m11() / exportScale(rsc) - 0.21) < 1e-10);
+    const double low = f.canvas.transform().m11();
+    f.canvas.zoomBy(0.5);
+    CHECK(f.canvas.transform().m11() == low);
+    f.canvas.zoomBy(39 / 0.21);
+    const double high = f.canvas.transform().m11();
+    f.canvas.zoomBy(2);
+    CHECK(f.canvas.transform().m11() == high);
+    f.canvas.fitToSelection();
+    CHECK(f.canvas.transform().m11() / exportScale(rsc) <= 10.001);
+}
+
+TEST_CASE("style switching, pages and opening update the canvas scale (#624)") {
+    App app;
+    const QVariant oldTheme = QSettings().value("theme");
+    QSettings().setValue("theme", "Light");
+    MainWindow w;
+    w.resize(1000, 700);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    const Document acs = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
+    canvas->setDocumentSilently(acs);
+    canvas->setGuides(false, false);
+    canvas->zoomBy(2);
+    canvas->centerOn(documentBounds(acs).center());
+    QApplication::processEvents();
+    const double zoom = canvas->transform().m11();
+    const QString preview = qEnvironmentVariable("PENZENE_STYLE_PREVIEW_DIR");
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/acs.png"));
+    QAction* rsc = nullptr;
+    QAction* undo = nullptr;
+    QAction* redo = nullptr;
+    for (auto* a : w.findChildren<QAction*>()) {
+        if (a->text() == "RSC") rsc = a;
+        if (a->shortcut() == QKeySequence::Undo) undo = a;
+        if (a->shortcut() == QKeySequence::Redo) redo = a;
+    }
+    REQUIRE(rsc);
+    REQUIRE(undo);
+    REQUIRE(redo);
+    rsc->trigger();
+    QApplication::processEvents();
+    CHECK(std::abs(canvas->transform().m11() / zoom - 12.2 / 14.4) < 1e-10);
+    if (!preview.isEmpty()) {
+        REQUIRE(w.grab().save(preview + "/rsc.png"));
+        REQUIRE(writeWhole(preview + "/aspirin-rsc.penz", canvas->document().toJson()));
+    }
+    undo->trigger();
+    CHECK(std::abs(canvas->transform().m11() - zoom) < 1e-10);
+    redo->trigger();
+    CHECK(std::abs(canvas->transform().m11() / zoom - 12.2 / 14.4) < 1e-10);
+    auto* tabs = w.findChild<QTabBar*>("pageTabs");
+    w.findChild<QToolButton*>("addPage")->click();
+    canvas->setDocumentSilently(acs);
+    const double second = canvas->transform().m11();
+    tabs->setCurrentIndex(0);
+    CHECK(std::abs(canvas->transform().m11() / second - 12.2 / 14.4) < 1e-10);
+    tabs->setCurrentIndex(1);
+    CHECK(std::abs(canvas->transform().m11() - second) < 1e-10);
+    QTemporaryDir dir;
+    Document saved = acs;
+    saved.style = "RSC";
+    REQUIRE(writeWhole(dir.filePath("rsc.penz"), saved.toJson()));
+    REQUIRE(w.openFile(dir.filePath("rsc.penz")));
+    CHECK(canvas->document().style == "RSC");
+    const double opened = canvas->transform().m11() / exportScale(saved);
+    canvas->setDocumentSilently(acs);
+    CHECK(std::abs(canvas->transform().m11() - opened) < 1e-10);
+    if (oldTheme.isValid()) QSettings().setValue("theme", oldTheme);
+    else QSettings().remove("theme");
 }
 
 // Finds a menu entry by its text, looking inside submenus.

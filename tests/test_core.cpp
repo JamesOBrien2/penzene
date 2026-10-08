@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QPainter>
 #include <QTemporaryDir>
+#include <QXmlStreamReader>
 #include <set>
 
 #include <catch2/catch_approx.hpp>
@@ -346,6 +347,78 @@ TEST_CASE("SMILES export never writes text that doesn't parse (#266)") {
     const std::string smi = chem::toSmiles(doc);
     INFO(smi);
     CHECK((smi.empty() || chem::fromSmiles(smi)));
+}
+
+TEST_CASE("ChemDraw keeps drawing styles at their physical size (#624)") {
+    for (const auto& style : drawingStyles())
+        for (double ratio : {0.0, 0.9}) {
+            INFO(style.name.toStdString() << " " << ratio);
+            Document d = *chem::fromSmiles("CCO");
+            REQUIRE(edit::applyLabel(d, 2, "OMe", true));
+            d.style = style.name;
+            d.labelRatio = ratio;
+            d.texts.push_back({{0, 50}, "heat", 1.2});
+            d.arrows.push_back({{50, 0}, {90, 0}, ArrowKind::Reaction, 6});
+            d.arrows.back().head = 1.3;
+            d.arrows.push_back({{50, 30}, {80, 60}, ArrowKind::Ellipse});
+            d.arrows.push_back({{50, 80}, {90, 80}, ArrowKind::Equilibrium});
+            const QByteArray xml = chem::toCdxml(d);
+            QXmlStreamReader r(xml);
+            std::vector<QPointF> nodes;
+            while (!r.atEnd()) {
+                r.readNext();
+                if (!r.isStartElement()) continue;
+                const auto attrs = r.attributes();
+                if (r.name() == u"CDXML") {
+                    CHECK(attrs.value("BondLength").toDouble() == Catch::Approx(style.bondLength));
+                    CHECK(attrs.value("LabelSize").toDouble() == Catch::Approx(documentStyle(d).fontSize * exportScale(d)));
+                    CHECK(attrs.value("LineWidth").toDouble() == Catch::Approx(style.lineWidth * exportScale(d)));
+                }
+                if (r.name() == u"n") {
+                    const auto xy = attrs.value("p").toString().split(' ');
+                    REQUIRE(xy.size() == 2);
+                    nodes.push_back({xy[0].toDouble(), xy[1].toDouble()});
+                }
+            }
+            REQUIRE(nodes.size() > 2);
+            CHECK(len(nodes[1] - nodes[0]) == Catch::Approx(style.bondLength).margin(0.02));
+            for (const QByteArray& file : {xml, chem::toCdx(d)}) {
+                INFO((file.startsWith("VjCD") ? "CDX" : "CDXML"));
+                auto back = chem::fromChemDraw(file);
+                REQUIRE(back);
+                CHECK(drawingStyle(back->style).bondLength == Catch::Approx(style.bondLength));
+                CHECK(documentStyle(*back).fontSize == Catch::Approx(documentStyle(d).fontSize).margin(0.06));
+                CHECK(chem::properties(*back)->formula == chem::properties(d)->formula);
+                REQUIRE(back->atoms.size() == d.atoms.size());
+                const QPointF moved = back->atoms[0].pos - d.atoms[0].pos;
+                for (size_t i = 0; i < d.atoms.size(); ++i) CHECK(len(back->atoms[i].pos - moved - d.atoms[i].pos) < 0.04);
+                REQUIRE(back->texts.size() == 1);
+                CHECK(back->texts[0].scale == Catch::Approx(1.2).margin(0.01));
+                CHECK(len(back->texts[0].pos - moved - d.texts[0].pos) < 0.04);
+                REQUIRE(back->arrows.size() == d.arrows.size());
+                for (const auto& arrow : d.arrows) {
+                    // Binary ChemDraw groups graphics and arrows separately.
+                    const auto found = std::find_if(back->arrows.begin(), back->arrows.end(), [&](const Arrow& a) { return a.kind == arrow.kind; });
+                    REQUIRE(found != back->arrows.end());
+                    CHECK(len(found->from - moved - arrow.from) < 0.04);
+                    CHECK(len(found->to - moved - arrow.to) < 0.04);
+                    CHECK(found->bend == Catch::Approx(arrow.bend).margin(0.04));
+                    if (!isShape(arrow.kind)) CHECK(found->head == Catch::Approx(arrow.head).margin(0.01));
+                }
+            }
+        }
+    auto drawing = [](double bond) {
+        return QString(R"(<CDXML BondLength="%1" LabelSize="9"><page><fragment><n id="1" p="0 0"/><n id="2" p="%1 0"/><b B="1" E="2"/></fragment></page></CDXML>)").arg(bond).toUtf8();
+    };
+    for (double bond : {12.15, 12.2, 12.25}) {
+        auto matched = chem::fromChemDraw(drawing(bond));
+        REQUIRE(matched);
+        CHECK(matched->style == "RSC");
+    }
+    auto unmatched = chem::fromChemDraw(drawing(12.26));
+    REQUIRE(unmatched);
+    CHECK(unmatched->style.isEmpty());
+    CHECK(unmatched->labelRatio == Catch::Approx(9 / 12.26));
 }
 
 TEST_CASE("a ChemDraw file's label size relative to its bonds is kept (#203)") {
