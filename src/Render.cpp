@@ -824,7 +824,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
     };
     for (size_t i = 0; i < doc.atoms.size(); ++i) {
         const auto& a = doc.atoms[i];
-        p.setPen(QPen(info[i].valenceError ? style.error : ink(a.color), lineWidth));
+        p.setPen(QPen(style.markValenceErrors && info[i].valenceError ? style.error : ink(a.color), lineWidth));
         if (labeled[i]) {
             drawLabel(p, doc, int(i), info[i].hydrogens, hSide(int(i)), st);
             if (style.labels) {
@@ -1119,7 +1119,9 @@ static void paintFrame(QPainter& p, const Document& doc, const ExportOptions& o,
     p.scale(s * perPoint, s * perPoint);
     p.translate(-r.topLeft());
     if (o.background.alpha()) p.fillRect(r, o.background);
-    paintDocument(p, doc);
+    RenderStyle style;
+    style.markValenceErrors = o.markValenceErrors;
+    paintDocument(p, doc, style);
 }
 
 Legend placeLegend(const QRectF& plot, QSizeF size, const std::vector<QPointF>& sticks, double clear) {

@@ -17,6 +17,7 @@ struct RenderStyle {
     QColor error = QColor(220, 40, 40);
     double lineWidth = 0;  // > 0 overrides the drawing style's (toolbar icons)
     std::vector<QRectF>* labels = nullptr;  // if set: each atom's drawn label box (empty: none), for the selection's outline
+    bool markValenceErrors = true;
 };
 
 // Screen colours. Exports and copies always use black ink on a clear
@@ -73,6 +74,7 @@ struct ExportOptions {
     QColor background = Qt::transparent;  // clear, or a colour to fill behind the drawing
     double scale = 1;                     // e.g. 0.85 to fit a journal column
     double margin = 0;                    // points of padding around the drawing
+    bool markValenceErrors = true;
 };
 // Writes .svg, .png or .pdf (by extension), cropped to the drawing plus the margin.
 bool exportDocument(const Document& doc, const QString& path, const ExportOptions& options = {});

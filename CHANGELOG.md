@@ -6,6 +6,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- View → Mark Valence Errors can turn off red error colouring on screen and in exports; structure checks are unchanged (#620).
+
 - Metal complexes use coordination geometry with clear ligand labels; Clean keeps metal interaction bonds connected and preserves the donor arrangement (#618).
 
 - Metal ligands keep their hydrogens and valence, including typed ammine and aqua labels; dative arrows and ligand abbreviations round-trip through chemistry formats (#616).

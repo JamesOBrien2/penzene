@@ -1081,6 +1081,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Mark &amp;Valence Errors</source>
+        <translation>&amp;Valenzfehler markieren</translation>
+    </message>
+    <message>
         <source>Reset Tool &amp;Layout</source>
         <translation type="unfinished"></translation>
     </message>
