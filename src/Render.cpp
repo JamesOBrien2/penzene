@@ -329,6 +329,17 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         p.drawLine(a, e);
         return;
     }
+    if (b.stereo == BondStereo::Dative) {  // donor → acceptor, its head at the acceptor
+        const double head = st.wedgeWidth, half = 0.4 * st.wedgeWidth;
+        const QPointF base = e - d * std::min(head, 0.5 * len(e - a));
+        p.drawLine(a, base);
+        p.save();
+        p.setBrush(p.pen().color());
+        p.setPen(Qt::NoPen);
+        p.drawPolygon(QPolygonF{e, base + n * half, base - n * half});
+        p.restore();
+        return;
+    }
     if (b.stereo == BondStereo::Wavy) {
         QPainterPath wave(a);
         const double L = len(e - a);

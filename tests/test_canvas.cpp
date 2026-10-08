@@ -4416,3 +4416,27 @@ TEST_CASE("Open says which records of a library it couldn't read (#584)") {
     CHECK(shown.contains("broken"));
     CHECK(chem::toSmiles(w.findChild<Canvas*>()->document()) == "CCO");
 }
+
+TEST_CASE("metal ligand labels and dative hotkeys work on the canvas (#616)") {
+    Fixture f;
+    Document d;
+    d.addAtom({0, 0}, 78), d.addAtom({kBondLength, 0}, 7);
+    d.bonds.push_back({0, 1});
+    REQUIRE(edit::applyLabel(d, 1, "NH3"));
+    f.canvas.setDocumentSilently(d);
+    CHECK(chem::atomInfo(f.doc())[1].hydrogens == 3);
+    const auto preview = qEnvironmentVariable("PENZENE_METAL_PREVIEW");
+    if (!preview.isEmpty()) {
+        f.canvas.zoomBy(4);
+        f.canvas.centerOn({kBondLength / 2, 0});
+        f.canvas.grab().save(preview + "/before-arrow.png");
+    }
+    f.hover({kBondLength / 2, 0});
+    f.key("k");
+    CHECK(f.doc().bonds[0].stereo == BondStereo::Dative);
+    CHECK(f.doc().bonds[0].a == 1);
+    if (!preview.isEmpty()) f.canvas.grab().save(preview + "/after-arrow.png");
+    f.undo.undo();
+    CHECK(f.doc().bonds[0].stereo == BondStereo::None);
+    CHECK(chem::atomInfo(f.doc())[1].hydrogens == 3);
+}

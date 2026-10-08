@@ -128,7 +128,7 @@ The .penz document (JSON). (since 0.4)
 
 ### `to_molblock(self) -> str`
 
-MDL MOL (V2000), with the drawing's wedges. (since 0.4)
+MDL MOL, with the drawing's wedges; V3000 when coordinate bonds require it. (since 0.4)
 
 ### `to_png(self, dpi: float = 300) -> bytes`
 

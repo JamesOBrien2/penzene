@@ -6,6 +6,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Metal ligands keep their hydrogens and valence, including typed ammine and aqua labels; dative arrows and ligand abbreviations round-trip through chemistry formats (#616).
+
 - Bonds keep clear of wide element labels such as Pt and Fe, on screen and in exports (#617).
 - Ferrocene and other η-bound rings report formula and mass without their drawing centroids; Clean keeps each centroid at its ring centre (#619).
 

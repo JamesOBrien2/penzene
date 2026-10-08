@@ -90,7 +90,8 @@
         "stereoGroup": {"type": "string", "pattern": "^(abs|&[1-9][0-9]{0,3}|or[1-9][0-9]{0,3})$", "description": "Enhanced stereo group of a stereocentre: abs (as drawn), &n (a mixture of it and its mirror image) or orn (one of the two, unknown which)."},
         "standsFor": {"type": "string", "description": "What a variable label (X, R1) stands for, such as \"N, O, S\" or \"H, Me, OMe\"; shown in its molecule's legend, and a query atom list in MOL and SMARTS when every entry is an element."},
         "attachments": {"type": "array", "items": {"type": "integer", "minimum": 0}, "description": "Variable attachment: this bare point (z 0) stands for a bond to any one of these atoms (indices)."},
-        "group": {"$ref": "#/$defs/group"}
+        "group": {"$ref": "#/$defs/group"},
+        "hydrogens": {"type": "integer", "minimum": 0, "maximum": 8, "description": "Hydrogens as typed on a ligand bonded to a metal (NH3, OH2); left out, they are implicit."}
       }
     },
     "bond": {
@@ -100,7 +101,7 @@
         "a": {"$ref": "#/$defs/index", "description": "First atom; a wedge starts here."},
         "b": {"$ref": "#/$defs/index"},
         "order": {"enum": [1, 2, 3], "default": 1},
-        "stereo": {"enum": ["none", "wedge", "hash", "bold", "dashed", "wavy", "interaction", "partial"]},
+        "stereo": {"enum": ["none", "wedge", "hash", "bold", "dashed", "wavy", "interaction", "partial", "dative"]},
         "position": {"enum": ["auto", "left", "centre", "right"], "description": "Which side a double bond's second line goes."},
         "color": {"$ref": "#/$defs/color"}
       }

@@ -57,6 +57,7 @@ Generated from Help → Keyboard Shortcuts in the app. Point at an atom or bond 
 | `d b y` | dashed, bold, wavy |
 | `D` / `B` | dashed double / bold double |
 | `i` | interaction: H-bond or contact, dotted, not a bond |
+| `k` | dative bond, an arrow to the acceptor (press again to flip) |
 | `p` / `P` | partial bond forming or breaking / partial double (transition states) |
 | `l c r` | double bond's second line left / centred / right |
 | `f` | bring to front: bonds it crosses get a gap |

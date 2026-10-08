@@ -72,7 +72,9 @@ for _ in range(args.trials):
 out = tempfile.mkdtemp()
 for s in ["CC(=O)Oc1ccccc1C(=O)O", "C[C@H](N)C(=O)O", "c1ccc2ccccc2c1", "C1CC1", "[Na+].[Cl-]", "C=C=C",
           "C#CC#C", "O=S(=O)(O)O", "C1CCCCCCCCCCC1", "c1ccncc1", "[NH4+]", "CC(C)(C)[Si](C)(C)OC",
-          "F/C=C/F", "F/C=C\\F", "C[N+](C)(C)C", "B1OC(C)(C)C(C)(C)O1", "O", "c1cc2ccc3cccc4ccc(c1)c2c34"]:
+          "F/C=C/F", "F/C=C\\F", "C[N+](C)(C)C", "B1OC(C)(C)C(C)(C)O1", "O", "c1cc2ccc3cccc4ccc(c1)c2c34",
+          "[NH3]->[Pt](<-[NH3])(Cl)Cl", "Cl[Pd](Cl)(P(c1ccccc1)(c1ccccc1)c1ccccc1)P(c1ccccc1)(c1ccccc1)c1ccccc1",
+          "C[Mg](Br)(<-O1CCCC1)<-O1CCCC1", "[O+]#[C-]->[Ni](<-[C-]#[O+])(<-[C-]#[O+])<-[C-]#[O+]"]:
     want = pz.from_smiles(s).to_smiles()
     for ext in ("penz", "mol", "cdxml"):
         d = pz.from_smiles(s)
