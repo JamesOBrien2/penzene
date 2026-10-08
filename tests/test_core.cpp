@@ -2352,7 +2352,7 @@ TEST_CASE("eta recognition keeps real wildcard atoms and original drawing indice
 
 TEST_CASE("metal complexes keep their ligands' hydrogens through every format (#616)") {
     QFile f(QString(PENZENE_TEST_DATA) + "/metals.smi");
-    REQUIRE(f.open(QIODevice::ReadOnly));
+    REQUIRE(f.open(QIODevice::ReadOnly | QIODevice::Text));
     int read = 0;
     for (const QString& line : QString::fromUtf8(f.readAll()).split('\n', Qt::SkipEmptyParts)) {
         if (line.startsWith('#')) continue;
