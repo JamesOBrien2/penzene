@@ -2658,6 +2658,51 @@ TEST_CASE("metal corpus labels keep clear of one another (#618)") {
     }
 }
 
+TEST_CASE("bulky metal ligands and coordination lines keep clear (#618)") {
+    auto doc = chem::fromSmiles("Cl[Ru](Cl)(=Cc1ccccc1)([P](C2CCCCC2)(C2CCCCC2)C2CCCCC2)[P](C2CCCCC2)(C2CCCCC2)C2CCCCC2");
+    REQUIRE(doc);
+    for (const Document& d : {*doc, chem::clean2D(*doc)}) {
+        RDKit::RWMol cut;
+        for (const auto& a : d.atoms) cut.addAtom(new RDKit::Atom(a.z));
+        for (const auto& b : d.bonds)
+            if (b.a != 1 && b.b != 1) cut.addBond(b.a, b.b, RDKit::Bond::SINGLE);
+        std::vector<int> membership;
+        RDKit::MolOps::getMolFrags(cut, membership);
+        const auto labels = drawnLabels(d);
+        for (size_t i = 0; i < d.atoms.size(); ++i)
+            for (size_t j = i + 1; j < d.atoms.size(); ++j)
+                if (membership[i] != membership[j]) CHECK(len(d.atoms[i].pos - d.atoms[j].pos) >= 0.65 * kBondLength / 1.5);
+        for (size_t i = 0; i < d.bonds.size(); ++i) {
+            const auto& a = d.bonds[i];
+            const int af = membership[a.a == 1 ? a.b : a.a];
+            const QLineF line(d.atoms[a.a].pos, d.atoms[a.b].pos);
+            for (size_t j = i + 1; j < d.bonds.size(); ++j) {
+                const auto& b = d.bonds[j];
+                const int bf = membership[b.a == 1 ? b.b : b.a];
+                if (af == bf || a.a == b.a || a.a == b.b || a.b == b.a || a.b == b.b) continue;
+                CHECK(line.intersects(QLineF(d.atoms[b.a].pos, d.atoms[b.b].pos)) != QLineF::BoundedIntersection);
+            }
+            for (size_t j = 0; j < labels.size(); ++j) {
+                if (membership[j] == af || j == 1 || labels[j].isEmpty()) continue;
+                const QRectF& box = labels[j];
+                CHECK_FALSE(box.contains(line.p1()));
+                CHECK_FALSE(box.contains(line.p2()));
+                for (const auto& edge : {QLineF(box.topLeft(), box.topRight()), QLineF(box.topRight(), box.bottomRight()),
+                                         QLineF(box.bottomRight(), box.bottomLeft()), QLineF(box.bottomLeft(), box.topLeft())})
+                    CHECK(line.intersects(edge) != QLineF::BoundedIntersection);
+            }
+        }
+    }
+    QFile f(QString(PENZENE_TEST_DATA) + "/metal2d-readme.smi");
+    REQUIRE(f.open(QIODevice::ReadOnly | QIODevice::Text));
+    auto crowded = chem::fromSmiles(f.readLine().split('\t')[0].toStdString());
+    REQUIRE(crowded);
+    crowded->labelRatio = 1.4;  // also cover fonts wider than the local platform's
+    const auto labels = drawnLabels(chem::clean2D(*crowded));
+    for (size_t i = 0; i < labels.size(); ++i)
+        for (size_t j = i + 1; j < labels.size(); ++j) CHECK_FALSE(labels[i].intersects(labels[j]));
+}
+
 TEST_CASE("metal2d README examples and the polynuclear fallback (#618)") {
     QFile f(QString(PENZENE_TEST_DATA) + "/metal2d-readme.smi");
     REQUIRE(f.open(QIODevice::ReadOnly | QIODevice::Text));

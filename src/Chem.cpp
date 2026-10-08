@@ -668,7 +668,7 @@ static bool coordinationLayout(RWMol& mol, const RDKit::Conformer* before, const
         if (best.empty()) continue;  // an incomplete or unsupported tag keeps RDKit's depiction
         std::set<int> ligands;
         for (int donor : donors) ligands.insert(membership[donor]);
-        auto place = [&](double radius) {
+        auto place = [&](double radius, double ligandScale) {
             mol.getConformer().setAtomPos(metal, {0, 0, 0});
             for (int f : ligands) {
                 RWMol ligand(*fragments[f]);
@@ -680,9 +680,9 @@ static bool coordinationLayout(RWMol& mol, const RDKit::Conformer* before, const
                 for (int i = 0; i < n; ++i) {
                     if (membership[donors[i]] != f) continue;
                     const int local = int(std::find(mapping[f].begin(), mapping[f].end(), donors[i]) - mapping[f].begin());
-                    const QPointF target = sites[best[i]] * radius;
+                    const QPointF target = sites[best[i]] * (radius / ligandScale);
                     if (attachments[i].size() == 1) constraints[local] = RDGeom::Point2D(target.x(), target.y());
-                    else eta = attachments[i], etaTarget = sites[best[i]] * (radius + 0.75);
+                    else eta = attachments[i], etaTarget = sites[best[i]] * ((radius + 0.75) / ligandScale);
                     outward += sites[best[i]];
                 }
                 RDDepict::Compute2DCoordParameters params;
@@ -691,6 +691,9 @@ static bool coordinationLayout(RWMol& mol, const RDKit::Conformer* before, const
                 if (constraints.size() > 1) params.coordMap = &constraints;
                 RDDepict::compute2DCoords(ligand, params);
                 auto& conf = ligand.getConformer();
+                for (unsigned i = 0; i < ligand.getNumAtoms(); ++i) conf.getAtomPos(i) *= ligandScale;
+                for (auto& [i, p] : constraints) p *= ligandScale;
+                etaTarget *= ligandScale;
                 if (!eta.empty()) {
                     RDGeom::Point3D centroid;
                     for (int donor : eta) {
@@ -703,11 +706,8 @@ static bool coordinationLayout(RWMol& mol, const RDKit::Conformer* before, const
                 } else if (constraints.size() == 1) {
                     const auto [donor, target] = *constraints.begin();
                     const auto origin = conf.getAtomPos(donor);
-                    QPointF direction;
-                    for (const auto* a : ligand.atomNeighbors(ligand.getAtomWithIdx(donor))) {
-                        const auto v = conf.getAtomPos(a->getIdx()) - origin;
-                        direction += QPointF(v.x, v.y);
-                    }
+                    const QPointF inward = fromRDKit(ligand, kScale).awayDirection(donor);
+                    const QPointF direction(-inward.x(), inward.y());
                     const double rotation = std::atan2(outward.y(), outward.x()) - std::atan2(direction.y(), direction.x());
                     for (unsigned i = 0; i < ligand.getNumAtoms(); ++i) {
                         const auto v = conf.getAtomPos(i) - origin;
@@ -735,16 +735,53 @@ static bool coordinationLayout(RWMol& mol, const RDKit::Conformer* before, const
         };
         // Increase the coordination sphere, leaving ligand depiction to RDKit.
         // ponytail: cap retries at 20 Å; exceptionally large chelates need a geometry optimizer.
+        double ligandScale = 1;
         for (double radius = 1.5; ; radius += 0.25) {
-            place(radius);
+            place(radius, ligandScale);
             const auto boxes = layoutLabels(mol, drawing);
-            bool collision = false;
+            bool collision = false, crowdedLigand = false;
             for (size_t i = 0; i < component.size(); ++i)
                 for (size_t j = i + 1; j < component.size(); ++j) {
                     const int a = component[i], b = component[j];
-                    if (membership[a] != membership[b] && boxes[a].adjusted(-0.1, -0.1, 0.1, 0.1).intersects(boxes[b])) collision = true;
+                    if (membership[a] == membership[b]) {
+                        if (boxes[a].adjusted(-0.1, -0.1, 0.1, 0.1).intersects(boxes[b]) &&
+                            (!mol.getBondBetweenAtoms(metal, a) || !mol.getBondBetweenAtoms(metal, b))) crowdedLigand = true;
+                        continue;
+                    }
+                    if (boxes[a].adjusted(-0.1, -0.1, 0.1, 0.1).intersects(boxes[b]) ||
+                        (mol.getConformer().getAtomPos(a) - mol.getConformer().getAtomPos(b)).length() < 0.65)
+                        collision = true;
                 }
-            if (!collision || radius >= 20) break;
+            auto point = [&](unsigned i) {
+                const auto& p = mol.getConformer().getAtomPos(i);
+                return QPointF(p.x, p.y);
+            };
+            for (const auto* a : mol.bonds()) {
+                const int af = membership[a->getBeginAtomIdx() == unsigned(metal) ? a->getEndAtomIdx() : a->getBeginAtomIdx()];
+                if (!ligands.contains(af)) continue;
+                const QLineF line(point(a->getBeginAtomIdx()), point(a->getEndAtomIdx()));
+                const QLineF drawn(QPointF(line.x1(), -line.y1()), QPointF(line.x2(), -line.y2()));
+                for (int atom : component) {
+                    if (membership[atom] == af || atom == metal || boxes[atom].isEmpty()) continue;
+                    const QRectF box = boxes[atom].adjusted(-0.1, -0.1, 0.1, 0.1);
+                    if (box.contains(drawn.p1()) || box.contains(drawn.p2())) collision = true;
+                    for (const auto& edge : {QLineF(box.topLeft(), box.topRight()), QLineF(box.topRight(), box.bottomRight()),
+                                             QLineF(box.bottomRight(), box.bottomLeft()), QLineF(box.bottomLeft(), box.topLeft())})
+                        if (drawn.intersects(edge) == QLineF::BoundedIntersection) collision = true;
+                }
+                for (const auto* b : mol.bonds()) {
+                    if (a->getIdx() >= b->getIdx()) continue;
+                    const int bf = membership[b->getBeginAtomIdx() == unsigned(metal) ? b->getEndAtomIdx() : b->getBeginAtomIdx()];
+                    if (!ligands.contains(bf) || af == bf ||
+                        a->getBeginAtomIdx() == b->getBeginAtomIdx() || a->getBeginAtomIdx() == b->getEndAtomIdx() ||
+                        a->getEndAtomIdx() == b->getBeginAtomIdx() || a->getEndAtomIdx() == b->getEndAtomIdx()) continue;
+                    if (QLineF(point(a->getBeginAtomIdx()), point(a->getEndAtomIdx())).intersects(
+                            QLineF(point(b->getBeginAtomIdx()), point(b->getEndAtomIdx()))) == QLineF::BoundedIntersection)
+                        collision = true;
+                }
+            }
+            if ((!collision && !crowdedLigand) || radius >= 20) break;
+            if (crowdedLigand) ligandScale += 0.1;
         }
         if (n == 6)
             for (int i = 0; i < n; ++i)
