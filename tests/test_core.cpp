@@ -3,6 +3,10 @@
 #include "Edit.h"
 #include "Render.h"
 
+#include <GraphMol/SmilesParse/SmilesParse.h>
+#include <GraphMol/Depictor/RDDepictor.h>
+#include <GraphMol/MolOps.h>
+
 #include <QDir>
 #include <QFile>
 #include <QImage>
@@ -2664,13 +2668,25 @@ TEST_CASE("metal2d README examples and the polynuclear fallback (#618)") {
         REQUIRE(doc);
         const int metals = int(std::count_if(doc->atoms.begin(), doc->atoms.end(), [](const Atom& a) { return chem::isMetal(a.z); }));
         if (metals > 1) {
-            QFile baseline(QString(PENZENE_TEST_DATA) + "/penz/" + cols[1] + ".penz");
-            REQUIRE(baseline.open(QIODevice::ReadOnly));
-            const auto old = Document::fromJson(baseline.readAll());
-            REQUIRE(old);
-            REQUIRE(old->atoms.size() == doc->atoms.size());
-            for (size_t i = 0; i < old->atoms.size(); ++i)
-                CHECK(len(old->atoms[i].pos - doc->atoms[i].pos) < 1e-5);
+            // The fallback remains the platform's native depictor, whose CoordGen layouts vary across platforms.
+            std::unique_ptr<RDKit::RWMol> native(RDKit::SmilesToMol(cols[0].toStdString()));
+            REQUIRE(native);
+            const auto& rings = native->getRingInfo()->atomRings();
+            RDDepict::Compute2DCoordParameters params;
+            params.canonOrient = true;
+            params.useRingTemplates = true;
+            params.forceRDKit = std::none_of(rings.begin(), rings.end(), [](const auto& r) { return r.size() >= 9; });
+            RDDepict::compute2DCoords(*native, params);
+            const auto& conf = native->getConformer();
+            double sum = 0;
+            for (const auto* bond : native->bonds())
+                sum += (conf.getAtomPos(bond->getBeginAtomIdx()) - conf.getAtomPos(bond->getEndAtomIdx())).length();
+            const double scale = kBondLength * native->getNumBonds() / sum;
+            REQUIRE(native->getNumAtoms() == doc->atoms.size());
+            for (size_t i = 0; i < doc->atoms.size(); ++i) {
+                const auto& p = conf.getAtomPos(i);
+                CHECK(len(QPointF(p.x * scale, -p.y * scale) - doc->atoms[i].pos) < 1e-5);
+            }
         } else {
             for (const Document& d : {*doc, chem::clean2D(*doc)}) {
                 const auto boxes = drawnLabels(d);
