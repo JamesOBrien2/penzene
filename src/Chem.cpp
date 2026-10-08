@@ -39,6 +39,8 @@
 #include <QHash>
 #include <QObject>
 #include <QPolygonF>
+#include <QPicture>
+#include <QPainter>
 #include <QRegularExpression>
 #include <QLineF>
 #include <QSet>
@@ -378,14 +380,9 @@ static void coordinate(RWMol& mol) {
     }
     for (auto [donor, metal] : dative) {
         auto* b = mol.getBondBetweenAtoms(donor, metal);
-        if (b->getBeginAtomIdx() != donor) {  // a dative bond points from its donor
-            const auto dir = b->getBondDir();
-            mol.removeBond(metal, donor);
-            mol.addBond(donor, metal, RDKit::Bond::DATIVE);
-            mol.getBondBetweenAtoms(donor, metal)->setBondDir(dir);
-        } else {
-            b->setBondType(RDKit::Bond::DATIVE);
-        }
+        // Reverse in place: a tagged metal's neighbour order is part of its stereochemistry.
+        b->setBeginAtomIdx(donor), b->setEndAtomIdx(metal);
+        b->setBondType(RDKit::Bond::DATIVE);
     }
 }
 
@@ -557,8 +554,213 @@ static bool forCoordGen(RWMol& mol) {
     return RDKit::SubstructMatch(mol, *peptideBond).size() >= 2;  // a tripeptide or longer
 }
 
+static Document fromRDKit(RWMol& mol, double scale);
+
+static std::vector<QRectF> layoutLabels(const RWMol& mol, const Document* drawing = nullptr) {
+    RWMol copy(mol);
+    Document doc = fromRDKit(copy, kScale);
+    if (drawing) doc.style = drawing->style, doc.labelRatio = drawing->labelRatio;
+    QPicture picture;
+    QPainter painter(&picture);
+    std::vector<QRectF> labels(doc.atoms.size());
+    paintDocument(painter, doc, {Qt::black, Qt::black, 0, &labels});
+    for (auto& box : labels) box = QRectF(box.topLeft() / kScale, box.size() / kScale);
+    return labels;
+}
+
+// The organic depictor owns each ligand; only its attachment to the metal is constrained.
+static bool coordinationLayout(RWMol& mol, const RDKit::Conformer* before, const Document* drawing) {
+    std::vector<std::vector<int>> components;
+    RDKit::MolOps::getMolFrags(mol, components);
+    bool changed = false;
+    for (const auto& component : components) {
+        int metal = -1, metals = 0;
+        for (int i : component)
+            if (isMetal(mol.getAtomWithIdx(i)->getAtomicNum())) metal = i, ++metals;
+        if (metals != 1) continue;  // retain the polynuclear and eta-centroid paths
+        const auto* center = mol.getAtomWithIdx(metal);
+        std::vector<int> donors;
+        bool barePoint = false;
+        for (const auto* a : mol.atomNeighbors(center)) {
+            donors.push_back(a->getIdx());
+            barePoint |= !a->getAtomicNum() && !a->hasProp(RDKit::common_properties::molFileAlias);
+        }
+        if (barePoint || donors.size() < 2) continue;
+        RWMol cut(mol);
+        for (int donor : donors) cut.removeBond(metal, donor);
+        std::vector<int> membership;
+        std::vector<std::vector<int>> mapping;
+        std::vector<std::unique_ptr<RDKit::ROMol>> fragments;
+        RDKit::MolOps::getMolFrags(cut, fragments, false, &membership, &mapping, false);
+        RDKit::MolOps::fastFindRings(cut);
+        std::vector<std::vector<int>> attachments;
+        std::set<int> grouped;
+        for (int donor : donors) {
+            if (grouped.contains(donor)) continue;
+            std::vector<int> eta;
+            for (int other : donors)
+                if (membership[donor] == membership[other] && mol.getAtomWithIdx(other)->getAtomicNum() == 6)
+                    eta.push_back(other);
+            const auto& rings = cut.getRingInfo()->atomRings();
+            const bool ring = std::any_of(rings.begin(), rings.end(), [&](const auto& r) {
+                return (r.size() == 5 || r.size() == 6) && std::all_of(eta.begin(), eta.end(), [&](int i) {
+                    return std::find(r.begin(), r.end(), i) != r.end();
+                });
+            });
+            if (ring && eta.size() >= 3 && eta.size() == size_t(std::count_if(donors.begin(), donors.end(), [&](int other) {
+                    return membership[other] == membership[donor];
+                }))) {
+                attachments.push_back(eta);  // an eta-bound ring uses its centre as one site
+                grouped.insert(eta.begin(), eta.end());
+            } else {
+                attachments.push_back({donor});
+            }
+        }
+        donors.clear();
+        for (const auto& group : attachments) donors.push_back(group[0]);
+        const int n = int(donors.size());
+        if (n < 2 || n > 6) continue;
+        std::vector<QPointF> sites;
+        if (n == 2) sites = {{1, 0}, {-1, 0}};
+        if (n == 3) sites = {{1, 0}, {-0.5, std::sqrt(3.0) / 2}, {-0.5, -std::sqrt(3.0) / 2}};
+        if (n == 4) sites = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}};
+        if (n == 5) sites = {{1, 0}, {-0.5, std::sqrt(3.0) / 2}, {-0.5, -std::sqrt(3.0) / 2}, {0, 1}, {0, -1}};
+        if (n == 6) sites = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}, unit(QPointF(1, 1)), unit(QPointF(-1, -1))};
+        auto idealAngle = [&](int a, int b) {
+            if (n == 5) return a < 3 && b < 3 ? 120.0 : a >= 3 && b >= 3 ? 180.0 : 90.0;
+            if (n == 6) return (a < 4 && b < 4 && std::abs(a - b) == 2) || (a >= 4 && b >= 4) ? 180.0 : 90.0;
+            return qRadiansToDegrees(std::acos(std::clamp(QPointF::dotProduct(sites[a], sites[b]), -1.0, 1.0)));
+        };
+        std::vector<int> permutation(n), best;
+        std::iota(permutation.begin(), permutation.end(), 0);
+        double bestScore = 1e100;
+        const bool tagged = RDKit::Chirality::hasNonTetrahedralStereo(center);
+        // Canonical @SP1, @TB1 and @OH1 orders in the projected site convention.
+        const std::vector<int> order = n == 6 ? std::vector<int>{4, 0, 1, 2, 3, 5}
+                                       : n == 5 ? std::vector<int>{3, 0, 1, 2, 4}
+                                                : std::vector<int>{0, 1, 2, 3};
+        do {
+            if (tagged) {
+                RDKit::INT_LIST probe;
+                for (int site : order) {
+                    const auto at = std::find(permutation.begin(), permutation.end(), site);
+                    if (at != permutation.end()) probe.push_back(mol.getBondBetweenAtoms(metal, donors[at - permutation.begin()])->getIdx());
+                }
+                if (RDKit::Chirality::getChiralPermutation(center, probe) != 1) continue;
+            }
+            double score = 0;
+            for (int i = 0; i < n; ++i) {
+                if (before) {
+                    QPointF direction;
+                    for (int donor : attachments[i]) {
+                        const auto delta = before->getAtomPos(donor) - before->getAtomPos(metal);
+                        direction += QPointF(delta.x, delta.y);
+                    }
+                    score += 1 - QPointF::dotProduct(unit(direction), sites[permutation[i]]);
+                }
+                for (int j = 0; j < i; ++j) {
+                    const double angle = idealAngle(permutation[i], permutation[j]);
+                    if (membership[donors[i]] == membership[donors[j]] && angle > 120) score += 100;
+                }
+            }
+            if (score < bestScore - 1e-9) bestScore = score, best = permutation;
+        } while (std::next_permutation(permutation.begin(), permutation.end()));
+        if (best.empty()) continue;  // an incomplete or unsupported tag keeps RDKit's depiction
+        std::set<int> ligands;
+        for (int donor : donors) ligands.insert(membership[donor]);
+        auto place = [&](double radius) {
+            mol.getConformer().setAtomPos(metal, {0, 0, 0});
+            for (int f : ligands) {
+                RWMol ligand(*fragments[f]);
+                ligand.updatePropertyCache(false);
+                RDKit::MolOps::fastFindRings(ligand);
+                RDGeom::INT_POINT2D_MAP constraints;
+                std::vector<int> eta;
+                QPointF outward, etaTarget;
+                for (int i = 0; i < n; ++i) {
+                    if (membership[donors[i]] != f) continue;
+                    const int local = int(std::find(mapping[f].begin(), mapping[f].end(), donors[i]) - mapping[f].begin());
+                    const QPointF target = sites[best[i]] * radius;
+                    if (attachments[i].size() == 1) constraints[local] = RDGeom::Point2D(target.x(), target.y());
+                    else eta = attachments[i], etaTarget = sites[best[i]] * (radius + 0.75);
+                    outward += sites[best[i]];
+                }
+                RDDepict::Compute2DCoordParameters params;
+                params.forceRDKit = constraints.size() < 2;
+                params.useRingTemplates = constraints.size() < 2;
+                if (constraints.size() > 1) params.coordMap = &constraints;
+                RDDepict::compute2DCoords(ligand, params);
+                auto& conf = ligand.getConformer();
+                if (!eta.empty()) {
+                    RDGeom::Point3D centroid;
+                    for (int donor : eta) {
+                        const int local = int(std::find(mapping[f].begin(), mapping[f].end(), donor) - mapping[f].begin());
+                        centroid += conf.getAtomPos(local);
+                    }
+                    centroid /= double(eta.size());
+                    for (unsigned i = 0; i < ligand.getNumAtoms(); ++i)
+                        conf.getAtomPos(i) += RDGeom::Point3D(etaTarget.x(), etaTarget.y(), 0) - centroid;
+                } else if (constraints.size() == 1) {
+                    const auto [donor, target] = *constraints.begin();
+                    const auto origin = conf.getAtomPos(donor);
+                    QPointF direction;
+                    for (const auto* a : ligand.atomNeighbors(ligand.getAtomWithIdx(donor))) {
+                        const auto v = conf.getAtomPos(a->getIdx()) - origin;
+                        direction += QPointF(v.x, v.y);
+                    }
+                    const double rotation = std::atan2(outward.y(), outward.x()) - std::atan2(direction.y(), direction.x());
+                    for (unsigned i = 0; i < ligand.getNumAtoms(); ++i) {
+                        const auto v = conf.getAtomPos(i) - origin;
+                        conf.setAtomPos(i, {target.x + v.x * std::cos(rotation) - v.y * std::sin(rotation),
+                                           target.y + v.x * std::sin(rotation) + v.y * std::cos(rotation), 0});
+                    }
+                } else if (constraints.size() == 2) {
+                    const auto a = constraints.begin()->second, b = std::next(constraints.begin())->second;
+                    const QPointF middle((a.x + b.x) / 2, (a.y + b.y) / 2), axis = unit(QPointF(b.x - a.x, b.y - a.y));
+                    QPointF centroid;
+                    for (unsigned i = 0; i < ligand.getNumAtoms(); ++i) {
+                        const auto& p = conf.getAtomPos(i);
+                        centroid += QPointF(p.x, p.y) - middle;
+                    }
+                    if (QPointF::dotProduct(centroid, outward) < 0)
+                        for (unsigned i = 0; i < ligand.getNumAtoms(); ++i) {
+                            const auto p = conf.getAtomPos(i);
+                            const QPointF v = QPointF(p.x, p.y) - middle;
+                            const QPointF reflected = middle + 2 * QPointF::dotProduct(v, axis) * axis - v;
+                            conf.setAtomPos(i, {reflected.x(), reflected.y(), 0});
+                        }
+                }
+                for (size_t i = 0; i < mapping[f].size(); ++i) mol.getConformer().setAtomPos(mapping[f][i], conf.getAtomPos(i));
+            }
+        };
+        // Increase the coordination sphere, leaving ligand depiction to RDKit.
+        // ponytail: cap retries at 20 Å; exceptionally large chelates need a geometry optimizer.
+        for (double radius = 1.5; ; radius += 0.25) {
+            place(radius);
+            const auto boxes = layoutLabels(mol, drawing);
+            bool collision = false;
+            for (size_t i = 0; i < component.size(); ++i)
+                for (size_t j = i + 1; j < component.size(); ++j) {
+                    const int a = component[i], b = component[j];
+                    if (membership[a] != membership[b] && boxes[a].adjusted(-0.1, -0.1, 0.1, 0.1).intersects(boxes[b])) collision = true;
+                }
+            if (!collision || radius >= 20) break;
+        }
+        if (n == 6)
+            for (int i = 0; i < n; ++i)
+                if (best[i] >= 4) {
+                    auto* bond = mol.getBondBetweenAtoms(metal, donors[i]);
+                    bond->setProp("_penzeneAxial", best[i] == 4 ? 1 : -1);
+                }
+        changed = true;
+    }
+    return changed;
+}
+
 // RDKit's depictor with its ring templates, or CoordGen (through it) where that does better.
-static void layout(RWMol& mol) {
+static void layout(RWMol& mol, const Document* drawing = nullptr) {
+    std::optional<RDKit::Conformer> before;
+    if (drawing && mol.getNumConformers()) before = mol.getConformer();
     RDDepict::Compute2DCoordParameters params;
     params.canonOrient = true;
     params.useRingTemplates = true;
@@ -579,29 +781,23 @@ static void layout(RWMol& mol) {
         mol.clearConformers();
         mol.addConformer(conf, true);
     }
+    if (coordinationLayout(mol, before ? &*before : nullptr, drawing)) mol.setProp("_penzeneLayoutScale", kScale);
     // RDKit packs separate fragments by their atoms alone, so the labels of ions and small
     // molecules run into each other (Na⁺Cl⁻, 3 H₂O): line them up left to right instead.
     std::vector<std::vector<int>> frags;
     if (RDKit::MolOps::getMolFrags(mol, frags) < 2) return;
     auto& conf = mol.getConformer();
+    const auto labels = layoutLabels(mol, drawing);
     double x = 0;
     for (const auto& f : frags) {  // in SMILES order
-        double lo = 1e9, hi = -1e9, top = 1e9, bottom = -1e9;
+        QRectF bounds;
         for (int i : f) {
-            const auto* a = mol.getAtomWithIdx(i);
             const auto& p = conf.getAtomPos(i);
-            // A label's extent guessed at 0.65 Å a character, its first letter centred on the atom.
-            int chars = 0;
-            if (a->getAtomicNum() != 6 || a->getFormalCharge() || !a->getDegree()) {
-                const int h = int(a->getTotalNumHs()), q = std::abs(a->getFormalCharge());
-                chars = int(a->getSymbol().size()) + (h ? 1 + (h > 1) : 0) + (q ? 1 + (q > 1) : 0);
-            }
-            lo = std::min(lo, p.x - (chars ? 0.35 : 0));
-            hi = std::max(hi, p.x + (chars ? 0.65 * chars - 0.3 : 0));
-            top = std::min(top, p.y), bottom = std::max(bottom, p.y);
+            bounds |= labels[i].isEmpty() ? QRectF(p.x - 0.1, p.y - 0.1, 0.2, 0.2)
+                                         : QRectF(labels[i].x(), -labels[i].bottom(), labels[i].width(), labels[i].height());
         }
-        for (int i : f) conf.getAtomPos(i) += RDGeom::Point3D(x - lo, -(top + bottom) / 2, 0);
-        x += hi - lo + 0.6;
+        for (int i : f) conf.getAtomPos(i) += RDGeom::Point3D(x - bounds.left(), -bounds.center().y(), 0);
+        x += bounds.width() + 0.6;
     }
 }
 
@@ -612,6 +808,7 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
     } catch (...) {
     }
     const auto& conf = mol.getConformer();
+    if (!scale) mol.getPropIfPresent("_penzeneLayoutScale", scale);
     if (!scale) {
         double sum = 0;
         for (const auto* b : mol.bonds())
@@ -670,6 +867,11 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
             if (!isMetal(b->getEndAtom()->getAtomicNum())) out.stereo = BondStereo::Dative;
             else if (const unsigned h = b->getBeginAtom()->getTotalNumHs()) doc.atoms[out.a].hydrogens = int(h);
         }
+        int axial = 0;
+        if (b->getPropIfPresent("_penzeneAxial", axial)) {
+            if (!isMetal(doc.atoms[out.a].z)) std::swap(out.a, out.b);
+            out.stereo = axial > 0 ? BondStereo::Wedge : BondStereo::Hash;
+        }
         doc.bonds.push_back(out);
         std::string pts;  // a position variation bond: "(n i j …)", 1-based, from its dummy atom
         const int dummy = mol.getAtomWithIdx(out.a)->getAtomicNum() == 0 ? out.a : out.b;
@@ -716,9 +918,10 @@ std::optional<Document> fromSmiles(const std::string& smiles) {
         }
     }
     if (!mol) return std::nullopt;
-    layout(*mol);
+    const bool supplied = mol->getNumConformers() > 0;
+    if (!supplied) layout(*mol);
     RDKit::Chirality::wedgeMolBonds(*mol, &mol->getConformer());
-    return fromRDKit(*mol);
+    return fromRDKit(*mol, supplied ? kScale : 0);
 }
 
 std::optional<Document> fromSequence(const QString& sequence) {
@@ -2258,7 +2461,13 @@ static Document cleanFragment(const Document& doc) {
     // crowded atom squeezes the depictor's layout (#85).
     auto mol = drawingMol(doc, false);
     perceive(*mol, false);  // keeps the drawn Kekulé form (#322)
-    layout(*mol);
+    for (const auto& b : doc.bonds)
+        if (b.stereo == BondStereo::Interaction && (isMetal(doc.atoms[b.a].z) || isMetal(doc.atoms[b.b].z))) {
+            const int metal = isMetal(doc.atoms[b.a].z) ? b.a : b.b, donor = metal == b.a ? b.b : b.a;
+            mol->addBond(donor, metal, RDKit::Bond::DATIVE);
+        }
+    mol->updatePropertyCache(false);
+    layout(*mol, &doc);
     RDKit::Chirality::wedgeMolBonds(*mol, &mol->getConformer());
     Document out = fromRDKit(*mol);
 
@@ -2319,6 +2528,7 @@ Document clean2D(const Document& doc, const std::vector<int>& only) {
                 const bool styled = was.stereo == BondStereo::Bold || was.stereo == BondStereo::Dashed ||
                                     was.stereo == BondStereo::Partial;
                 if (styled && b.stereo == BondStereo::None) b.stereo = was.stereo;
+                if (was.stereo == BondStereo::Dative) b.a = was.a, b.b = was.b, b.stereo = was.stereo;
                 if (b.order == 2 && was.order == 2) b.position = was.position;
                 b.color = was.color;
             }
