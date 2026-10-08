@@ -3,6 +3,10 @@
 #include "Edit.h"
 #include "Render.h"
 
+#include <GraphMol/SmilesParse/SmilesParse.h>
+#include <GraphMol/Depictor/RDDepictor.h>
+#include <GraphMol/MolOps.h>
+
 #include <QDir>
 #include <QFile>
 #include <QImage>
@@ -2552,4 +2556,191 @@ TEST_CASE("CDXML interaction bonds keep their drawing and hydrogen semantics (#6
     CHECK(roundtrip->bonds[0].stereo == BondStereo::Interaction);
     CHECK(chem::atomInfo(*roundtrip)[1].hydrogens == 3);
     CHECK(chem::properties(*roundtrip)->formula == "H3NPt");
+}
+
+
+static std::vector<QRectF> drawnLabels(const Document& doc) {
+    QImage image(1, 1, QImage::Format_ARGB32);
+    QPainter p(&image);
+    std::vector<QRectF> labels(doc.atoms.size());
+    paintDocument(p, doc, {Qt::black, Qt::black, 0, &labels});
+    return labels;
+}
+
+TEST_CASE("metal coordination sites and Clean keep the drawing's topology (#618)") {
+    auto angle = [](const Document& d, int m, int a, int b) {
+        const auto u = unit(d.atoms[a].pos - d.atoms[m].pos), v = unit(d.atoms[b].pos - d.atoms[m].pos);
+        return qRadiansToDegrees(std::acos(std::clamp(QPointF::dotProduct(u, v), -1.0, 1.0)));
+    };
+    SECTION("cisplatin's ammines occupy adjacent square-planar sites") {
+        auto d = chem::fromSmiles("[NH3]->[Pt](<-[NH3])(Cl)Cl");
+        REQUIRE(d);
+        CHECK(angle(*d, 1, 0, 2) == Catch::Approx(90).margin(2));
+        CHECK(angle(chem::clean2D(*d), 1, 0, 2) == Catch::Approx(90).margin(2));
+    }
+    SECTION("interaction bonds are layout connections and keep their drawing and chemistry") {
+        Document d;
+        d.addAtom({20, 30}, 78);
+        for (QPointF v : {QPointF(1, 0), QPointF(0, 1), QPointF(-1, 0), QPointF(0, -1)}) {
+            d.addAtom(QPointF(20, 30) + v * kBondLength, 7);
+            d.atoms.back().hydrogens = 3;
+            d.bonds.push_back({0, int(d.atoms.size()) - 1, 1, BondStereo::Interaction});
+        }
+        const auto smiles = chem::toSmiles(d);
+        const Document clean = chem::clean2D(d);
+        REQUIRE(clean.bonds.size() == 4);
+        for (const auto& b : clean.bonds) {
+            CHECK(b.stereo == BondStereo::Interaction);
+            CHECK(len(clean.atoms[b.a].pos - clean.atoms[b.b].pos) == Catch::Approx(kBondLength).margin(0.5));
+        }
+        CHECK(chem::toSmiles(clean) == smiles);
+        CHECK(angle(clean, 0, 1, 3) == Catch::Approx(180).margin(2));
+    }
+    SECTION("tagged square planar cis and trans survive Clean") {
+        for (const auto& [smi, expected] : std::vector<std::pair<std::string, double>>{
+                 {"Cl[Pt@SP1](Cl)([NH3])[NH3]", 90}, {"Cl[Pt@SP2](Cl)([NH3])[NH3]", 180},
+                 {"Cl[Pt@SP1]([NH3])([OH2])Br", 90}}) {
+            auto d = chem::fromSmiles(smi);
+            REQUIRE(d);
+            CHECK(angle(*d, 1, 0, 2) == Catch::Approx(expected).margin(2));
+            CHECK(angle(chem::clean2D(*d), 1, 0, 2) == Catch::Approx(expected).margin(2));
+        }
+    }
+    SECTION("tagged trigonal-bipyramidal and octahedral axial pairs survive Clean") {
+        for (const char* smi : {"[Cl-]->[Fe@TB1](<-[NH3])(<-[OH2])(<-P(C)(C)C)<-[Br-]",
+                               "[Cl-]->[Co@OH1](<-[NH3])(<-[OH2])(<-P(C)(C)C)(F)Br"}) {
+            auto d = chem::fromSmiles(smi);
+            REQUIRE(d);
+            const int bromine = int(std::find_if(d->atoms.begin(), d->atoms.end(), [](const Atom& a) { return a.z == 35; }) - d->atoms.begin());
+            CHECK(angle(*d, 1, 0, bromine) == Catch::Approx(180).margin(2));
+            CHECK(angle(chem::clean2D(*d), 1, 0, bromine) == Catch::Approx(180).margin(2));
+        }
+    }
+    SECTION("CX coordinates keep their supplied scale and orientation") {
+        auto d = chem::fromSmiles("[NH3]->[Pt]<-[NH3] |(0,0,;2,0,;2,3,)|");
+        REQUIRE(d);
+        CHECK(d->atoms[0].pos == QPointF(0, 0));
+        CHECK(d->atoms[1].pos.x() == Catch::Approx(2 * kBondLength / 1.5));
+        CHECK(d->atoms[2].pos.y() == Catch::Approx(-3 * kBondLength / 1.5));
+    }
+    SECTION("octahedral drawings include an axial wedge and hash") {
+        auto d = chem::fromSmiles("[NH3]->[Co+3](<-[NH3])(<-[NH3])(<-[NH3])(<-[NH3])<-[NH3]");
+        REQUIRE(d);
+        int wedges = 0, hashes = 0;
+        for (const auto& b : d->bonds) wedges += b.stereo == BondStereo::Wedge, hashes += b.stereo == BondStereo::Hash;
+        CHECK(wedges == 1);
+        CHECK(hashes == 1);
+        d->style = "RSC";
+        d->labelRatio = 1.5;
+        const auto labels = drawnLabels(chem::clean2D(*d));
+        for (size_t i = 0; i < labels.size(); ++i)
+            for (size_t j = i + 1; j < labels.size(); ++j) CHECK_FALSE(labels[i].intersects(labels[j]));
+    }
+}
+
+TEST_CASE("metal corpus labels keep clear of one another (#618)") {
+    QFile f(QString(PENZENE_TEST_DATA) + "/metals.smi");
+    REQUIRE(f.open(QIODevice::ReadOnly | QIODevice::Text));
+    for (const auto& line : QString::fromUtf8(f.readAll()).split('\n', Qt::SkipEmptyParts)) {
+        if (line.startsWith('#')) continue;
+        const auto cols = line.split('\t');
+        INFO(cols[1].toStdString());
+        auto doc = chem::fromSmiles(cols[0].toStdString());
+        REQUIRE(doc);
+        for (const Document& d : {*doc, chem::clean2D(*doc)}) {
+            auto boxes = drawnLabels(d);
+            for (size_t i = 0; i < boxes.size(); ++i)
+                for (size_t j = i + 1; j < boxes.size(); ++j) {
+                    INFO(i << " " << j);
+                    CHECK_FALSE(boxes[i].intersects(boxes[j]));
+                }
+        }
+    }
+}
+
+TEST_CASE("bulky metal ligands and coordination lines keep clear (#618)") {
+    auto doc = chem::fromSmiles("Cl[Ru](Cl)(=Cc1ccccc1)([P](C2CCCCC2)(C2CCCCC2)C2CCCCC2)[P](C2CCCCC2)(C2CCCCC2)C2CCCCC2");
+    REQUIRE(doc);
+    for (const Document& d : {*doc, chem::clean2D(*doc)}) {
+        RDKit::RWMol cut;
+        for (const auto& a : d.atoms) cut.addAtom(new RDKit::Atom(a.z));
+        for (const auto& b : d.bonds)
+            if (b.a != 1 && b.b != 1) cut.addBond(b.a, b.b, RDKit::Bond::SINGLE);
+        std::vector<int> membership;
+        RDKit::MolOps::getMolFrags(cut, membership);
+        const auto labels = drawnLabels(d);
+        for (size_t i = 0; i < d.atoms.size(); ++i)
+            for (size_t j = i + 1; j < d.atoms.size(); ++j)
+                if (membership[i] != membership[j]) CHECK(len(d.atoms[i].pos - d.atoms[j].pos) >= 0.65 * kBondLength / 1.5);
+        for (size_t i = 0; i < d.bonds.size(); ++i) {
+            const auto& a = d.bonds[i];
+            const int af = membership[a.a == 1 ? a.b : a.a];
+            const QLineF line(d.atoms[a.a].pos, d.atoms[a.b].pos);
+            for (size_t j = i + 1; j < d.bonds.size(); ++j) {
+                const auto& b = d.bonds[j];
+                const int bf = membership[b.a == 1 ? b.b : b.a];
+                if (af == bf || a.a == b.a || a.a == b.b || a.b == b.a || a.b == b.b) continue;
+                CHECK(line.intersects(QLineF(d.atoms[b.a].pos, d.atoms[b.b].pos)) != QLineF::BoundedIntersection);
+            }
+            for (size_t j = 0; j < labels.size(); ++j) {
+                if (membership[j] == af || j == 1 || labels[j].isEmpty()) continue;
+                const QRectF& box = labels[j];
+                CHECK_FALSE(box.contains(line.p1()));
+                CHECK_FALSE(box.contains(line.p2()));
+                for (const auto& edge : {QLineF(box.topLeft(), box.topRight()), QLineF(box.topRight(), box.bottomRight()),
+                                         QLineF(box.bottomRight(), box.bottomLeft()), QLineF(box.bottomLeft(), box.topLeft())})
+                    CHECK(line.intersects(edge) != QLineF::BoundedIntersection);
+            }
+        }
+    }
+    QFile f(QString(PENZENE_TEST_DATA) + "/metal2d-readme.smi");
+    REQUIRE(f.open(QIODevice::ReadOnly | QIODevice::Text));
+    auto crowded = chem::fromSmiles(f.readLine().split('\t')[0].toStdString());
+    REQUIRE(crowded);
+    crowded->labelRatio = 1.4;  // also cover fonts wider than the local platform's
+    const auto labels = drawnLabels(chem::clean2D(*crowded));
+    for (size_t i = 0; i < labels.size(); ++i)
+        for (size_t j = i + 1; j < labels.size(); ++j) CHECK_FALSE(labels[i].intersects(labels[j]));
+}
+
+TEST_CASE("metal2d README examples and the polynuclear fallback (#618)") {
+    QFile f(QString(PENZENE_TEST_DATA) + "/metal2d-readme.smi");
+    REQUIRE(f.open(QIODevice::ReadOnly | QIODevice::Text));
+    for (const auto& line : QString::fromUtf8(f.readAll()).split('\n', Qt::SkipEmptyParts)) {
+        const auto cols = line.split('\t');
+        INFO(cols[1].toStdString());
+        auto doc = chem::fromSmiles(cols[0].toStdString());
+        REQUIRE(doc);
+        const int metals = int(std::count_if(doc->atoms.begin(), doc->atoms.end(), [](const Atom& a) { return chem::isMetal(a.z); }));
+        if (metals > 1) {
+            // The fallback remains the platform's native depictor, whose CoordGen layouts vary across platforms.
+            std::unique_ptr<RDKit::RWMol> native(RDKit::SmilesToMol(cols[0].toStdString()));
+            REQUIRE(native);
+            const auto& rings = native->getRingInfo()->atomRings();
+            RDDepict::Compute2DCoordParameters params;
+            params.canonOrient = true;
+            params.useRingTemplates = true;
+            params.forceRDKit = std::none_of(rings.begin(), rings.end(), [](const auto& r) { return r.size() >= 9; });
+            RDDepict::compute2DCoords(*native, params);
+            const auto& conf = native->getConformer();
+            double sum = 0;
+            for (const auto* bond : native->bonds())
+                sum += (conf.getAtomPos(bond->getBeginAtomIdx()) - conf.getAtomPos(bond->getEndAtomIdx())).length();
+            const double scale = kBondLength * native->getNumBonds() / sum;
+            REQUIRE(native->getNumAtoms() == doc->atoms.size());
+            for (size_t i = 0; i < doc->atoms.size(); ++i) {
+                const auto& p = conf.getAtomPos(i);
+                CHECK(len(QPointF(p.x * scale, -p.y * scale) - doc->atoms[i].pos) < 1e-5);
+            }
+        } else {
+            for (const Document& d : {*doc, chem::clean2D(*doc)}) {
+                const auto boxes = drawnLabels(d);
+                for (size_t i = 0; i < boxes.size(); ++i)
+                    for (size_t j = i + 1; j < boxes.size(); ++j) {
+                        INFO(i << " " << j);
+                        CHECK_FALSE(boxes[i].intersects(boxes[j]));
+                    }
+            }
+        }
+    }
 }
