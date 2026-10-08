@@ -65,6 +65,7 @@ std::string toRxn(const Reaction& r);                      // MDL Rxnfile (V2000
 std::string toRdf(const std::vector<Reaction>& steps);     // MDL RD file: one Rxnfile per step
 Document layoutReaction(const std::vector<Reaction>& steps);  // the steps left to right, as one scheme
 std::optional<Document> fromReactionSmiles(const std::string& smiles);
+bool isReactionSmiles(const std::string& smiles);  // has a reaction's >, not only dative bonds' ->
 std::optional<Document> fromRxn(const std::string& text);
 std::optional<Document> fromRdf(const std::string& text);
 // New layout, same atom order; each molecule keeps its centroid. With `only`,
@@ -147,6 +148,7 @@ QStringList abbreviations();
 // Replaces `atom` with the first atom of `smiles` (or an abbreviation) and lays
 // the rest out away from its bonds. New atoms are appended, so indices stay valid.
 bool attach(Document& doc, int atom, const std::string& smilesOrAbbreviation);
+bool isMetal(int z);  // alkali to bismuth, the d and f blocks: where a bond can be a dative one
 bool expandLabel(Document& doc, int atom);  // one label drawn out in full, a charged group keeping its charge (N3-)
 // R-group libraries (#432). A scaffold's R sites are atoms labelled R1, R2… (from SMILES [1*] or [*:1]).
 std::vector<int> rSites(const Document& doc);  // their numbers, sorted, each once

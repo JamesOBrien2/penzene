@@ -637,6 +637,7 @@ QString labelHotkey(const QString& key) {
 bool applyLabel(Document& doc, int at, const QString& label, bool anyText) {
     Atom& a = doc.atoms[at];
     if (label.trimmed() != a.label) a.standsFor.clear();  // a definition belongs to its label (#505)
+    a.hydrogens = -1;
     // Abbreviations first: in a drawing, Ac, Pr and Ts mean acetyl, propyl and
     // tosyl, not actinium, praseodymium and tennessine (#125).
     if (auto head = chem::abbreviationHead(label)) {
@@ -651,6 +652,22 @@ bool applyLabel(Document& doc, int at, const QString& label, bool anyText) {
     // "OH", "NH2": the element; hydrogens are implicit. A mass number before it is an
     // isotope ("13C", "18OH"); D and T are hydrogen-2 and -3. Gives {z, mass}, z 0 if not one.
     static const QRegularExpression element("^(\\d{0,3})([A-Z][a-z]?)(H\\d*)?$");
+    // Except on a ligand: bonded to a metal, NH3 and OH2 keep their hydrogens (they're ammine and
+    // aqua, not amide and hydroxide). H3N and H2O, written the way a ligand on the left reads, too.
+    static const QRegularExpression ligand("^(?:H(\\d*)([A-Z][a-z]?)|([A-Z][a-z]?)H(\\d*))$");
+    auto ligandOf = [&](const QString& text) {
+        const auto m = ligand.match(text.trimmed());
+        if (!m.hasMatch()) return false;
+        const auto nbs = doc.neighbors(at);
+        if (!std::any_of(nbs.begin(), nbs.end(), [&](int n) { return chem::isMetal(doc.atoms[n].z); })) return false;
+        const int z = chem::atomicNumber((m.captured(2) + m.captured(3)).toStdString());
+        const QString count = m.captured(1) + m.captured(4);
+        const int h = count.isEmpty() ? 1 : count.toInt();
+        if (z <= 1 || h > 8) return false;
+        a.z = z, a.isotope = 0, a.label.clear(), a.hydrogens = h;
+        return true;
+    };
+    if (ligandOf(label)) return true;
     auto elementOf = [](const QString& s) -> std::pair<int, int> {
         const auto m = element.match(s.trimmed());
         if (!m.hasMatch()) return {0, 0};
@@ -678,6 +695,10 @@ bool applyLabel(Document& doc, int at, const QString& label, bool anyText) {
         }
     auto m = metalIon.match(label);
     if (!m.hasMatch() || !elementOf(m.captured("base")).first) m = ion.match(label);
+    if (m.hasMatch() && ligandOf(m.captured("base"))) {
+        a.charge = charge(m);
+        return true;
+    }
     if (const auto [z, mass] = m.hasMatch() ? elementOf(m.captured("base")) : std::pair{0, 0}; z > 0) {
         a.z = z, a.isotope = mass, a.label.clear();
         a.charge = charge(m);
@@ -704,6 +725,7 @@ QString atomText(const Atom& a) {
     if (!a.label.isEmpty()) return a.label;
     if (a.z == 1 && (a.isotope == 2 || a.isotope == 3)) return a.isotope == 2 ? "D" : "T";
     const QString sym = QString::fromStdString(chem::symbol(a.z));
+    if (a.hydrogens >= 0) return sym + (a.hydrogens ? "H" : "") + (a.hydrogens > 1 ? QString::number(a.hydrogens) : "");  // NH3 on a metal
     return a.isotope ? QString::number(a.isotope) + sym : sym;
 }
 
@@ -788,6 +810,10 @@ Hotspot hotkey(Document& doc, Hotspot h, const QString& t) {
         b.stereo = t == "i" ? BondStereo::Interaction : BondStereo::Partial;
         b.order = t == "P" ? 2 : 1;
         b.position = BondPosition::Auto;
+    } else if (t == "k") {  // dative, from donor to acceptor; again flips which way it points
+        if (b.stereo == BondStereo::Dative) std::swap(b.a, b.b);
+        else if (chem::isMetal(doc.atoms[b.a].z) && !chem::isMetal(doc.atoms[b.b].z)) std::swap(b.a, b.b);  // to the metal
+        b.stereo = BondStereo::Dative, b.order = 1, b.position = BondPosition::Auto;
     } else if (t == "l" || t == "c" || t == "r") {
         if (b.order != 2) b.order = 2, b.stereo = BondStereo::None;
         b.position = t == "l" ? BondPosition::Left : t == "c" ? BondPosition::Centre : BondPosition::Right;

@@ -11,7 +11,7 @@
 #include <cmath>
 #include <numbers>
 
-static const char* kStereo[] = {"none", "wedge", "hash", "bold", "dashed", "wavy", "interaction", "partial"};
+static const char* kStereo[] = {"none", "wedge", "hash", "bold", "dashed", "wavy", "interaction", "partial", "dative"};
 static const char* kPosition[] = {"auto", "left", "centre", "right"};
 static const char* kArrow[] = {"reaction", "equilibrium", "resonance", "retro", "fishhook",
                                "line", "box", "roundedbox", "ellipse",
@@ -56,6 +56,7 @@ QByteArray Document::toJson() const {
             o["attachments"] = at;
         }
         if (a.group >= 0) o["group"] = a.group;
+        if (a.hydrogens >= 0) o["hydrogens"] = a.hydrogens;
         as.append(o);
     }
     for (const auto& b : bonds) {
@@ -204,6 +205,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         setStereoGroupTag(a, o["stereoGroup"].toString());
         a.standsFor = o["standsFor"].toString();
         a.group = std::max(-1, o["group"].toInt(-1));
+        a.hydrogens = std::clamp(o["hydrogens"].toInt(-1), -1, 8);
     }
     const int n = int(doc.atoms.size());
     for (int i = 0; i < n; ++i)

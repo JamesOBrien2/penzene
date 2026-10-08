@@ -1,0 +1,16 @@
+# SMILES	name	formula	hydrogens on each N, O or P bonded to a metal (symbol=count, sorted)
+[NH3]->[Pt](<-[NH3])(Cl)Cl	cisplatin	H6Cl2N2Pt	N=3,N=3
+[NH3][Pt+2]([NH3])([Cl-])[Cl-]	cisplatin-charged	H6Cl2N2Pt	N=3,N=3
+[NH3]->[Co+3](<-[NH3])(<-[NH3])(<-[NH3])(<-[NH3])<-[NH3]	hexaamminecobalt	H18CoN6+3	N=3,N=3,N=3,N=3,N=3,N=3
+Cl[Pd](Cl)(P(c1ccccc1)(c1ccccc1)c1ccccc1)P(c1ccccc1)(c1ccccc1)c1ccccc1	PdCl2(PPh3)2	C36H30Cl2P2Pd	P=0,P=0
+Cl[Ru](Cl)(=Cc1ccccc1)([P](C2CCCCC2)(C2CCCCC2)C2CCCCC2)[P](C2CCCCC2)(C2CCCCC2)C2CCCCC2	Grubbs-I	C43H72Cl2P2Ru	P=0,P=0
+Cl[Rh](P(c1ccccc1)(c1ccccc1)c1ccccc1)(P(c1ccccc1)(c1ccccc1)c1ccccc1)P(c1ccccc1)(c1ccccc1)c1ccccc1	Wilkinson	C54H45ClP3Rh	P=0,P=0,P=0
+Cl[Ir](<-[C-]#[O+])(P(c1ccccc1)(c1ccccc1)c1ccccc1)P(c1ccccc1)(c1ccccc1)c1ccccc1	Vaska	C37H30ClIrOP2	P=0,P=0
+[O+]#[C-]->[Ni](<-[C-]#[O+])(<-[C-]#[O+])<-[C-]#[O+]	Ni(CO)4	C4NiO4	
+[O+]#[C-]->[Fe](<-[C-]#[O+])(<-[C-]#[O+])(<-[C-]#[O+])<-[C-]#[O+]	Fe(CO)5	C5FeO5	
+CN(C)[Ti](N(C)C)(N(C)C)N(C)C	Ti(NMe2)4	C8H24N4Ti	N=0,N=0,N=0,N=0
+C[Mg]Br	MeMgBr	CH3BrMg	
+C[Mg](Br)(<-O1CCCC1)<-O1CCCC1	MeMgBr.2THF	C9H19BrMgO2	O=0,O=0
+C1=CC=C[CH-]1.C1=CC=C[CH-]1.[Fe+2]	ferrocene	C10H10Fe	
+[Cu+2].[O-]C(=O)CN(CC(=O)[O-])CCN(CC(=O)[O-])CC(=O)[O-]	Cu-EDTA	C10H12CuN2O8-2	
+NCCN->[Zn+2](<-NCCN)<-NCCN	Zn(en)3-partial	C6H24N6Zn+2	N=2,N=2,N=2

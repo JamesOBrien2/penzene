@@ -4,6 +4,8 @@
 
 #include <GraphMol/CIPLabeler/CIPLabeler.h>
 #include <GraphMol/Chirality.h>
+#include <GraphMol/ChemReactions/Reaction.h>
+#include <GraphMol/ChemReactions/ReactionParser.h>
 #include <GraphMol/FileParsers/CDXMLParser.h>
 #include <GraphMol/Depictor/RDDepictor.h>
 #include <GraphMol/DistGeomHelpers/Embedder.h>
@@ -69,6 +71,9 @@ static const QHash<QString, QString>& groups() {
         {"COOH", "C(=O)O"}, {"Bu", "CCCC"}, {"iBu", "CC(C)C"}, {"OEt", "OCC"}, {"NHBoc", "NC(=O)OC(C)(C)C"},
         {"NMe2", "N(C)C"}, {"SO3H", "S(=O)(=O)O"}, {"TIPS", "[Si](C(C)C)(C(C)C)C(C)C"}, {"MOM", "COC"},
         {"THP", "C1CCCCO1"},
+        // Ligands, bound through the first atom.
+        {"CO", "[C-]#[O+]"}, {"PPh3", "P(c1ccccc1)(c1ccccc1)c1ccccc1"}, {"PCy3", "P(C1CCCCC1)(C1CCCCC1)C1CCCCC1"},
+        {"PMe3", "P(C)(C)C"}, {"py", "n1ccccc1"}, {"THF", "O1CCCC1"}, {"MeCN", "N#CC"},
     };
     return g;
 }
@@ -208,7 +213,7 @@ Document projectionsAsWedges(const Document& in) {
     const double tol = std::sin(qDegreesToRadians(4.0));
     auto dir = [&](int from, int to) { return unit(doc.atoms[to].pos - doc.atoms[from].pos); };
     for (int i = 0; i < int(doc.atoms.size()); ++i) {
-        if (at[i].size() != 4) continue;
+        if (at[i].size() != 4 || isMetal(in.atoms[i].z)) continue;  // a square-planar metal is no projection
         const auto nbs = neighbors(in, at, i);
         if (nbs.size() != 4) continue;
         int horizontal = 0, vertical = 0;
@@ -330,6 +335,60 @@ static RDKit::Atom* queryAtom(const Atom& a) {
     return q;
 }
 
+bool isMetal(int z) {
+    switch (z) {
+    case 3: case 4: case 11: case 12: case 13: case 19: case 20: case 31: case 37: case 38: case 49: case 50:
+    case 55: case 56: case 81: case 82: case 83: return true;
+    default: return (z >= 21 && z <= 30) || (z >= 39 && z <= 48) || (z >= 57 && z <= 80) || z >= 87;
+    }
+}
+
+// A donor's usual number of bonds, counting a charged atom as the element it's
+// isoelectronic with (N+ as C, C- as N, Cl- as Ar); -1 for the rest.
+static int firstValence(int z, int charge) {
+    switch (z - charge) {
+    case 2: case 10: case 18: case 36: case 54: return 0;
+    case 1: case 9: case 17: case 35: case 53: return 1;
+    case 8: case 16: case 34: case 52: return 2;
+    case 5: case 7: case 15: case 33: case 51: return 3;
+    case 6: case 14: case 32: return 4;
+    default: return -1;
+    }
+}
+
+// Bonds to a metal that would give the donor more than its usual valence become
+// dative (donor -> metal), as IUPAC recommends: PPh3, NMe3, pyridine, THF, and an
+// NH3 or OH2 whose hydrogens were typed. A donor with a bond to spare keeps it
+// covalent (amide NMe2, alkyl, chloride), so the drawing means what it says.
+// RDKit's own cleanUpOrganometallics misses PR3, whose P(V) is a legal valence.
+static void coordinate(RWMol& mol) {
+    std::vector<std::pair<unsigned, unsigned>> dative;  // donor, metal
+    for (const auto* a : mol.atoms()) {
+        const int first = isMetal(a->getAtomicNum()) ? -1 : firstValence(a->getAtomicNum(), a->getFormalCharge());
+        if (first < 0) continue;
+        double v0 = a->getNumExplicitHs() + a->getNumRadicalElectrons();
+        std::vector<unsigned> metals;
+        for (const auto* b : mol.atomBonds(a)) {
+            const auto* other = b->getOtherAtom(a);
+            if (b->getBondType() == RDKit::Bond::SINGLE && isMetal(other->getAtomicNum())) metals.push_back(other->getIdx());
+            else if (b->getBondType() != RDKit::Bond::DATIVE) v0 += b->getBondTypeAsDouble();
+        }
+        const int excess = int(std::lround(v0)) + int(metals.size()) - first;
+        for (int k = 0; k < std::min(excess, int(metals.size())); ++k) dative.emplace_back(a->getIdx(), metals[k]);
+    }
+    for (auto [donor, metal] : dative) {
+        auto* b = mol.getBondBetweenAtoms(donor, metal);
+        if (b->getBeginAtomIdx() != donor) {  // a dative bond points from its donor
+            const auto dir = b->getBondDir();
+            mol.removeBond(metal, donor);
+            mol.addBond(donor, metal, RDKit::Bond::DATIVE);
+            mol.getBondBetweenAtoms(donor, metal)->setBondDir(dir);
+        } else {
+            b->setBondType(RDKit::Bond::DATIVE);
+        }
+    }
+}
+
 static std::unique_ptr<RWMol> drawingMol(const Document& in, bool expand = true) {
     const Document doc = projectionsAsWedges(expand ? expanded(in) : in);
     auto mol = std::make_unique<RWMol>();
@@ -339,6 +398,7 @@ static std::unique_ptr<RWMol> drawingMol(const Document& in, bool expand = true)
         RDKit::Atom* query = a.z == 0 && i < in.atoms.size() ? queryAtom(in.atoms[i]) : nullptr;
         auto* atom = query ? query : new RDKit::Atom(a.z);
         atom->setFormalCharge(a.charge);
+        if (a.hydrogens >= 0) atom->setNumExplicitHs(a.hydrogens), atom->setNoImplicit(true);
         atom->setNumRadicalElectrons(a.radicals);
         if (a.isotope && a.z > 0) atom->setIsotope(a.isotope);
         // Not setAtomMapNum: it logs through rdErrorLog, which the Windows DLL doesn't export.
@@ -364,9 +424,10 @@ static std::unique_ptr<RWMol> drawingMol(const Document& in, bool expand = true)
     for (const auto& b : doc.bonds) {
         const int order = chemicalOrder(b);
         if (order < 1) continue;  // drawn only
-        auto type = order == 2 ? RDKit::Bond::DOUBLE
-                    : order == 3 ? RDKit::Bond::TRIPLE
-                                 : RDKit::Bond::SINGLE;
+        auto type = b.stereo == BondStereo::Dative ? RDKit::Bond::DATIVE
+                    : order == 2                   ? RDKit::Bond::DOUBLE
+                    : order == 3                   ? RDKit::Bond::TRIPLE
+                                                   : RDKit::Bond::SINGLE;
         mol->addBond(b.a, b.b, type);
         if (b.stereo == BondStereo::Wedge || b.stereo == BondStereo::Hash || b.stereo == BondStereo::Wavy) {
             auto* bond = mol->getBondBetweenAtoms(b.a, b.b);
@@ -405,6 +466,7 @@ static std::unique_ptr<RWMol> drawingMol(const Document& in, bool expand = true)
     mol->setStereoGroups(std::move(stereoGroups));
     conf->set3D(false);
     mol->addConformer(conf, true);
+    coordinate(*mol);
     return mol;
 }
 
@@ -428,11 +490,7 @@ static std::vector<HapticLigand> hapticLigands(const Document& doc) {
         if (point.z != 0 || point.charge || point.radicals || point.isotope || point.map || !point.label.isEmpty() ||
             !point.standsFor.isEmpty() || !point.attachments.empty() || at[i].size() != 1) continue;
         const int metal = neighbors(doc, at, i)[0], z = doc.atoms[metal].z;
-        const bool isMetal = z == 3 || z == 4 || z == 11 || z == 12 || z == 13 || z == 19 || z == 20 ||
-                             z == 31 || z == 37 || z == 38 || z == 49 || z == 50 || z == 55 || z == 56 ||
-                             z == 81 || z == 82 || z == 83 || (z >= 21 && z <= 30) || (z >= 39 && z <= 48) ||
-                             (z >= 57 && z <= 80) || z >= 87;
-        if (!isMetal) continue;
+        if (!isMetal(z)) continue;
         for (const auto& ring : cycles) {
             if ((ring.size() != 5 && ring.size() != 6) || used.count(ring[0])) continue;
             if (!std::all_of(ring.begin(), ring.end(), [&](int j) { return doc.atoms[j].z == 6; })) continue;
@@ -590,7 +648,8 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
         }
         doc.atoms.push_back({QPointF(p.x * scale, -p.y * scale), standsFor.isEmpty() ? int(a->getAtomicNum()) : 0,
                              a->getFormalCharge(), label, {}, siteFromMap ? 0 : int(a->getAtomMapNum()), 0,
-                             int(std::min(2u, a->getNumRadicalElectrons()))});
+                             // not a metal's: RDKit gives a bracketed [Mg] with dative bonds two
+                             isMetal(a->getAtomicNum()) ? 0 : int(std::min(2u, a->getNumRadicalElectrons()))});
         if (a->getAtomicNum() > 0) doc.atoms.back().isotope = int(a->getIsotope());  // on a dummy it's an R-group number
         doc.atoms.back().standsFor = standsFor;
     }
@@ -605,6 +664,12 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
                      : b->getBondDir() == RDKit::Bond::BEGINDASH ? BondStereo::Hash
                      : b->getBondDir() == RDKit::Bond::UNKNOWN   ? BondStereo::Wavy
                                                                  : BondStereo::None;
+        if (RDKit::isDative(*b)) {
+            // To a metal, a plain line, as coordination is usually drawn: the donor's hydrogens, which
+            // a line alone would take one from (NH3 -> NH2), are kept as typed. Otherwise an arrow.
+            if (!isMetal(b->getEndAtom()->getAtomicNum())) out.stereo = BondStereo::Dative;
+            else if (const unsigned h = b->getBeginAtom()->getTotalNumHs()) doc.atoms[out.a].hydrogens = int(h);
+        }
         doc.bonds.push_back(out);
         std::string pts;  // a position variation bond: "(n i j …)", 1-based, from its dummy atom
         const int dummy = mol.getAtomWithIdx(out.a)->getAtomicNum() == 0 ? out.a : out.b;
@@ -635,7 +700,20 @@ std::optional<Document> fromSmiles(const std::string& smiles) {
     try {
         mol.reset(RDKit::SmilesToMol(smiles));
     } catch (...) {
-        return std::nullopt;
+    }
+    const bool metal = mol && std::any_of(mol->atoms().begin(), mol->atoms().end(),
+                                          [](const RDKit::Atom* a) { return isMetal(a->getAtomicNum()); });
+    if (!mol || metal) {  // coordinated before RDKit checks valences: [NH3][Pt] would fail, and [P](C)(C)C-[Pd] get a radical
+        try {
+            mol.reset(RDKit::SmilesToMol(smiles, 0, false));
+            if (mol) {
+                mol->updatePropertyCache(false), coordinate(*mol);
+                RDKit::MolOps::sanitizeMol(*mol);
+                RDKit::MolOps::assignStereochemistry(*mol, true, true);
+            }
+        } catch (...) {
+            mol.reset();
+        }
     }
     if (!mol) return std::nullopt;
     layout(*mol);
@@ -759,6 +837,7 @@ struct FileMarks {
     std::vector<std::pair<QPointF, QColor>> atoms;
     std::vector<std::tuple<QPointF, QPointF, QColor>> bonds;  // from, to
     std::vector<std::pair<QPointF, std::vector<QPointF>>> variable;  // variable attachment points and their atoms
+    std::vector<std::tuple<QPointF, QPointF, BondStereo>> styles;  // dative and hydrogen-bond orders, from, to
 };
 
 // Arrows, free text and label nodes from the CDXML itself; RDKit only reads the
@@ -846,6 +925,9 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             ++bondCount[from], ++bondCount[to];
             if (const QColor c = ink(at); c.isValid() && !inLabel && nodePos.contains(from) && nodePos.contains(to))
                 inks.bonds.push_back({nodePos[from], nodePos[to], c});
+            if (const auto order = at.value("Order"); (order == u"dative" || order == u"hydrogen") && !inLabel &&
+                                                      nodePos.contains(from) && nodePos.contains(to))
+                inks.styles.push_back({nodePos[from], nodePos[to], order == u"dative" ? BondStereo::Dative : BondStereo::Interaction});
         } else if (tag == "n") {
             if (at.hasAttribute("Z")) moleculeZ = std::min(moleculeZ, at.value("Z").toDouble());
             const int id = at.value("id").toInt();
@@ -1042,23 +1124,62 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         const QByteArray xml = cdxToCdxml(data);
         return xml.isEmpty() ? std::nullopt : fromChemDraw(xml);
     }
-    std::vector<std::unique_ptr<RWMol>> mols;
-    try {
-        mols = RDKit::v2::CDXMLParser::MolsFromCDXML(data.toStdString());
-    } catch (...) {
-        return std::nullopt;
+    Document graphics;
+    QHash<int, int> bondCount;
+    std::vector<QPointF> lonePairs;
+    FileMarks inks;
+    const auto labels = chemDrawGraphics(data, graphics, bondCount, lonePairs, inks);
+    // Interaction bonds are drawing-only; some RDKit versions reject their CDXML order.
+    QByteArray chemistry;
+    QXmlStreamReader reader(data);
+    QXmlStreamWriter writer(&chemistry);
+    while (!reader.atEnd()) {
+        reader.readNext();
+        if (reader.isStartElement() && reader.name() == u"b" &&
+            reader.attributes().value("Order").compare(u"hydrogen", Qt::CaseInsensitive) == 0)
+            reader.skipCurrentElement();
+        else writer.writeCurrentToken(reader);
     }
+    if (reader.hasError()) return std::nullopt;
     // The two readings share coordinates, not atom order (only one drops hydrogens).
     auto at = [](const RWMol& mol, const RDKit::Atom* a) {  // not getOwningMol: Windows links no RDKit logger
         const auto p = mol.getConformer().getAtomPos(a->getIdx());
         return std::pair{std::lround(p.x * 1000), std::lround(p.y * 1000)};
     };
     DrawnBonds<decltype(at)> drawn;  // over all fragments
+    std::vector<std::unique_ptr<RWMol>> mols;
     try {
-        const RDKit::v2::CDXMLParser::CDXMLParserParams asDrawn(false, false, RDKit::v2::CDXMLParser::CDXMLFormat::CDXML);
-        for (auto& m : RDKit::v2::CDXMLParser::MolsFromCDXML(data.toStdString(), asDrawn))
+        const RDKit::v2::CDXMLParser::CDXMLParserParams raw(false, false, RDKit::v2::CDXMLParser::CDXMLFormat::CDXML);
+        auto rawMols = RDKit::v2::CDXMLParser::MolsFromCDXML(chemistry.toStdString(), raw);
+        for (const auto& m : rawMols)
             if (m->getNumConformers()) drawn.merge(bondTypes(*m, at));
+        const bool metal = std::any_of(rawMols.begin(), rawMols.end(), [](const auto& m) {
+            return std::any_of(m->atoms().begin(), m->atoms().end(), [](const RDKit::Atom* a) { return isMetal(a->getAtomicNum()); });
+        });
+        if (metal) {
+            for (auto& m : rawMols) {
+                // RDKit can reverse a dative bond when flattening a nickname's external connection.
+                auto atomAt = [&](QPointF pos) {
+                    for (const auto* a : m->atoms()) {
+                        const auto p = m->getConformer().getAtomPos(a->getIdx());
+                        if (len(QPointF(p.x * kScale, -p.y * kScale) - pos) < 0.6) return int(a->getIdx());
+                    }
+                    return -1;
+                };
+                for (const auto& [from, to, stereo] : inks.styles) {
+                    const int a = atomAt(from), b = atomAt(to);
+                    if (a < 0 || b < 0 || a == b) continue;
+                    if (m->getBondBetweenAtoms(a, b)) m->removeBond(a, b);
+                    if (stereo == BondStereo::Dative) m->addBond(a, b, RDKit::Bond::DATIVE);
+                }
+                coordinate(*m);
+                RDKit::MolOps::sanitizeMol(*m);
+                RDKit::MolOps::removeHs(*m, RDKit::MolOps::RemoveHsParameters{});
+            }
+            mols = std::move(rawMols);
+        } else mols = RDKit::v2::CDXMLParser::MolsFromCDXML(chemistry.toStdString());
     } catch (...) {
+        return std::nullopt;
     }
     Document doc;
     for (auto& mol : mols) {
@@ -1069,11 +1190,7 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         doc.append(fromRDKit(*mol, kScale));  // RDKit scales CDXML to 1.5 Å bonds, like MOL
     }
     if (data.trimmed().startsWith('<')) {
-        Document graphics;
-        QHash<int, int> bondCount;
-        std::vector<QPointF> lonePairs;
-        FileMarks inks;
-        placeLabels(doc, chemDrawGraphics(data, graphics, bondCount, lonePairs, inks), bondCount);
+        placeLabels(doc, labels, bondCount);
         auto atomAt = [&](QPointF p) {
             for (int i = 0; i < int(doc.atoms.size()); ++i)
                 if (QLineF(doc.atoms[i].pos, p).length() < 0.6) return i;
@@ -1084,6 +1201,17 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         for (const auto& [from, to, c] : inks.bonds)
             for (Bond& b : doc.bonds)
                 if ((atomAt(from) == b.a && atomAt(to) == b.b) || (atomAt(from) == b.b && atomAt(to) == b.a)) b.color = c;
+        // Dative and hydrogen bonds as drawn (RDKit may drop or flatten them); a dative one to a metal as a
+        // plain line, its donor's hydrogens kept (see fromRDKit).
+        for (const auto& [from, to, stereo] : inks.styles) {
+            const int a = atomAt(from), b = atomAt(to);
+            if (a < 0 || b < 0 || a == b) continue;
+            int k = doc.bondBetween(a, b);
+            if (k < 0) k = int(doc.bonds.size()), doc.bonds.push_back({a, b});
+            const bool line = stereo == BondStereo::Dative && isMetal(doc.atoms[b].z);
+            doc.bonds[k].a = a, doc.bonds[k].b = b, doc.bonds[k].order = 1;
+            doc.bonds[k].stereo = line ? BondStereo::None : stereo;
+        }
         for (const auto& [p, ends] : inks.variable)  // RDKit reads the point as a carbon
             if (const int i = atomAt(p); i >= 0) {
                 doc.atoms[i].z = 0;
@@ -1132,7 +1260,7 @@ std::vector<Record> readRecords(const QString& path) {
             if (out.empty() && cols[0].compare("SMILES", Qt::CaseInsensitive) == 0) continue;  // a header row (#329)
             const std::string first = cols[0].toStdString();
             out.push_back({cols.size() > 1 ? cols[1] : n, ext == "inchi"                        ? fromInchi(first)
-                                                          : first.find('>') != std::string::npos ? fromReactionSmiles(first)
+                                                          : isReactionSmiles(first)               ? fromReactionSmiles(first)
                                                                                                  : fromSmiles(first)});
         }
     }
@@ -1277,10 +1405,20 @@ std::string toReactionSmiles(const Reaction& r) {
 }
 
 std::string toRxn(const Reaction& r) {
-    std::string out = "$RXN\n\n  Penzene\n\n" + QString("%1%2").arg(r.reactants.size(), 3).arg(r.products.size(), 3).toStdString() + "\n";
+    RDKit::ChemicalReaction rxn;
+    bool v3000 = false;
     for (const auto* side : {&r.reactants, &r.products})
-        for (const auto& m : *side) out += "$MOL\n" + toMolBlock(m);
-    return out;
+        for (const auto& doc : *side) {
+            auto mol = toRDKit(doc);
+            perceive(*mol, false);
+            RDKit::Chirality::reapplyMolBlockWedging(*mol);
+            mol->setStereoGroups({});  // ordinary RXN retains the existing V2000 convention
+            v3000 |= RDKit::MolToMolBlock(*mol).find("V3000") != std::string::npos;
+            RDKit::ROMOL_SPTR part(mol.release());
+            if (side == &r.reactants) rxn.addReactantTemplate(part);
+            else rxn.addProductTemplate(part);
+        }
+    return v3000 ? RDKit::ChemicalReactionToV3KRxnBlock(rxn) : RDKit::ChemicalReactionToRxnBlock(rxn);
 }
 
 std::string toRdf(const std::vector<Reaction>& steps) {
@@ -1334,12 +1472,19 @@ Document layoutReaction(const std::vector<Reaction>& steps) {
     return out;
 }
 
+// A reaction's > between its sides, not a dative bond's -> ([NH3]->[Pt]).
+static const QRegularExpression& reactionArrow() {
+    static const QRegularExpression arrow("(?<!-)>");
+    return arrow;
+}
+bool isReactionSmiles(const std::string& smiles) { return QString::fromStdString(smiles).contains(reactionArrow()); }
+
 // One step a line, as toReactionSmiles writes a scheme (#591); a step starting from the last one's
 // products carries on from them.
 std::optional<Document> fromReactionSmiles(const std::string& smiles) {
     std::vector<Reaction> steps;
     for (const QString& line : QString::fromStdString(smiles).split('\n', Qt::SkipEmptyParts)) {
-        const QStringList sides = line.trimmed().split('>');
+        const QStringList sides = line.trimmed().split(reactionArrow());
         if (sides.size() != 3) return std::nullopt;
         Reaction r;
         std::vector<Document>* into[] = {&r.reactants, &r.agents, &r.products};
@@ -1358,18 +1503,23 @@ std::optional<Document> fromReactionSmiles(const std::string& smiles) {
 
 static std::optional<Reaction> readRxn(const QString& s) {
     if (!s.startsWith("$RXN")) return std::nullopt;
-    const QString counts = s.section('\n', 4, 4);
-    const int nr = counts.mid(0, 3).trimmed().toInt(), np = counts.mid(3, 3).trimmed().toInt();
-    QStringList blocks = s.split("$MOL\n");
-    blocks.removeFirst();
-    if (nr + np == 0 || int(blocks.size()) < nr + np) return std::nullopt;
-    Reaction r;
-    for (int k = 0; k < nr + np; ++k) {
-        auto m = fromMolBlock(blocks[k].toStdString());
-        if (!m) return std::nullopt;
-        (k < nr ? r.reactants : r.products).push_back(std::move(*m));
+    try {
+        std::unique_ptr<RDKit::ChemicalReaction> rxn(RDKit::RxnBlockToChemicalReaction(s.toStdString()));
+        if (!rxn || (rxn->getReactants().empty() && rxn->getProducts().empty())) return std::nullopt;
+        Reaction r;
+        for (const auto* side : {&rxn->getReactants(), &rxn->getProducts()})
+            for (const auto& part : *side) {
+                RWMol mol(*part);
+                if (!mol.getNumAtoms() || !mol.getNumConformers()) return std::nullopt;
+                coordinate(mol);
+                perceive(mol, false);
+                RDKit::Chirality::reapplyMolBlockWedging(mol);
+                (side == &rxn->getReactants() ? r.reactants : r.products).push_back(fromRDKit(mol));
+            }
+        return r;
+    } catch (...) {
+        return std::nullopt;
     }
-    return r;
 }
 
 std::optional<Document> fromRxn(const std::string& text) {
@@ -1558,10 +1708,12 @@ QByteArray toCdxml(const Document& doc) {
     if (!doc.atoms.empty()) {
         w.writeStartElement("fragment");
         w.writeAttribute("id", QString::number(id++));
+        const auto mol = drawingMol(doc);  // bond lookup uses drawing atom indices, including eta points
         std::vector<int> node(doc.atoms.size());  // each atom's id, for the bonds
         auto element = [&](const Atom& a) {
             if (a.z != 6) w.writeAttribute("Element", QString::number(a.z));
             if (a.charge) w.writeAttribute("Charge", QString::number(a.charge));
+            if (a.hydrogens >= 0) w.writeAttribute("NumHydrogens", QString::number(a.hydrogens));
             if (a.radicals) w.writeAttribute("Radical", a.radicals == 1 ? "Doublet" : "Triplet");
             if (a.isotope && a.z > 0) w.writeAttribute("Isotope", QString::number(a.isotope));
             if (a.stereoGroup != StereoGroup::None) {
@@ -1620,9 +1772,9 @@ QByteArray toCdxml(const Document& doc) {
                     element(group.atoms[k]);
                     w.writeEndElement();
                 }
-                std::vector<std::pair<int, int>> links;  // connection point -> head
+                std::vector<std::pair<int, int>> links;  // connection point, document neighbour
                 for (int nb : doc.neighbors(int(i))) {
-                    links.push_back({id++, inner[0]});
+                    links.push_back({id++, nb});
                     w.writeStartElement("n");
                     w.writeAttribute("id", QString::number(links.back().first));
                     w.writeAttribute("p", pt(doc.atoms[nb].pos));
@@ -1638,11 +1790,15 @@ QByteArray toCdxml(const Document& doc) {
                     if (b.order > 1) w.writeAttribute("Order", QString::number(b.order));
                     w.writeEndElement();
                 }
-                for (auto [from, to] : links) {
+                for (auto [point, nb] : links) {
+                    const auto* connection = mol->getBondBetweenAtoms(i, nb);
+                    const bool dative = connection && RDKit::isDative(*connection);
+                    const bool donor = dative && connection->getBeginAtomIdx() == i;
                     w.writeStartElement("b");
                     w.writeAttribute("id", QString::number(id++));
-                    w.writeAttribute("B", QString::number(from));
-                    w.writeAttribute("E", QString::number(to));
+                    w.writeAttribute("B", QString::number(donor ? inner[0] : point));
+                    w.writeAttribute("E", QString::number(donor ? point : inner[0]));
+                    if (dative) w.writeAttribute("Order", "dative");
                     w.writeEndElement();
                 }
                 w.writeEndElement();  // fragment
@@ -1660,15 +1816,21 @@ QByteArray toCdxml(const Document& doc) {
             w.writeEndElement();
             w.writeEndElement();
         }
-        static const char* display[] = {nullptr, "WedgeBegin", "WedgedHashBegin", "Bold", "Dash", "Wavy", nullptr, "Dash"};
+        static const char* display[] = {nullptr, "WedgeBegin", "WedgedHashBegin", "Bold", "Dash", "Wavy", nullptr, "Dash", "Dative"};
         static const char* side[] = {nullptr, "Left", "Center", "Right"};
+        // A plain line that coordinates a ligand to a metal goes out as the dative bond it is, donor first,
+        // so a reader doesn't take a hydrogen from NH3 for it.
         for (const Bond& b : doc.bonds) {
+            const auto* coordinate = b.stereo == BondStereo::None ? mol->getBondBetweenAtoms(b.a, b.b) : nullptr;
+            const bool dative = b.stereo == BondStereo::Dative || (coordinate && RDKit::isDative(*coordinate));
+            const bool flip = coordinate && dative && int(coordinate->getBeginAtomIdx()) != b.a;
             w.writeStartElement("b");
             w.writeAttribute("id", QString::number(id++));
-            w.writeAttribute("B", QString::number(node[b.a]));
-            w.writeAttribute("E", QString::number(node[b.b]));
+            w.writeAttribute("B", QString::number(node[flip ? b.b : b.a]));
+            w.writeAttribute("E", QString::number(node[flip ? b.a : b.b]));
             // ChemDraw's own hydrogen-bond order, and half orders for partial bonds.
             if (b.stereo == BondStereo::Interaction) w.writeAttribute("Order", "hydrogen");
+            else if (dative) w.writeAttribute("Order", "dative");
             else if (b.stereo == BondStereo::Partial) w.writeAttribute("Order", b.order == 2 ? "1.5" : "0.5");
             else if (b.order > 1) w.writeAttribute("Order", QString::number(b.order));
             if (display[int(b.stereo)]) w.writeAttribute("Display", display[int(b.stereo)]);
@@ -1727,7 +1889,7 @@ std::string toMolBlock(const Document& doc, bool v3000) {
     auto mol = toRDKit(doc);
     perceive(*mol, false);  // the drawn Kekulé bonds, not aromatic type 4, a query-only type (#321)
     RDKit::Chirality::reapplyMolBlockWedging(*mol);  // keep the user's wedges
-    if (!v3000) mol->setStereoGroups({});  // V2000 has no place for them; RDKit would switch to V3000 (and RXN files are V2000)
+    if (!v3000) mol->setStereoGroups({});  // V2000 has no place for them; RDKit would switch to V3000 (ordinary RXN files retain V2000)
     return RDKit::MolToMolBlock(*mol, true, -1, false, v3000);
 }
 
@@ -2313,7 +2475,7 @@ std::vector<AtomInfo> atomInfo(const Document& doc) {
             i.valenceError = true;
             continue;
         }
-        i.hydrogens = int(a->getNumImplicitHs());
+        i.hydrogens = int(a->getTotalNumHs());  // implicit, or as typed on a ligand
     }
     return info;
 }

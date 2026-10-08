@@ -131,7 +131,9 @@ class Document:
         """
 
     def to_molblock(self) -> str:
-        """MDL MOL (V2000), with the drawing's wedges. (since 0.4)"""
+        """
+        MDL MOL, with the drawing's wedges; V3000 when coordinate bonds require it. (since 0.4)
+        """
 
     def to_inchi(self) -> str:
         """Standard InChI. (since 0.4)"""

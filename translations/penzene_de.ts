@@ -1053,6 +1053,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Dative bond: an arrow from the donor to the acceptor, which takes none of the donor&apos;s hydrogens — k on a bond</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>SMAR&amp;TS</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1090,64 +1094,6 @@
     </message>
     <message>
         <source>T&amp;heme</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;p&gt;Point at an atom or bond to make it the &lt;b&gt;hotspot&lt;/b&gt;. It stays put when the mouse
-moves off, so you can keep typing.&lt;/p&gt;
-&lt;table cellspacing=&quot;5&quot;&gt;
-&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Moving the hotspot&lt;/th&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;atom → bond → atom; with &lt;b&gt;Shift&lt;/b&gt;: atom → atom, bond → bond (with a selection: nudge it, below)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Space&lt;/b&gt; / &lt;b&gt;g&lt;/b&gt;&lt;/td&gt;&lt;td&gt;select the hotspot&apos;s molecule / just its atom or bond&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;G&lt;/b&gt;&lt;/td&gt;&lt;td&gt;add the hotspot&apos;s atom or bond to the selection; the arrow keys go on to the next (Esc when done)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;&amp;gt;&lt;/b&gt; … &lt;b&gt;&amp;gt;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;a curved arrow from the first hotspot to the second, selected&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+↑&lt;/b&gt; / &lt;b&gt;Alt+↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;bend the selected curved arrow more / less (Arrange → Flip Curved Arrow turns it over)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc&lt;/b&gt;&lt;/td&gt;&lt;td&gt;clear hotspot and selection&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Atom: sprout&lt;/th&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;1&lt;/b&gt; / &lt;b&gt;0&lt;/b&gt;&lt;/td&gt;&lt;td&gt;single bond, linear / cyclic mode (0 is longer on 2°/3° carbons)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;2&lt;/b&gt;&lt;/td&gt;&lt;td&gt;acetyl (1°), C=O (2°), CH&lt;sub&gt;2&lt;/sub&gt;-acetyl (3°/aromatic)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;3&lt;/b&gt; or &lt;b&gt;a&lt;/b&gt;&lt;/td&gt;&lt;td&gt;phenyl&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;4&lt;/b&gt; / &lt;b&gt;5&lt;/b&gt;&lt;/td&gt;&lt;td&gt;wedged / hashed methyl&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;6 7 u v&lt;/b&gt;&lt;/td&gt;&lt;td&gt;cyclohexane, cyclopentane, cyclobutane, cyclopropane (spiro on 2°)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;8 9 z&lt;/b&gt;&lt;/td&gt;&lt;td&gt;methylidene, dimethyl / gem-dimethyl / isopropyl, alkyne&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;k K&lt;/b&gt;&lt;/td&gt;&lt;td&gt;sulfonyl, t-Bu&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;.&lt;/b&gt; / &lt;b&gt;j&lt;/b&gt; / &lt;b&gt;J&lt;/b&gt;&lt;/td&gt;&lt;td&gt;attachment point / η⁵-cyclopentadienyl / η⁶-benzene&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Atom: label and marks&lt;/th&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;c n/w o/q s p f l b i h d&lt;/b&gt;&lt;/td&gt;&lt;td&gt;C N O S P F Cl Br I H D (deuterium)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;B S L&lt;/b&gt;&lt;/td&gt;&lt;td&gt;B, Si, Li&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;m e P A&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Me, Et, Ph, Ac&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;O N F E Z&lt;/b&gt;&lt;/td&gt;&lt;td&gt;OMe, NO&lt;sub&gt;2&lt;/sub&gt;, CF&lt;sub&gt;3&lt;/sub&gt;, CO&lt;sub&gt;2&lt;/sub&gt;Me, N&lt;sub&gt;3&lt;/sub&gt;&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;y/Y H Q M&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Boc, Cbz, Fmoc, MgBr&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;x r&lt;/b&gt;&lt;/td&gt;&lt;td&gt;X, R (generic atoms)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;+ −&lt;/b&gt;&lt;/td&gt;&lt;td&gt;charge&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;:&lt;/b&gt; / &lt;b&gt;*&lt;/b&gt;&lt;/td&gt;&lt;td&gt;lone pairs (0–3) / radical dot&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;&apos;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;atom-map number (next free, or off)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Enter&lt;/b&gt;, &lt;b&gt;=&lt;/b&gt; or &lt;b&gt;t&lt;/b&gt;&lt;/td&gt;&lt;td&gt;type a label: element, abbreviation (OMe, Boc, TBS…), SMILES or any text&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;/&lt;/b&gt; or &lt;b&gt;?&lt;/b&gt;&lt;/td&gt;&lt;td&gt;atom properties&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Delete&lt;/b&gt;&lt;/td&gt;&lt;td&gt;remove label (C stays), or delete a carbon&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Bond&lt;/th&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;1 2 3&lt;/b&gt;&lt;/td&gt;&lt;td&gt;single, double, triple; &lt;b&gt;2&lt;/b&gt; on a double bond swaps the side of its second line&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;w&lt;/b&gt; / &lt;b&gt;h&lt;/b&gt;, &lt;b&gt;W&lt;/b&gt;, &lt;b&gt;H&lt;/b&gt;&lt;/td&gt;&lt;td&gt;wedged / hashed (press again to flip)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;a z&lt;/b&gt;&lt;/td&gt;&lt;td&gt;fuse benzene / cyclopentadiene&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;v 4–8&lt;/b&gt;&lt;/td&gt;&lt;td&gt;fuse ring of that size (v = 3)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;9&lt;/b&gt; / &lt;b&gt;0&lt;/b&gt;&lt;/td&gt;&lt;td&gt;fuse chair cyclohexane (two orientations)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;d b y&lt;/b&gt;&lt;/td&gt;&lt;td&gt;dashed, bold, wavy&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;D&lt;/b&gt; / &lt;b&gt;B&lt;/b&gt;&lt;/td&gt;&lt;td&gt;dashed double / bold double&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;i&lt;/b&gt;&lt;/td&gt;&lt;td&gt;interaction: H-bond or contact, dotted, not a bond&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;p&lt;/b&gt; / &lt;b&gt;P&lt;/b&gt;&lt;/td&gt;&lt;td&gt;partial bond forming or breaking / partial double (transition states)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;l c r&lt;/b&gt;&lt;/td&gt;&lt;td&gt;double bond&apos;s second line left / centred / right&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;f&lt;/b&gt;&lt;/td&gt;&lt;td&gt;bring to front: bonds it crosses get a gap&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;No hotspot (Esc)&lt;/th&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;x X j e t Space&lt;/b&gt;&lt;/td&gt;&lt;td&gt;bond, chain, benzene, arrow, text, select tool&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Selection&lt;/th&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;nudge 1 pt; with &lt;b&gt;Shift&lt;/b&gt; 10 pt&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Enter&lt;/b&gt;&lt;/td&gt;&lt;td&gt;back to a hotspot on the selection&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Drag onto an atom&lt;/b&gt;&lt;/td&gt;&lt;td&gt;merge (Select tool) &amp;nbsp;•&amp;nbsp; &lt;b&gt;Shift+drag&lt;/b&gt; move straight; draw a bond at any angle&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;duplicate across the next arrow that way (or alongside)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+← →&lt;/b&gt;&lt;/td&gt;&lt;td&gt;rotate 15° &amp;nbsp;•&amp;nbsp; &lt;b&gt;Alt+drag&lt;/b&gt; rotate freely, or lasso from empty space • &lt;b&gt;double-click&lt;/b&gt; select fragment, or edit text&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+0&lt;/b&gt;&lt;/td&gt;&lt;td&gt;zoom to the selection (to everything with none)&lt;/td&gt;&lt;/tr&gt;
-&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+Alt+←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;rotate 15° out of the page (3D), keeping stereo &amp;nbsp;•&amp;nbsp; choose the Rotate in 3D tool from Select and drag freely&lt;/td&gt;&lt;/tr&gt;
-&lt;/table&gt;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2130,6 +2076,65 @@ moves off, so you can keep typing.&lt;/p&gt;
     </message>
     <message>
         <source>Keyboard Shortcuts</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;p&gt;Point at an atom or bond to make it the &lt;b&gt;hotspot&lt;/b&gt;. It stays put when the mouse
+moves off, so you can keep typing.&lt;/p&gt;
+&lt;table cellspacing=&quot;5&quot;&gt;
+&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Moving the hotspot&lt;/th&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;atom → bond → atom; with &lt;b&gt;Shift&lt;/b&gt;: atom → atom, bond → bond (with a selection: nudge it, below)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Space&lt;/b&gt; / &lt;b&gt;g&lt;/b&gt;&lt;/td&gt;&lt;td&gt;select the hotspot&apos;s molecule / just its atom or bond&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;G&lt;/b&gt;&lt;/td&gt;&lt;td&gt;add the hotspot&apos;s atom or bond to the selection; the arrow keys go on to the next (Esc when done)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;&amp;gt;&lt;/b&gt; … &lt;b&gt;&amp;gt;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;a curved arrow from the first hotspot to the second, selected&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+↑&lt;/b&gt; / &lt;b&gt;Alt+↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;bend the selected curved arrow more / less (Arrange → Flip Curved Arrow turns it over)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Esc&lt;/b&gt;&lt;/td&gt;&lt;td&gt;clear hotspot and selection&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Atom: sprout&lt;/th&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;1&lt;/b&gt; / &lt;b&gt;0&lt;/b&gt;&lt;/td&gt;&lt;td&gt;single bond, linear / cyclic mode (0 is longer on 2°/3° carbons)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;2&lt;/b&gt;&lt;/td&gt;&lt;td&gt;acetyl (1°), C=O (2°), CH&lt;sub&gt;2&lt;/sub&gt;-acetyl (3°/aromatic)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;3&lt;/b&gt; or &lt;b&gt;a&lt;/b&gt;&lt;/td&gt;&lt;td&gt;phenyl&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;4&lt;/b&gt; / &lt;b&gt;5&lt;/b&gt;&lt;/td&gt;&lt;td&gt;wedged / hashed methyl&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;6 7 u v&lt;/b&gt;&lt;/td&gt;&lt;td&gt;cyclohexane, cyclopentane, cyclobutane, cyclopropane (spiro on 2°)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;8 9 z&lt;/b&gt;&lt;/td&gt;&lt;td&gt;methylidene, dimethyl / gem-dimethyl / isopropyl, alkyne&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;k K&lt;/b&gt;&lt;/td&gt;&lt;td&gt;sulfonyl, t-Bu&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;.&lt;/b&gt; / &lt;b&gt;j&lt;/b&gt; / &lt;b&gt;J&lt;/b&gt;&lt;/td&gt;&lt;td&gt;attachment point / η⁵-cyclopentadienyl / η⁶-benzene&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Atom: label and marks&lt;/th&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;c n/w o/q s p f l b i h d&lt;/b&gt;&lt;/td&gt;&lt;td&gt;C N O S P F Cl Br I H D (deuterium)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;B S L&lt;/b&gt;&lt;/td&gt;&lt;td&gt;B, Si, Li&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;m e P A&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Me, Et, Ph, Ac&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;O N F E Z&lt;/b&gt;&lt;/td&gt;&lt;td&gt;OMe, NO&lt;sub&gt;2&lt;/sub&gt;, CF&lt;sub&gt;3&lt;/sub&gt;, CO&lt;sub&gt;2&lt;/sub&gt;Me, N&lt;sub&gt;3&lt;/sub&gt;&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;y/Y H Q M&lt;/b&gt;&lt;/td&gt;&lt;td&gt;Boc, Cbz, Fmoc, MgBr&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;x r&lt;/b&gt;&lt;/td&gt;&lt;td&gt;X, R (generic atoms)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;+ −&lt;/b&gt;&lt;/td&gt;&lt;td&gt;charge&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;:&lt;/b&gt; / &lt;b&gt;*&lt;/b&gt;&lt;/td&gt;&lt;td&gt;lone pairs (0–3) / radical dot&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;&apos;&lt;/b&gt;&lt;/td&gt;&lt;td&gt;atom-map number (next free, or off)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Enter&lt;/b&gt;, &lt;b&gt;=&lt;/b&gt; or &lt;b&gt;t&lt;/b&gt;&lt;/td&gt;&lt;td&gt;type a label: element, abbreviation (OMe, Boc, TBS…), SMILES or any text&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;/&lt;/b&gt; or &lt;b&gt;?&lt;/b&gt;&lt;/td&gt;&lt;td&gt;atom properties&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Delete&lt;/b&gt;&lt;/td&gt;&lt;td&gt;remove label (C stays), or delete a carbon&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Bond&lt;/th&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;1 2 3&lt;/b&gt;&lt;/td&gt;&lt;td&gt;single, double, triple; &lt;b&gt;2&lt;/b&gt; on a double bond swaps the side of its second line&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;w&lt;/b&gt; / &lt;b&gt;h&lt;/b&gt;, &lt;b&gt;W&lt;/b&gt;, &lt;b&gt;H&lt;/b&gt;&lt;/td&gt;&lt;td&gt;wedged / hashed (press again to flip)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;a z&lt;/b&gt;&lt;/td&gt;&lt;td&gt;fuse benzene / cyclopentadiene&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;v 4–8&lt;/b&gt;&lt;/td&gt;&lt;td&gt;fuse ring of that size (v = 3)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;9&lt;/b&gt; / &lt;b&gt;0&lt;/b&gt;&lt;/td&gt;&lt;td&gt;fuse chair cyclohexane (two orientations)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;d b y&lt;/b&gt;&lt;/td&gt;&lt;td&gt;dashed, bold, wavy&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;D&lt;/b&gt; / &lt;b&gt;B&lt;/b&gt;&lt;/td&gt;&lt;td&gt;dashed double / bold double&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;i&lt;/b&gt;&lt;/td&gt;&lt;td&gt;interaction: H-bond or contact, dotted, not a bond&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;k&lt;/b&gt;&lt;/td&gt;&lt;td&gt;dative bond, an arrow to the acceptor (press again to flip)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;p&lt;/b&gt; / &lt;b&gt;P&lt;/b&gt;&lt;/td&gt;&lt;td&gt;partial bond forming or breaking / partial double (transition states)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;l c r&lt;/b&gt;&lt;/td&gt;&lt;td&gt;double bond&apos;s second line left / centred / right&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;f&lt;/b&gt;&lt;/td&gt;&lt;td&gt;bring to front: bonds it crosses get a gap&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;No hotspot (Esc)&lt;/th&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;x X j e t Space&lt;/b&gt;&lt;/td&gt;&lt;td&gt;bond, chain, benzene, arrow, text, select tool&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Selection&lt;/th&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;nudge 1 pt; with &lt;b&gt;Shift&lt;/b&gt; 10 pt&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Enter&lt;/b&gt;&lt;/td&gt;&lt;td&gt;back to a hotspot on the selection&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Drag onto an atom&lt;/b&gt;&lt;/td&gt;&lt;td&gt;merge (Select tool) &amp;nbsp;•&amp;nbsp; &lt;b&gt;Shift+drag&lt;/b&gt; move straight; draw a bond at any angle&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;duplicate across the next arrow that way (or alongside)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Alt+← →&lt;/b&gt;&lt;/td&gt;&lt;td&gt;rotate 15° &amp;nbsp;•&amp;nbsp; &lt;b&gt;Alt+drag&lt;/b&gt; rotate freely, or lasso from empty space • &lt;b&gt;double-click&lt;/b&gt; select fragment, or edit text&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+0&lt;/b&gt;&lt;/td&gt;&lt;td&gt;zoom to the selection (to everything with none)&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Shift+Alt+←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;rotate 15° out of the page (3D), keeping stereo &amp;nbsp;•&amp;nbsp; choose the Rotate in 3D tool from Select and drag freely&lt;/td&gt;&lt;/tr&gt;
+&lt;/table&gt;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
