@@ -1157,6 +1157,12 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         if (tag == "CDXML") {
             const double bond = at.hasAttribute("BondLength") ? std::max(1.0, at.value("BondLength").toDouble()) : 30;
             scale = kBondLength / bond;
+            double closest = 0.05 + 1e-9;
+            for (const auto& style : drawingStyles())
+                if (const double distance = std::abs(style.bondLength - bond); distance < closest) {
+                    doc.style = style.name == drawingStyles()[0].name ? QString() : style.name;
+                    closest = distance;
+                }
             if (const double w = at.value("LineWidth").toDouble(); w > 0) lineWidth = w;
             // The file's labels relative to its bonds, which may be far from our styles' (#203).
             if (at.hasAttribute("LabelSize")) doc.labelRatio = at.value("LabelSize").toDouble() / bond;
@@ -1194,7 +1200,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         if (tag == "s") superscript = at.value("face").toInt() & 64;
         if (tag == "s" && text && !text->color.isValid()) text->color = ink(at);
         if (tag == "s" && (text || labelText >= 0) && at.hasAttribute("size")) {
-            const double rel = at.value("size").toDouble() * scale / 10;  // 10 pt: the default (ACS) label size
+            const double rel = at.value("size").toDouble() * scale / documentStyle(doc).fontSize;
             if (rel > 0) (text ? text->scale : labels[labelText].textScale) = rel;  // size="0" would save unopenable (#316)
         } else if (tag == "t" && !inside("n") && !inside("fragment")) {
             // p is the first baseline; the bounding box gives the left edge whatever the justification.
@@ -1466,6 +1472,7 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
             if (best >= 0) doc.atoms[best].lonePairs = std::min(3, doc.atoms[best].lonePairs + 1);
         }
         doc.arrows = graphics.arrows;
+        doc.style = graphics.style;
         doc.labelRatio = graphics.labelRatio;
         doc.texts.insert(doc.texts.end(), graphics.texts.begin(), graphics.texts.end());
     }
@@ -1801,8 +1808,7 @@ std::optional<Document> readFile(const QString& path, QStringList* unreadable) {
     return fromMolBlock(data.toStdString());
 }
 
-// CDXML in our own coordinates (BondLength = ours, y down, as ChemDraw), so
-// ChemDraw and chemDrawGraphics read it back unscaled.
+// CDXML in physical points, y down; BondLength lets readers recover our model units.
 // Abbreviations are written expanded, free-text labels as generic
 // nicknames; ChemDraw's own Fragment/Nickname nodes would keep "OMe" as a label.
 QByteArray toCdxml(const Document& doc) {
@@ -1813,9 +1819,12 @@ QByteArray toCdxml(const Document& doc) {
     w.writeDTD(R"(<!DOCTYPE CDXML SYSTEM "http://www.cambridgesoft.com/xml/cdxml.dtd">)");
     int id = 1;
     // Placed as ChemDraw places its own: across the middle of a US Letter page, an inch from the top (#443).
-    const QRectF box = documentBounds(doc);
+    const DrawingStyle st = documentStyle(doc);
+    const double physicalScale = exportScale(doc);
+    const QRectF bounds = documentBounds(doc);
+    const QRectF box(bounds.topLeft() * physicalScale, bounds.size() * physicalScale);
     const QPointF shift(std::round(std::max(306 - box.center().x(), 72 - box.left())), std::round(72 - box.top()));  // whole points: coordinates keep their decimals
-    auto pt = [shift](QPointF p) { p += shift; return QString("%1 %2").arg(p.x(), 0, 'f', 2).arg(p.y(), 0, 'f', 2); };
+    auto pt = [shift, physicalScale](QPointF p) { p = p * physicalScale + shift; return QString("%1 %2").arg(p.x(), 0, 'f', 2).arg(p.y(), 0, 'f', 2); };
     auto pt3 = [&](QPointF p) { return pt(p) + " 0"; };
     // The colour table starts at colour 2 (0 and 1 are black and white); its first two entries are
     // ChemDraw's page background and default ink, so white and black lead it and the colours used follow.
@@ -1833,8 +1842,13 @@ QByteArray toCdxml(const Document& doc) {
     for (const Text& tx : doc.texts) if (tx.color.isValid()) colorNo(tx.color);
     for (const Arrow& a : doc.arrows) if (a.color.isValid()) colorNo(a.color);
     w.writeStartElement("CDXML");
-    w.writeAttribute("BondLength", QString::number(kBondLength));
-    if (doc.labelRatio > 0) w.writeAttribute("LabelSize", QString::number(doc.labelRatio * kBondLength));
+    w.writeAttribute("BondLength", QString::number(st.bondLength));
+    w.writeAttribute("LabelSize", QString::number(st.fontSize * physicalScale));
+    w.writeAttribute("LabelFont", "3");
+    w.writeAttribute("LineWidth", QString::number(st.lineWidth * physicalScale));
+    w.writeAttribute("BoldWidth", QString::number(st.boldWidth * physicalScale));
+    w.writeAttribute("HashSpacing", QString::number(st.hashSpacing * physicalScale));
+    w.writeAttribute("BondSpacing", QString::number(st.bondSpacing * 100));
     w.writeAttribute("CreationProgram", "Penzene");
     if (palette.size() > 2) {
         w.writeStartElement("colortable");
@@ -1851,7 +1865,7 @@ QByteArray toCdxml(const Document& doc) {
     w.writeEmptyElement("font");
     w.writeAttribute("id", "3");
     w.writeAttribute("charset", "iso-8859-1");
-    w.writeAttribute("name", "Arial");
+    w.writeAttribute("name", st.font);
     w.writeEndElement();
     w.writeStartElement("page");
     w.writeAttribute("id", QString::number(id++));
@@ -1914,14 +1928,14 @@ QByteArray toCdxml(const Document& doc) {
         case ArrowKind::Equilibrium:
             w.writeAttribute("ArrowheadHead", "HalfLeft");
             w.writeAttribute("ArrowheadTail", "HalfLeft");
-            w.writeAttribute("ArrowShaftSpacing", "4");
+            w.writeAttribute("ArrowShaftSpacing", QString::number(4 * physicalScale));
             break;
         case ArrowKind::Fishhook: w.writeAttribute("ArrowheadHead", "HalfLeft"); break;
         }
         if (a.kind != ArrowKind::Retro) w.writeAttribute("ArrowheadType", "Solid");
         if (a.crossed) w.writeAttribute("NoGo", "Cross");
-        // At ChemDraw's 1 pt line (no LineWidth is written), a head kHeadLength long; notch and width in its proportions.
-        const double head = a.head * kHeadLength * 100;
+        // ChemDraw expresses arrowheads in hundredths of the line width.
+        const double head = a.head * kHeadLength / st.lineWidth * 100;
         for (auto [name, share] : {std::pair{"HeadSize", 1.0}, {"ArrowheadCenterSize", 0.875}, {"ArrowheadWidth", 0.25}})
             w.writeAttribute(name, QString::number(std::lround(head * share)));
         paint(a.color);
@@ -2050,6 +2064,7 @@ QByteArray toCdxml(const Document& doc) {
             w.writeAttribute("p", pt(a.pos + QPointF(-3, 4)));
             w.writeStartElement("s");
             w.writeAttribute("font", "3");
+            w.writeAttribute("size", QString::number(st.fontSize * physicalScale));
             paint(a.color);
             w.writeCharacters(a.label);
             w.writeEndElement();
@@ -2089,7 +2104,7 @@ QByteArray toCdxml(const Document& doc) {
         auto run = [&](Script s, const QString& chars) {
             w.writeStartElement("s");
             w.writeAttribute("font", "3");
-            w.writeAttribute("size", QString::number(10 * t.scale));  // 10 pt: the ACS label size
+            w.writeAttribute("size", QString::number(st.fontSize * t.scale * physicalScale));
             paint(t.color);
             if (s != Script::Base || t.compound) w.writeAttribute("face", QString::number((t.compound ? 1 : 0) | (s == Script::Sub ? 32 : s == Script::Super ? 64 : 0)));
             w.writeCharacters(chars);

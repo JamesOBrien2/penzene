@@ -141,6 +141,7 @@ private:
 
     Document doc_;
     bool fitOnShow_ = false;
+    double styleScale_ = 1;  // the physical scale already applied to the view
     QPicture picture_;
     std::vector<QRectF> labels_;  // each atom's drawn label box, as painted into picture_
     Theme theme_;

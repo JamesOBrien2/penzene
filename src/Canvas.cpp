@@ -482,7 +482,7 @@ void Canvas::insert(Document frag, const QString& text) {
 QPointF Canvas::viewCenter() const { return mapToScene(viewport()->rect().center()); }
 
 void Canvas::zoomBy(double factor) {
-    double s = transform().m11() * factor;
+    double s = transform().m11() / styleScale_ * factor;
     if (s > 0.2 && s < 40) scale(factor, factor);
 }
 
@@ -500,11 +500,17 @@ void Canvas::showEvent(QShowEvent* e) {
 void Canvas::fit(const Document& part) {
     if (part.empty()) return;
     fitInView(documentBounds(part).adjusted(-20, -20, 20, 20), Qt::KeepAspectRatio);
-    if (const double s = transform().m11(); s > 10) scale(10 / s, 10 / s);  // one atom: close up, not window-filling
+    if (const double s = transform().m11() / styleScale_; s > 10) scale(10 / s, 10 / s);  // one atom: close up, not window-filling
 }
 
 // Cache the drawing as a QPicture; hover/selection repaints just replay it.
 void Canvas::refresh() {
+    if (const double physical = exportScale(doc_); physical != styleScale_) {
+        const QPointF centre = viewCenter();
+        scale(physical / styleScale_, physical / styleScale_);
+        styleScale_ = physical;
+        centerOn(centre);
+    }
     if (!(doc_ == shown_)) {  // not for a hover or a theme: accessibility tools keep the parts they hold
         shown_ = doc_, ++revision_;
         keyHotspot_ = false, arrowMark_ = {};  // indices may have gone stale
