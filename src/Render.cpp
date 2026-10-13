@@ -42,6 +42,13 @@ const std::vector<DrawingStyle>& builtInDrawingStyles() {
         // hash 1.75, margin 1.25, spacing 20%, Helvetica 7 pt.
         {"RSC", 12.2, 0.449 * kRsc, 1.602 * kRsc, 4.5 * 1.602 / 2.0 * kRsc, 2.2 * 1.75 / 2.5 * kRsc, 0.20,
          (3.9 * 0.7 + 1.25) * kRsc, "Helvetica", QFont::Normal, 7 * kRsc},
+        // Publisher sources and conversions: docs/journal-styles.md. Wedges keep ACS's bold-width ratio.
+        modelStyle({"Nature", 10.8, 0.021 * 72 / 2.54, 0.055 * 72 / 2.54, 0.055 * 72 / 2.54 * 2.25,
+                    0.06 * 72 / 2.54, 0.18, 0.39 * 6 + 0.042 * 72 / 2.54, 0.042 * 72 / 2.54, "Helvetica", 400, 6}),
+        modelStyle({"Angewandte", 17, 0.75, 2.6015625, 2.6015625 * 2.25, 2.6015625,
+                    0.18, 0.39 * 12 + 2, 2, "Arial", 400, 12}),
+        modelStyle({"SYNLETT/SYNTHESIS", 0.357 * 72 / 2.54, 0.02 * 72 / 2.54, 0.049 * 72 / 2.54, 0.049 * 72 / 2.54 * 2.25,
+                    0.062 * 72 / 2.54, 0.18, 0.39 * 6 + 0.032 * 72 / 2.54, 0.032 * 72 / 2.54, "Arial", 400, 6}),
     };
     return styles;
 }

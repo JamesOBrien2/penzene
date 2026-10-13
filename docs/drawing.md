@@ -120,6 +120,9 @@ lane labels like any text.
 
 ### Saved drawing styles
 
+Nature, Angewandte and SYNLETT/SYNTHESIS join the ACS 1996, JDP and RSC presets.
+Their measurements and publisher sources are listed in [Journal drawing styles](journal-styles.md).
+
 **Format → Circled Charges** surrounds each displayed charge sign with a circle,
 including charges on skeletal carbons. Charge magnitudes remain beside the sign.
 This is a saved, undoable document setting; it changes the drawing, not chemistry.

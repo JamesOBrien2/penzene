@@ -92,6 +92,7 @@ tutorials/index
 
 chemistry
 figures
+journal-styles
 files
 ```
 
