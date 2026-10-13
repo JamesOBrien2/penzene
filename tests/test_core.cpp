@@ -157,8 +157,30 @@ TEST_CASE("a peptide from its one- or three-letter sequence (#503)") {
     CHECK_FALSE(chem::fromSequence("G1S"));
     CHECK(chem::toSmiles(*chem::fromSequence("Ala-D-Phe")) == chem::toSmiles(*chem::fromSequence("Af")));  // D-phenylalanine (#570)
     CHECK(chem::properties(*chem::fromSequence("H-GLY-OH"))->formula == "C2H5NO2");
-    for (const char* bad : {"Gly-Xyz", "Ac-Gly-NH2", "Ala-D-D-Phe", "G-F-L"})  // refused, not read as one-letter codes
+    for (const char* bad : {"Gly-Xyz", "Ac-NH2", "Gly-Ac", "NH2-Gly", "Ac-Ac-Gly", "Ac-H-Gly", "Gly-OH-NH2",
+                            "Gly-NH2-NH2", "Ala-D-D-Phe", "G-F-L"})
         CHECK_FALSE(chem::fromSequence(bad));
+}
+
+TEST_CASE("peptide caps change only the termini and keep stereochemistry (#572)") {
+    for (auto [sequence, smiles] : {std::pair{"Ac-Gly", "CC(=O)NCC(=O)O"}, {"Gly-NH2", "NCC(N)=O"},
+                                    {"Ac-Gly-Phe-NH2", "CC(=O)NCC(=O)N[C@@H](Cc1ccccc1)C(N)=O"},
+                                    {"Ac-Pro-NH2", "CC(=O)N1CCC[C@H]1C(N)=O"},
+                                    {"Ac-Lys-Asp-NH2", "CC(=O)N[C@@H](CCCCN)C(=O)N[C@@H](CC(=O)O)C(N)=O"}}) {
+        INFO(sequence);
+        const auto doc = chem::fromSequence(sequence);
+        REQUIRE(doc);
+        CHECK(chem::toSmiles(*doc) == chem::toSmiles(*chem::fromSmiles(smiles)));
+        CHECK(chem::properties(*doc)->formula == chem::properties(*chem::fromSmiles(smiles))->formula);
+        CHECK(chem::checkStructure(*doc).empty());
+    }
+    CHECK(chem::toSmiles(*chem::fromSequence("Ac-Gly-D-Phe-NH2")) !=
+          chem::toSmiles(*chem::fromSequence("Ac-Gly-Phe-NH2")));
+    CHECK(chem::toSmiles(*chem::fromSequence("H-Gly-NH2")) == chem::toSmiles(*chem::fromSequence("Gly-NH2")));
+    CHECK(chem::toSmiles(*chem::fromSequence("Ac-Gly-OH")) == chem::toSmiles(*chem::fromSequence("Ac-Gly")));
+    CHECK(chem::toSmiles(*chem::fromSequence("Ac-GF-NH2")) == chem::toSmiles(*chem::fromSequence("Ac-Gly-Phe-NH2")));
+    if (const QString preview = qEnvironmentVariable("PENZENE_PEPTIDE_PREVIEW"); !preview.isEmpty())
+        REQUIRE(exportDocument(*chem::fromSequence("Ac-Gly-Phe-NH2"), preview, {.background = Qt::white, .margin = 10}));
 }
 
 TEST_CASE("a peptide's side chains keep clear of the backbone's N-H (#559)") {
