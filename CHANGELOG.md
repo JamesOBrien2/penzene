@@ -6,6 +6,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- A Newman and Fischer tutorial explains editing projections and reading Fischer stereochemistry as SMILES; the anti-butane Newman template now places its methyl groups opposite one another (#604).
+
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 
 - View → Mark Valence Errors can turn off red error colouring on screen and in exports; structure checks are unchanged (#620).

@@ -6,6 +6,7 @@ results should match the ones shown here.
 | Tutorial | You'll make |
 |---|---|
 | [Caffeine from the keyboard](keyboard.md) | a structure drawn with hotkeys: one click, then twelve keys |
+| [Newman and Fischer projections](projections.md) | projection drawings and a Fischer mirror image with verified stereochemistry |
 | [A reaction scheme](reaction-scheme.md) | an aspirin synthesis with reagents and conditions, exported as SVG and PDF |
 | [A dataset of structures](dataset.md) | a grid of drugs and a descriptor table, from a `.smi` file |
 | [A publication figure](publication-figure.md) | a coloured structure in a journal style, at print size |
@@ -16,6 +17,7 @@ results should match the ones shown here.
 :hidden:
 
 keyboard
+projections
 reaction-scheme
 dataset
 publication-figure
