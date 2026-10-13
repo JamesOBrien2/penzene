@@ -108,7 +108,7 @@ Relabel an atom, as add_atom takes a label: an element ("C" undoes a label), an 
 
 ### `Document.style`
 
-Drawing style: 'ACS 1996' (default), 'JDP' or 'RSC' (since 0.4)
+Drawing style name, from drawing_styles(); includes saved user styles (since 0.4)
 
 ### `substitute(self, fragments: dict) -> Document`
 

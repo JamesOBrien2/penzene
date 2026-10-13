@@ -7,6 +7,8 @@
 #include "WhatsNew.h"
 #include "Templates.h"
 #include "Render.h"
+#include "Styles.h"
+#include "StyleEditor.h"
 
 #include <QApplication>
 #include <QNativeGestureEvent>
@@ -66,6 +68,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/reporters/catch_reporter_event_listener.hpp>
 #include <catch2/reporters/catch_reporter_registrars.hpp>
 
@@ -2611,6 +2614,59 @@ TEST_CASE("the colour swatch opens CPK colours; the pick paints atoms and bonds 
     click((canvas->document().atoms[0].pos + canvas->document().atoms[1].pos) / 2);
     CHECK(canvas->document().atoms[1].color == blue);
     CHECK(canvas->document().bonds[0].color == blue);
+}
+
+TEST_CASE("custom style editor saves a portable style and canvas undo restores its scale (#625)") {
+    App app;
+    QApplication::processEvents();
+    MainWindow w;
+    w.resize(1000, 700);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("[NH3]->[Pt+2](<-[NH3])(Cl)Cl"));
+    canvas->fitToDocument();
+    const QString name = "Penzene editor regression";
+    deleteDrawingStyle(name);
+    struct Cleanup { QString name; ~Cleanup() { deleteDrawingStyle(name); } } cleanup{name};
+    QTimer::singleShot(0, [&] {
+        auto* dialog = QApplication::activeModalWidget();
+        REQUIRE(dialog);
+        auto* length = dialog->findChild<QDoubleSpinBox*>("bondLength");
+        auto* save = dialog->findChild<QPushButton*>("saveStyle");
+        REQUIRE(length); REQUIRE(save);
+        CHECK_FALSE(length->isEnabled());
+        CHECK_FALSE(save->isEnabled());
+        dialog->findChild<QPushButton*>("duplicateStyle")->click();
+        CHECK(length->isEnabled());
+        dialog->findChild<QLineEdit*>("styleName")->setText(name);
+        length->setValue(20);
+        dialog->findChild<QDoubleSpinBox*>("labelMargin")->setValue(2);
+        save->click();
+        CHECK(dialog->findChild<QPushButton*>("deleteStyle")->isEnabled());
+        const QString preview = qEnvironmentVariable("PENZENE_STYLES_PREVIEW");
+        if (!preview.isEmpty()) {
+            REQUIRE(dialog->grab().save(preview + "/style-editor.png"));
+            if (qEnvironmentVariableIsSet("PENZENE_FEEDBACK_PREVIEW_LIVE")) {
+                QEventLoop loop;
+                QTimer::singleShot(60000, &loop, &QEventLoop::quit);
+                loop.exec();
+            }
+        }
+        qobject_cast<QDialog*>(dialog)->accept();
+    });
+    editDrawingStyles(&w, canvas->document());
+    const Document before = canvas->document();
+    const double scale = canvas->transform().m11();
+    Document after = before;
+    REQUIRE(applyDrawingStyle(after, name));
+    canvas->commit(after, "Drawing style");
+    CHECK(canvas->transform().m11() / scale == Catch::Approx(20 / 14.4));
+    CHECK(canvas->selectedSubset().styleSettings == after.styleSettings);
+    w.findChild<QUndoGroup*>()->undo();
+    CHECK(canvas->document() == before);
+    CHECK(canvas->transform().m11() == Catch::Approx(scale));
+    w.findChild<QUndoGroup*>()->redo();
+    CHECK(canvas->document().styleSettings == after.styleSettings);
 }
 
 TEST_CASE("Text has its own rail button and keeps its hotkey (#622)") {

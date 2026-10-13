@@ -6,6 +6,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Drawing styles can be duplicated, edited, saved and shared as JSON; custom styles travel with the drawing and work from the command line and Python (#625).
+
 - The Format toolbar sets colours, separate shape fills and text fonts, sizes, bold and italic, on selections or the next object drawn (#621).
 - Text has its own button on the tool rail, with the same `t` shortcut (#622).
 

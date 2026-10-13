@@ -10,6 +10,17 @@
 // Scene units are points; a standard bond is 14.4 pt (ACS 1996).
 constexpr double kBondLength = 14.4;
 
+// A portable style snapshot, in physical points (bondSpacing is a fraction).
+struct StyleSettings {
+    QString name;
+    double bondLength = 14.4, lineWidth = 0.6, boldWidth = 2, wedgeWidth = 4.5, hashSpacing = 2.2;
+    double bondSpacing = 0.18, labelRadius = 5.5, labelMargin = 1;
+    QString font = "Arial";
+    int weight = 400;
+    double fontSize = 10;
+    bool operator==(const StyleSettings&) const = default;
+};
+
 // Wedge/Hash/Wavy carry stereo; Bold and Dashed are drawing styles (on a
 // double bond they style one line).
 // Interaction (dotted: H-bond, contact, coordination) and Partial (dashed: bonds
@@ -142,6 +153,7 @@ struct Document {
     std::vector<Fill> fills;
     std::vector<Bracket> brackets;
     QString style;  // drawing style preset name; empty means ACS 1996
+    std::optional<StyleSettings> styleSettings;  // embedded snapshot, independent of the user's library
     enum class CarbonLabels { None, Terminal, All } carbonLabels = CarbonLabels::None;  // skeletal by default
     double labelRatio = 0;  // label size over bond length, as a ChemDraw file sets it; 0 = the style's own
     bool showStereo = false;  // draw CIP (R)/(S) and (E)/(Z) labels

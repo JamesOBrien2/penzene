@@ -2,6 +2,7 @@
 #include "Geometry.h"
 #include "Edit.h"
 #include "Render.h"
+#include "Styles.h"
 
 #include <GraphMol/SmilesParse/SmilesParse.h>
 #include <GraphMol/Depictor/RDDepictor.h>
@@ -40,6 +41,82 @@ TEST_CASE("SMILES gives 2D coordinates") {
 
 TEST_CASE("bad SMILES is rejected") {
     CHECK_FALSE(chem::fromSmiles("C1CC"));
+}
+
+TEST_CASE("drawing style definitions preserve presets and reject invalid data (#625)") {
+    for (const auto& preset : builtInDrawingStyles()) {
+        const auto s = styleSettings(preset);
+        const auto back = styleFromJson(styleToJson(s));
+        REQUIRE(back);
+        CHECK(*back == s);
+        Document original = *chem::fromSmiles("C[C@H](N)C(=O)O");
+        original.style = preset.name;
+        Document portable = original;
+        portable.styleSettings = s;
+        CHECK(renderImage(original) == renderImage(portable));
+        CHECK(documentStyle(portable).lineWidth == Catch::Approx(preset.lineWidth));
+        CHECK(exportScale(portable) == Catch::Approx(preset.bondLength / kBondLength));
+        CHECK(Document::fromJson(portable.toJson()) == portable);
+    }
+    const auto good = styleToJson(styleSettings(drawingStyle("RSC")));
+    for (const auto& key : good.keys()) {
+        auto missing = good;
+        missing.remove(key);
+        CHECK_FALSE(styleFromJson(missing));
+    }
+    for (const auto& pair : {std::pair{"bondLength", QJsonValue(0)}, {"lineWidth", QJsonValue(-1)},
+          {"fontSize", QJsonValue(0)}, {"weight", QJsonValue(400.5)}, {"name", QJsonValue("  ")},
+          {"bondSpacing", QJsonValue(2)}, {"version", QJsonValue(2)}, {"hashSpacing", QJsonValue("2")}}) {
+        auto bad = good;
+        bad[pair.first] = pair.second;
+        CHECK_FALSE(styleFromJson(bad));
+    }
+}
+
+TEST_CASE("custom styles are snapshots shared by files, pages and exports (#625)") {
+    auto s = styleSettings(drawingStyle("RSC"));
+    s.name = "Penzene style regression";
+    deleteDrawingStyle(s.name);
+    struct Cleanup { QString name; ~Cleanup() { deleteDrawingStyle(name); } } cleanup{s.name};
+    REQUIRE(saveDrawingStyle(s));
+    CHECK_FALSE(saveDrawingStyle(s));
+    auto duplicate = s;
+    duplicate.name = s.name.toUpper();
+    CHECK_FALSE(saveDrawingStyle(duplicate));
+    duplicate.name = "ACS 1996";
+    CHECK_FALSE(saveDrawingStyle(duplicate));
+    CHECK_FALSE(deleteDrawingStyle("RSC"));
+    Document d = *chem::fromSmiles("[NH3]->[Pt+2](<-[NH3])(Cl)Cl");
+    d.labelRatio = 2;
+    REQUIRE(applyDrawingStyle(d, s.name));
+    CHECK(d.labelRatio == 0);
+    CHECK(d.styleSettings == s);
+    const auto png = renderImage(d);
+    const auto sheets = sheetsToJson({{"A", d}, {"B", d}});
+    const auto before = d.toJson();
+    auto changed = s;
+    changed.bondLength = 24;
+    REQUIRE(saveDrawingStyle(changed, s.name));
+    CHECK(renderImage(d) == png);
+    Document newlyApplied = d;
+    REQUIRE(applyDrawingStyle(newlyApplied, s.name));
+    CHECK(exportScale(newlyApplied) == Catch::Approx(24 / kBondLength));
+    REQUIRE(deleteDrawingStyle(s.name));
+    CHECK_FALSE(applyDrawingStyle(newlyApplied, s.name));
+    REQUIRE(Document::fromJson(before));
+    CHECK(renderImage(*Document::fromJson(before)) == png);
+    const std::vector<Sheet> expected{{"A", d}, {"B", d}};
+    CHECK(sheetsFromJson(sheets) == expected);
+    CHECK(sheetsFromJson(sheetsToJsonV1({{"A", d}, {"B", d}}))[1].doc == d);
+    CHECK(Document::fromEmbedded(renderSvg(d)) == d);
+    CHECK(Document::fromEmbedded(renderPng(d)) == d);
+    CHECK(Document::fromEmbedded(renderPdf(d)) == d);
+    CHECK(chem::toCdxml(d).contains("BondLength=\"12.2\""));
+    auto broken = QJsonDocument::fromJson(before).object();
+    auto settings = broken["styleSettings"].toObject();
+    settings["fontSize"] = -1;
+    broken["styleSettings"] = settings;
+    CHECK_FALSE(Document::fromJson(QJsonDocument(broken).toJson()));
 }
 
 TEST_CASE("deleting a bond removes only endpoints left isolated") {

@@ -1094,7 +1094,6 @@
     </message>
     <message>
         <source>Text</source>
-
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1123,6 +1122,10 @@
     </message>
     <message>
         <source>Ctrl+Shift+G</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Edit Styles…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2327,6 +2330,174 @@ moves off, so you can keep typing.&lt;/p&gt;
     </message>
     <message>
         <source>under the nmrshiftdb2 Database License (%1).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Drawing Styles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Drawing styles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Name:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bond length:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Line width:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bold width:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wedge width:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hash spacing:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Double-bond gap:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Label margin:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Label size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source> pt</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Label font:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Thin</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Extra light</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Light</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Demi bold</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bold</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Extra bold</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Black</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Label weight:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Live drawing style preview</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Duplicate</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Import…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Export…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enter a name and valid measurements.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>This font is unavailable; a substitute is used.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source> copy</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not save the style. Check its name, measurements and folder permissions; names must be unique.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Delete style</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Delete %1? Existing drawings keep their style.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not delete the style.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Import drawing style</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Drawing styles (*.json)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not read the style file.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid style or duplicate name. Import requires a unique user style name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Export drawing style</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not write the style file.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
