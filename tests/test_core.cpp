@@ -1891,6 +1891,65 @@ TEST_CASE("orbitals: kind, look and colour survive .penz and CDXML (#204)") {
     }
 }
 
+TEST_CASE("ChemDraw groups keep whole fragments, arrows and text together (#579)") {
+    Document doc = *chem::fromSmiles("CO.CN");
+    REQUIRE(edit::applyLabel(doc, 1, "OMe", true));
+    for (int i = 0; i < 4; ++i) doc.atoms[i].group = i < 2 ? 7 : 8;
+    doc.texts = {{{0, 80}, "first"}, {{80, 80}, "second"}, {{160, 80}, "ungrouped"}};
+    doc.texts[0].group = 7;
+    doc.texts[1].group = 8;
+    doc.arrows = {{{0, -40}, {30, -40}}, {{80, -40}, {110, -40}}};
+    doc.arrows[0].group = 7, doc.arrows[0].behind = true;
+    doc.arrows[1].group = 8;
+    const QByteArray xml = chem::toCdxml(doc);
+    CHECK(xml.count("<group ") == 2);
+    for (const QByteArray& data : {xml, chem::toCdx(doc)}) {
+        const auto back = chem::fromChemDraw(data);
+        REQUIRE(back);
+        CHECK(chem::toSmiles(*back) == chem::toSmiles(doc));
+        REQUIRE(back->atoms.size() == 4);
+        REQUIRE(back->arrows.size() == 2);
+        REQUIRE(back->texts.size() == 3);
+        auto groupOf = [&](const char* text) {
+            const auto it = std::find_if(back->texts.begin(), back->texts.end(), [&](const Text& t) { return t.text == text; });
+            REQUIRE(it != back->texts.end());
+            return it->group;
+        };
+        const int first = groupOf("first"), second = groupOf("second");
+        REQUIRE(first >= 0);
+        REQUIRE(second >= 0);
+        CHECK(first != second);
+        CHECK(groupOf("ungrouped") == -1);
+        CHECK(std::count_if(back->atoms.begin(), back->atoms.end(), [&](const Atom& a) { return a.group == first; }) == 2);
+        CHECK(std::count_if(back->atoms.begin(), back->atoms.end(), [&](const Atom& a) { return a.group == second; }) == 2);
+        CHECK(back->arrows[0].group == first);
+        CHECK(back->arrows[0].behind);
+        CHECK(back->arrows[1].group == second);
+        CHECK_FALSE(back->arrows[1].behind);
+    }
+    doc.atoms[1].group = -1;  // grouping half a molecule cannot split its ChemDraw fragment
+    const auto partial = chem::fromChemDraw(chem::toCdxml(doc));
+    REQUIRE(partial);
+    CHECK(chem::toSmiles(*partial) == chem::toSmiles(doc));
+    CHECK(std::count_if(partial->atoms.begin(), partial->atoms.end(), [](const Atom& a) { return a.group < 0; }) == 2);
+}
+
+TEST_CASE("ChemDraw nested groups flatten while inline fragment groups are ignored (#579)") {
+    const auto doc = chem::fromChemDraw(R"(<CDXML BondLength="30"><page id="1">
+<group id="2"><fragment id="3"><n id="4" p="0 0"/><n id="5" p="30 0"/><b id="6" B="4" E="5"/></fragment>
+<group id="7"><t id="8" p="0 30"><s>nested</s></t></group></group>
+<fragment id="9"><group id="10"><n id="11" p="90 0"/></group><n id="12" p="120 0"/><b id="13" B="11" E="12"/></fragment>
+</page></CDXML>)");
+    REQUIRE(doc);
+    REQUIRE(doc->atoms.size() == 4);
+    REQUIRE(doc->texts.size() == 1);
+    CHECK(doc->atoms[0].group == doc->texts[0].group);
+    CHECK(doc->atoms[1].group == doc->texts[0].group);
+    CHECK(doc->texts[0].group >= 0);
+    CHECK(doc->atoms[2].group == -1);
+    CHECK(doc->atoms[3].group == -1);
+}
+
 TEST_CASE("arrange: arrows and orbitals stack around the molecule's layer (#204)") {
     Document doc;
     for (int i = 0; i < 3; ++i) doc.arrows.push_back({{double(i), 0}, {double(i), 5}, ArrowKind::Line});
