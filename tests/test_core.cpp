@@ -2,6 +2,7 @@
 #include "Geometry.h"
 #include "Edit.h"
 #include "Render.h"
+#include "Jcamp.h"
 
 #include <GraphMol/SmilesParse/SmilesParse.h>
 #include <GraphMol/Depictor/RDDepictor.h>
@@ -24,6 +25,88 @@
 #include <algorithm>
 #include <cmath>
 #include <numeric>
+
+TEST_CASE("JCAMP decodes numeric and compressed samples with checked difference checkpoints (#553)") {
+    const QByteArray header = "##TITLE=synthetic\n##JCAMP-DX=5.01\n##DATA TYPE=NMR SPECTRUM\n"
+        "##.OBSERVE NUCLEUS=^1H\n##XUNITS=PPM\n##FIRSTX=4\n##LASTX=0\n##NPOINTS=5\n"
+        "##XFACTOR=0.1\n##YFACTOR=2\n##XYDATA=(X++(Y..Y))\n";
+    for (const QByteArray& data : {QByteArray("40 1 2 3 6 10\n"), QByteArray("40 A B C F A0\n"),
+                                  QByteArray("40AJT\n20CLM\n0A0\n"), QByteArray("40+1+2+3+6+10\n")}) {
+        QString error;
+        const auto spectra = readJcamp(header + data + "##END=\n", &error);
+        INFO(error.toStdString());
+        REQUIRE(spectra.size() == 1);
+        CHECK(spectra[0].proton);
+        CHECK(spectra[0].points == std::vector<QPointF>{{4, 2}, {3, 4}, {2, 6}, {1, 12}, {0, 20}});
+    }
+    auto gaps = readJcamp(header + "40 A?BC@\n##END=\n");
+    REQUIRE(gaps.size() == 1);
+    CHECK(std::isnan(gaps[0].points[1].y()));
+    const auto scientific = readJcamp(header + "40 1e0 2E+0 3.0e0 6 10\n##END=\n");
+    REQUIRE(scientific.size() == 1);
+    CHECK(scientific[0].points[1].y() == 4);
+    const auto packedE = readJcamp(header + "40E3BCFA0\n##END=\n");
+    REQUIRE(packedE.size() == 1);
+    CHECK(packedE[0].points[0].y() == 106);
+    const auto repeated = readJcamp(header + "40 A U b @\n##END=\n");
+    REQUIRE(repeated.size() == 1);
+    CHECK(repeated[0].points == std::vector<QPointF>{{4, 2}, {3, 2}, {2, 2}, {1, -4}, {0, 0}});
+    for (const QByteArray& bad : {QByteArray("40AJT\n20DLM\n0A0\n"), QByteArray("40AJT\n21CLM\n0A0\n"),
+                                 QByteArray("40AJT\n20CLM\n"), QByteArray("40AS999999999\n"), QByteArray("40 A B\n"),
+                                 QByteArray("40 A T T @\n"), QByteArray("40 A ? J B @\n")}) {
+        QString error;
+        CHECK(readJcamp(header + bad + "##END=\n", &error).empty());
+        CHECK_FALSE(error.isEmpty());
+    }
+    CHECK(readJcamp(header + "40 A B C F A0\n").empty());
+}
+
+TEST_CASE("JCAMP converts Hz to referenced ppm and reads NTUPLES real pages and linked spectra (#553)") {
+    const QByteArray header = "##TITLE=carbon\n##JCAMP-DX=5.01\n##DATA TYPE=NMR SPECTRUM\n"
+        "##.OBSERVE NUCLEUS=13C\n##.OBSERVE FREQUENCY=100\n##XUNITS=HZ\n"
+        "##NPOINTS=3\n##.SHIFT REFERENCE=INTERNAL, CDCl3, 2, 77\n##XYPOINTS=(XY..XY)\n14000,1;12000,2;10000,1\n##END=\n";
+    const auto spectra = readJcamp(header);
+    REQUIRE(spectra.size() == 1);
+    CHECK_FALSE(spectra[0].proton);
+    CHECK(spectra[0].points == std::vector<QPointF>{{97, 1}, {77, 2}, {57, 1}});
+    QByteArray offset = header;
+    offset.replace("##.SHIFT REFERENCE=INTERNAL, CDCl3, 2, 77", "##FIRSTX=14000\n##$OFFSET=97");
+    CHECK(readJcamp(offset)[0].points == spectra[0].points);
+    offset.replace("14000,1;12000,2;10000,1", "10000,1;12000,2;14000,1");
+    CHECK(readJcamp(offset)[0].points == std::vector<QPointF>{{57, 1}, {77, 2}, {97, 1}});
+    const auto peaks = readJcamp("##TITLE=negative shifts\n##DATA TYPE=NMR PEAK TABLE\n##.OBSERVE NUCLEUS=1H\n"
+                               "##XUNITS=PPM\n##$OFFSET=1\n##PEAK TABLE=(XY..XY)\n-2,-1;-1,2\n##END=\n");
+    REQUIRE(peaks.size() == 1);
+    CHECK(peaks[0].peaks);
+    CHECK(peaks[0].points == std::vector<QPointF>{{0, -1}, {1, 2}});
+    const QByteArray ntuples = "##TITLE=real and imaginary\n##DATA TYPE=NMR SPECTRUM\n##.OBSERVE NUCLEUS=1H\n"
+        "##.OBSERVE FREQUENCY=400\n##NUM DIM=1\n##NTUPLES=NMR SPECTRUM\n##SYMBOL=X,R,I\n"
+        "##VAR_TYPE=INDEPENDENT,DEPENDENT,DEPENDENT\n##VAR_DIM=3,3,3\n##UNITS=HZ,ARBITRARY UNITS,ARBITRARY UNITS\n"
+        "##FACTOR=1,2,3\n##FIRST=800,0,0\n##LAST=0,0,0\n##PAGE=N=1\n"
+        "##DATA TABLE=(X++(R..R)),XYDATA\n800 A B C\n##PAGE=N=2\n##DATA TABLE=(X++(I..I)),XYDATA\n800 ZZZ\n##END NTUPLES=\n##END=\n";
+    const auto real = readJcamp(ntuples);
+    REQUIRE(real.size() == 1);
+    CHECK(real[0].points == std::vector<QPointF>{{2, 2}, {1, 4}, {0, 6}});
+    QByteArray generic = ntuples;
+    generic.replace("SYMBOL=X,R,I", "SYMBOL=F1,R,I");
+    generic.replace("(X++", "(F1++");
+    CHECK(readJcamp(generic)[0].points == real[0].points);
+    const auto linked = readJcamp("##TITLE=two spectra\n##DATA TYPE=LINK\n" + header + ntuples + "##END=\n");
+    CHECK(linked.size() == 2);
+    QByteArray bad = header;
+    bad.replace("##.OBSERVE FREQUENCY=100\n", "");
+    CHECK(readJcamp(bad).empty());
+    bad = header;
+    bad.replace("CDCl3, 2, 77", "CDCl3, 0, 77");
+    CHECK(readJcamp(bad).empty());
+    bad = ntuples;
+    bad.replace("##NUM DIM=1", "##NUM DIM=2");
+    CHECK(readJcamp(bad).empty());
+    bad = header;
+    bad.replace("NMR SPECTRUM", "NMR FID");
+    CHECK(readJcamp(bad).empty());
+    CHECK(readJcamp("not a spectrum").empty());
+}
 
 TEST_CASE("SMILES gives 2D coordinates") {
     auto doc = chem::fromSmiles("c1ccccc1O");

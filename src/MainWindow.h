@@ -115,6 +115,7 @@ private:
     void updateProfile();  // the Properties panel, while it's visible
     void updateMassSpec();  // the Mass Spec panel, likewise
     void updateNmr();       // and the NMR panel
+    void importExperimental();
     void applyTheme(const QString& name);
     void remember(const QString& path);  // most recent first, at most 10
 
@@ -165,6 +166,9 @@ private:
     class QDockWidget* nmrDock_;
     class QComboBox* nucleus_;
     class NmrView* nmr_;
+    class QLabel* experimentalName_;
+    class QPushButton* removeExperimental_;
+    QString experimentalFile_;
     std::vector<std::pair<QAction*, std::function<QIcon()>>> icons_;
     std::vector<struct FlyoutFrame*> flyouts_;  // the tool rail's group flyouts
 };
