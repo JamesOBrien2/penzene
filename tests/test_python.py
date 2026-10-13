@@ -55,6 +55,11 @@ assert boc.atoms[0].symbol == "Boc" and boc.formula == "C5H10O2"
 
 doc.style = "RSC"
 assert doc.style == "RSC" and "RSC" in pz.drawing_styles()
+for journal in ("Nature", "Angewandte", "SYNLETT/SYNTHESIS"):
+    assert journal in pz.drawing_styles()
+    doc.style = journal
+    assert doc.style == journal
+    assert "<svg" in doc.to_svg()
 for bad in (lambda: pz.from_smiles("C1CC"), lambda: m.add_atom("notachem!!"), lambda: setattr(doc, "style", "Comic")):
     try:
         bad()

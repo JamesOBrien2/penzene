@@ -180,6 +180,44 @@ TEST_CASE("circled charges preserve bonds around a crowded metal centre (#623)")
     }
 }
 
+TEST_CASE("journal presets match publisher measurements and ChemDraw physical sizes (#473)") {
+    for (const auto& [name, bond, font, line, bold, margin, hash] : {
+        std::tuple{"Nature", 10.8, 6.0, 0.5952755906, 1.5590551181, 1.1905511811, 1.7007874016},
+        {"Angewandte", 17.0, 12.0, 0.75, 2.6015625, 2.0, 2.6015625},
+        {"SYNLETT/SYNTHESIS", 10.1196850394, 6.0, 0.5669291339, 1.3889763780, 0.9070866142, 1.7574803150}}) {
+        INFO(name);
+        const auto s = styleSettings(drawingStyle(name));
+        CHECK(s.name == name);
+        CHECK(s.bondLength == Catch::Approx(bond).margin(1e-6));
+        CHECK(s.fontSize == Catch::Approx(font));
+        CHECK(s.lineWidth == Catch::Approx(line).margin(1e-6));
+        CHECK(s.boldWidth == Catch::Approx(bold).margin(1e-6));
+        CHECK(s.labelMargin == Catch::Approx(margin).margin(1e-6));
+        CHECK(s.hashSpacing == Catch::Approx(hash).margin(1e-6));
+        CHECK(s.bondSpacing == Catch::Approx(0.18));
+        CHECK_FALSE(saveDrawingStyle(s));
+        Document d = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
+        d.circledCharges = true;
+        REQUIRE(applyDrawingStyle(d, name));
+        CHECK(d.circledCharges);  // a preset must not change independent presentation choices
+        CHECK_FALSE(d.styleSettings);
+        CHECK(exportScale(d) == Catch::Approx(bond / kBondLength));
+        const auto xml = chem::toCdxml(d);
+        QXmlStreamReader reader(xml);
+        REQUIRE(reader.readNextStartElement());
+        CHECK(reader.attributes().value("BondLength").toDouble() == Catch::Approx(bond));
+        CHECK(reader.attributes().value("LabelSize").toDouble() == Catch::Approx(font));
+        CHECK(reader.attributes().value("LineWidth").toDouble() == Catch::Approx(line));
+        const auto back = chem::fromChemDraw(xml);
+        REQUIRE(back);
+        CHECK(back->style == name);
+        CHECK(chem::toSmiles(*back) == chem::toSmiles(d));
+        CHECK(Document::fromJson(d.toJson()) == d);
+        CHECK_FALSE(renderPng(d).isEmpty());
+        CHECK_FALSE(renderPdf(d).isEmpty());
+    }
+}
+
 TEST_CASE("deleting a bond removes only endpoints left isolated") {
     Document chain;
     chain.atoms = {{{0, 0}}, {{kBondLength, 0}}, {{2 * kBondLength, 0}}};
@@ -541,7 +579,9 @@ TEST_CASE("ChemDraw keeps drawing styles at their physical size (#624)") {
                     CHECK(len(found->from - moved - arrow.from) < 0.04);
                     CHECK(len(found->to - moved - arrow.to) < 0.04);
                     CHECK(found->bend == Catch::Approx(arrow.bend).margin(0.04));
-                    if (!isShape(arrow.kind)) CHECK(found->head == Catch::Approx(arrow.head).margin(0.01));
+                    // CDX rounds stroke widths to hundredths of a point; compare physical head lengths.
+                    if (!isShape(arrow.kind)) CHECK(found->head * kHeadLength * exportScale(d) ==
+                        Catch::Approx(arrow.head * kHeadLength * exportScale(d)).margin(0.05));
                 }
             }
         }

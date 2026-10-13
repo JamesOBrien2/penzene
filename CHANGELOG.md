@@ -6,6 +6,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Journal drawing styles now include Nature, Angewandte and SYNLETT/SYNTHESIS, with publisher measurements and sources (#473).
+
 - Format → Circled Charges draws circles around charge signs, including bare carbons; the setting is saved with the drawing (#623).
 
 - Drawing styles can be duplicated, edited, saved and shared as JSON; custom styles travel with the drawing and work from the command line and Python (#625).
