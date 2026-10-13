@@ -2774,15 +2774,15 @@ void MainWindow::buildMenus() {
         for (auto* action : styles->actions()) if (action->isSeparator()) { separator = action; break; }
         for (auto* action : styleGroup->actions()) { styleGroup->removeAction(action); styles->removeAction(action); delete action; }
         for (const auto& st : drawingStyles()) {
-        auto* act = styles->addAction(st.name);
-        if (separator) styles->insertAction(separator, act);
-        act->setCheckable(true);
-        styleGroup->addAction(act);
-        connect(act, &QAction::triggered, this, [this, name = st.name] {
-            Document next = canvas_->document();
-            if (!applyDrawingStyle(next, name)) return;
-            if (!(next == canvas_->document())) canvas_->commit(next, tr("Drawing style"));
-        });
+            auto* act = styles->addAction(st.name);
+            if (separator) styles->insertAction(separator, act);
+            act->setCheckable(true);
+            styleGroup->addAction(act);
+            connect(act, &QAction::triggered, this, [this, name = st.name] {
+                Document next = canvas_->document();
+                if (!applyDrawingStyle(next, name)) return;
+                if (!(next == canvas_->document())) canvas_->commit(next, tr("Drawing style"));
+            });
         }
     };
     populateStyles();

@@ -7,7 +7,6 @@
 #include <QDoubleSpinBox>
 #include <QFile>
 #include <QFileDialog>
-#include <QFontComboBox>
 #include <QFontDatabase>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -60,7 +59,9 @@ void editDrawingStyles(QWidget* parent, const Document& document) {
         form->addRow(m.label, box);
         numbers.push_back(box);
     }
-    auto* font = new QFontComboBox;
+    auto* font = new QComboBox;
+    font->setEditable(true);
+    font->addItems(QFontDatabase::families());
     font->setObjectName("styleFont");
     form->addRow(QObject::tr("Label font:"), font);
     auto* weight = new QComboBox;
@@ -191,8 +192,7 @@ void editDrawingStyles(QWidget* parent, const Document& document) {
     });
     QObject::connect(name, &QLineEdit::textChanged, &dialog, redraw);
     for (auto* box : numbers) QObject::connect(box, &QDoubleSpinBox::valueChanged, &dialog, redraw);
-    QObject::connect(font, &QFontComboBox::currentFontChanged, &dialog, redraw);
-    QObject::connect(font, &QFontComboBox::editTextChanged, &dialog, redraw);
+    QObject::connect(font, &QComboBox::editTextChanged, &dialog, redraw);
     QObject::connect(weight, &QComboBox::currentIndexChanged, &dialog, redraw);
     refresh(documentStyle(document).name);
     dialog.exec();

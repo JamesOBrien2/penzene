@@ -77,8 +77,15 @@ struct App {  // base class so the QApplication exists before any widget member
     App() {
         static int argc = 1;
         static char name[] = "tests";
-        static char* argv[] = {name};
-        static QApplication app(argc, argv);
+        static char* argv[] = {name, nullptr};
+        // Match the app's style; Qt's native caches outlive local static destructors.
+        static QApplication* app = [] {
+            auto* app = new QApplication(argc, argv);
+            app->setStyle(themedStyle());
+            return app;
+        }();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        qApp->setStyleSheet({});  // New fixtures need fresh caches after native widgets have been destroyed.
         QApplication::setOrganizationName("penzene-tests");  // keep the user's settings out of it
         QStandardPaths::setTestModeEnabled(true);  // and their app data (autosave)
     }
@@ -2648,13 +2655,23 @@ TEST_CASE("custom style editor saves a portable style and canvas undo restores i
             REQUIRE(dialog->grab().save(preview + "/style-editor.png"));
             if (qEnvironmentVariableIsSet("PENZENE_FEEDBACK_PREVIEW_LIVE")) {
                 QEventLoop loop;
-                QTimer::singleShot(60000, &loop, &QEventLoop::quit);
+                QObject::connect(qobject_cast<QDialog*>(dialog), &QDialog::finished, &loop, &QEventLoop::quit);
                 loop.exec();
+                return;
             }
         }
         qobject_cast<QDialog*>(dialog)->accept();
     });
     editDrawingStyles(&w, canvas->document());
+    if (qEnvironmentVariableIsSet("PENZENE_FEEDBACK_PREVIEW_LIVE")) return;
+    QTimer::singleShot(0, [&] {
+        auto* preferences = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        REQUIRE(preferences);
+        for (auto* box : preferences->findChildren<QComboBox*>())
+            if (box->findText("Dark") >= 0) box->setCurrentText("Dark");
+        preferences->accept();
+    });
+    w.showPreferences();
     const Document before = canvas->document();
     const double scale = canvas->transform().m11();
     Document after = before;
