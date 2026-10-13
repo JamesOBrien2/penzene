@@ -32,9 +32,9 @@ jobs:
       - name: WinGet
         shell: pwsh
         run: |
-          # Hosted images can ship an older client that rejects the submission schema.
+          # Repair only the runner account; all-user registration can select a broken staged bundle.
           Install-PSResource Microsoft.WinGet.Client -Repository PSGallery -TrustRepository -Quiet
-          Repair-WinGetPackageManager -AllUsers -Latest
+          Repair-WinGetPackageManager -Latest
           winget --version
       - name: Validate
         shell: pwsh
