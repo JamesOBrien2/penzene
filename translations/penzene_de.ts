@@ -1129,6 +1129,14 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Circled Charges</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Circled charges</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Mark &amp;Valence Errors</source>
         <translation>&amp;Valenzfehler markieren</translation>
     </message>

@@ -100,6 +100,7 @@ void editDrawingStyles(QWidget* parent, const Document& document) {
     QString replacing;
     bool loading = false;
     Document sample = chem::fromSmiles("[NH3]->[Pt+2](<-[NH3])(Cl)Cl").value_or(Document());
+    sample.circledCharges = document.circledCharges;
     auto draft = [&] {
         if (!fields->isEnabled()) return source;
         StyleSettings s = source;

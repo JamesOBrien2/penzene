@@ -160,6 +160,7 @@ struct Document {
     bool showAtomNumbers = false;  // draw each atom's index (from 1)
     bool showShifts = false;  // draw predicted 13C and 1H NMR shifts (#403)
     bool aromaticCircles = false;  // default for every aromatic ring
+    bool circledCharges = false;
     QString page;         // a pageSizes() name: laid out at final size; "" = no page
     QPointF pageOrigin;   // the page's top-left corner
     std::vector<std::vector<int>> aromaticCircleOverrides;  // sorted ring atom IDs with the opposite display

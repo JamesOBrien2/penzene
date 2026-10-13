@@ -1340,6 +1340,7 @@ QRectF bounds(const Document& doc, const Piece& p) {
     part.style = doc.style;
     part.styleSettings = doc.styleSettings;
     part.labelRatio = doc.labelRatio;
+    part.circledCharges = doc.circledCharges;
     return documentBounds(part);
 }
 
