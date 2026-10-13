@@ -6,6 +6,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Text has its own button on the tool rail, with the same `t` shortcut (#622).
+
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 
 - View → Mark Valence Errors can turn off red error colouring on screen and in exports; structure checks are unchanged (#620).

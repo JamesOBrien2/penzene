@@ -1053,6 +1053,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Text</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Dative bond: an arrow from the donor to the acceptor, which takes none of the donor&apos;s hydrogens — k on a bond</source>
         <translation type="unfinished"></translation>
     </message>
