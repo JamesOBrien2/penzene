@@ -38,6 +38,45 @@ TEST_CASE("SMILES gives 2D coordinates") {
     CHECK(std::abs(std::hypot(d.x(), d.y()) - kBondLength) < 0.5);
 }
 
+TEST_CASE("themes have a validated versioned JSON round trip (#475)") {
+    for (const Theme& t : themes()) {
+        INFO(t.name.toStdString());
+        const auto back = Theme::fromJson(t.toJson());
+        REQUIRE(back);
+        CHECK(back->toJson() == t.toJson());
+        CHECK(chrome(*back).border.rgba() == chrome(t).border.rgba());
+        CHECK(chrome(*back).secondary.rgba() == chrome(t).secondary.rgba());
+        CHECK(chrome(*back).accentBg.rgba() == chrome(t).accentBg.rgba());
+    }
+    const auto valid = QJsonDocument::fromJson(theme("Light").toJson()).object();
+    for (auto [key, value] : {std::pair<QString, QJsonValue>{"version", 2}, {"version", "1"}, {"format", "penzene"},
+                              {"name", " "}, {"dark", "false"}, {"colors", "#ffffff"}}) {
+        auto bad = valid;
+        bad[key] = value;
+        CHECK_FALSE(Theme::fromJson(QJsonDocument(bad).toJson()));
+    }
+    for (QJsonValue badColor : {QJsonValue("invalid"), QJsonValue(12), QJsonValue(QJsonValue::Null)}) {
+        auto bad = valid;
+        auto colors = bad["colors"].toObject();
+        colors["ink"] = badColor;
+        bad["colors"] = colors;
+        CHECK_FALSE(Theme::fromJson(QJsonDocument(bad).toJson()));
+    }
+    auto missing = valid;
+    auto colors = missing["colors"].toObject();
+    colors.remove("accent");
+    missing["colors"] = colors;
+    CHECK_FALSE(Theme::fromJson(QJsonDocument(missing).toJson()));
+    CHECK_FALSE(Theme::fromJson("{}"));
+    CHECK_FALSE(Theme::fromJson("not JSON"));
+    QFile example(QString(PENZENE_TEST_DATA) + "/../../docs/_static/theme-example.json");
+    REQUIRE(example.open(QIODevice::ReadOnly));
+    const auto shared = Theme::fromJson(example.readAll());
+    REQUIRE(shared);
+    CHECK(shared->name == "Shared Light");
+    CHECK(chrome(*shared).border == chrome(theme("Light")).border);
+}
+
 TEST_CASE("bad SMILES is rejected") {
     CHECK_FALSE(chem::fromSmiles("C1CC"));
 }

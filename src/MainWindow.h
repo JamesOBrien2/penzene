@@ -116,6 +116,9 @@ private:
     void updateMassSpec();  // the Mass Spec panel, likewise
     void updateNmr();       // and the NMR panel
     void applyTheme(const QString& name);
+    void importTheme();
+    void exportTheme();
+    void refreshThemeMenu();
     void remember(const QString& path);  // most recent first, at most 10
 
     QUndoStack* undo_;  // the page on the canvas's history
@@ -150,6 +153,7 @@ private:
     class QAction* shortcutsAction_ = nullptr;
     std::vector<std::pair<class QToolButton*, Document>> welcomeExamples_;
     class QActionGroup* themeGroup_ = nullptr;
+    class QMenu* themeMenu_ = nullptr;
     class QDockWidget* profileDock_;
     class QDockWidget* templateDock_;
     class QTreeWidget* templates_;
