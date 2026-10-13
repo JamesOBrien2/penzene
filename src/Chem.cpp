@@ -3135,9 +3135,14 @@ static const std::vector<Shift>& predictAllShifts(const Document& drawn, std::ve
     for (size_t i = 0; i < codes.size(); ++i) {
         Shift s{int(i)};
         s.hydrogens = hydrogens[i], s.symmetry = classes[i];
+        std::set<int> couplingSets;
         if (doc.atoms[i].z == 6)  // H on O or N exchange, so split nothing and aren't split
             for (int nb : doc.neighbors(int(i)))
-                if (doc.atoms[nb].z == 6 && classes[nb] != classes[i]) s.coupled += hydrogens[nb];
+                if (doc.atoms[nb].z == 6 && classes[nb] != classes[i] && hydrogens[nb]) {
+                    s.coupled += hydrogens[nb];
+                    couplingSets.insert(classes[nb]);
+                }
+        s.singleCouplingSet = couplingSets.size() == 1;
         auto look = [&](int column, double& value, int& spheres) {
             for (int n = int(codes[i].size()); n >= 1 && !spheres; --n)
                 if (auto v = table.find(std::to_string(n) + " " + codes[i][n - 1], column)) value = *v, spheres = n;
@@ -3172,6 +3177,7 @@ std::vector<NmrStick> nmrSticks(const Document& doc, bool proton, const std::vec
         if (std::find(k.atoms.begin(), k.atoms.end(), atom) == k.atoms.end()) k.atoms.push_back(atom);
         k.weak = (proton ? s.protonSpheres : s.carbonSpheres) < 3;
         k.coupled = s.coupled;
+        k.singleCouplingSet = s.singleCouplingSet;
     }
     std::vector<NmrStick> out;
     for (auto& [c, k] : byClass) out.push_back(std::move(k));
