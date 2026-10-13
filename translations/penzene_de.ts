@@ -280,6 +280,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Text format</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Flip arrow</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1050,6 +1054,42 @@
     </message>
     <message>
         <source>Export Descriptors</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Format</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Colour</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Fill</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Text font</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Text size in points</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Mixed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bold</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Italic</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

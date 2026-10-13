@@ -49,6 +49,10 @@ The clipboard and the drawing inside exported SVG, PNG and PDF files are still v
 Penzene 1.x can't open version 2, so Save As offers **Penzene 1.x**: a
 version 1 file, which those versions open (before 1.2, the first page only).
 
+Text may carry `font`, `bold` and `italic`; its `scale` is relative to the drawing
+style’s label size. A filled shape’s optional `fill` is separate from its line `color`.
+Without `fill`, old `filled` shapes keep using the line colour.
+
 ### Versions
 
 Every Penzene release reads the files of every earlier one. Examples from each release live in

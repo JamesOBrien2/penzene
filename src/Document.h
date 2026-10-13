@@ -96,6 +96,7 @@ struct Arrow {
     // front (the highest), and each spot on it gets its Rf beside it (edit::syncPlates).
     bool plate = false;
     int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
+    QColor fill;  // invalid: use the line colour, preserving old filled shapes
     bool operator==(const Arrow&) const = default;
 };
 
@@ -112,6 +113,8 @@ struct Text {
     bool rf = false;        // a TLC spot's Rf, rewritten beside it on every edit (#506)
     int group = -1;  // Arrange → Group (#410): objects sharing an id act as one; -1 = none
     int series = 0;  // lettered compound numbers sharing one number (2a, 2b), on any page; 0 = none (#583)
+    QString font;  // empty: the drawing style
+    bool bold = false, italic = false;
     bool operator==(const Text&) const = default;
 };
 
