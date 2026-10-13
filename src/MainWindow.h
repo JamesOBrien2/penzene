@@ -95,6 +95,7 @@ protected:
 private:
     void buildTools();
     void buildMenus();
+    void buildFormatToolbar();
     void buildWelcome();
     void paintExamples();
     bool saveTo(const QString& path, bool v3000 = false);
