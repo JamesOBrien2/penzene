@@ -2,6 +2,7 @@
 #include "Chem.h"
 #include "Edit.h"
 #include "Render.h"
+#include "Styles.h"
 
 #include <QBuffer>
 #include <QFileInfo>
@@ -106,7 +107,7 @@ NB_MODULE(_penzene, m) {
         .def_ro("atoms", &Document::atoms, "The atoms, in order (their index is what add_bond and hotkeys take) (since 0.4)")
         .def_ro("bonds", &Document::bonds, "The bonds (since 0.4)")
         .def_prop_rw(
-            "style", [](const Document& d) { return drawingStyle(d.style).name.toStdString(); },
+            "style", [](const Document& d) { return documentStyle(d).name.toStdString(); },
             [](Document& d, const std::string& name) {
                 const DrawingStyle& s = drawingStyle(qs(name));
                 if (s.name != qs(name)) {
@@ -114,9 +115,9 @@ NB_MODULE(_penzene, m) {
                     for (const auto& known : drawingStyles()) names << "'" + known.name + "'";
                     throw nb::value_error(("unknown drawing style: " + name + " (use " + names.join(", ").toStdString() + ")").c_str());
                 }
-                d.style = s.name == drawingStyles()[0].name ? QString() : s.name;
+                applyDrawingStyle(d, qs(name));
             },
-            "Drawing style: 'ACS 1996' (default), 'JDP' or 'RSC' (since 0.4)")
+            "Drawing style name, from drawing_styles(); includes saved user styles (since 0.4)")
         .def(
             "add_atom",
             [](Document& d, const std::string& label, double x, double y) {

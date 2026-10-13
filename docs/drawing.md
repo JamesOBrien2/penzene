@@ -118,6 +118,22 @@ lane labels like any text.
 
 ## Arrows, text, shapes and colour
 
+### Saved drawing styles
+
+**Format → Drawing Style → Edit Styles…** opens the style editor. Built-in styles
+are read-only: **Duplicate** one, give it a unique name, adjust its measurements
+in points, and **Save**. The live preview includes a charged metal complex.
+**Import** and **Export** exchange versioned JSON definitions; **Delete** removes
+only a saved user style. Names are unique without regard to case.
+
+Saved styles appear in the Drawing Style menu, Preferences, `--drawing-style`,
+and Python's `drawing_styles()` and `Document.style`. All three use the same
+`Penzene/styles` directory under the operating system's user data location.
+Applying a custom style embeds a snapshot in the drawing, so changes to the
+library do not change existing documents. Reapply the style to take a newer
+definition. Font files are not embedded; install the named font on another
+computer for the same lettering. The editor reports unavailable fonts.
+
 The **Format toolbar** above the canvas sets the selection’s colour, shape or ring fill,
 and text font, size in points, bold and italic. Mixed selections show **Mixed**. Each
 change is one undo step. With nothing selected, choose the tool and set the format

@@ -1,4 +1,5 @@
 #include "Render.h"
+#include "Styles.h"
 #include "Chem.h"
 #include "Geometry.h"
 
@@ -28,7 +29,7 @@
 // Model units per point for a style's native values (bond length / 14.4 undone).
 constexpr double kJdp = kBondLength / 14.17, kRsc = kBondLength / 12.2;
 
-const std::vector<DrawingStyle>& drawingStyles() {
+const std::vector<DrawingStyle>& builtInDrawingStyles() {
     // Wedge width and hash spacing keep ACS's proportion to the bold width and
     // hash setting (4.5/2.0 and 2.2/2.5); label radius is half a glyph plus the margin.
     static const std::vector<DrawingStyle> styles{
@@ -45,10 +46,16 @@ const std::vector<DrawingStyle>& drawingStyles() {
     return styles;
 }
 
-const DrawingStyle& drawingStyle(const QString& name) {
+std::vector<DrawingStyle> drawingStyles() {
+    auto out = builtInDrawingStyles();
+    for (const auto& s : userDrawingStyles()) out.push_back(modelStyle(s));
+    return out;
+}
+
+DrawingStyle drawingStyle(const QString& name) {
     for (const auto& s : drawingStyles())
         if (s.name == name) return s;
-    return drawingStyles()[0];
+    return builtInDrawingStyles()[0];
 }
 // Carbons are skeletal unless alone or the document asks for their labels.
 static bool hasLabel(const Document& doc, int i, const std::vector<int>& degree) {
@@ -61,7 +68,7 @@ static bool hasLabel(const Document& doc, int i, const std::vector<int>& degree)
 // ---------------------------------------------------------------- rendering
 
 DrawingStyle documentStyle(const Document& doc) {
-    DrawingStyle st = drawingStyle(doc.style);
+    DrawingStyle st = doc.styleSettings ? modelStyle(*doc.styleSettings) : drawingStyle(doc.style);
     if (doc.labelRatio > 0) {  // text and the bonds' clearance around labels scale together
         const double k = doc.labelRatio * kBondLength / st.fontSize;
         st.fontSize *= k, st.labelRadius *= k;
@@ -261,9 +268,9 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
             QFontMetricsF fm(labelFont(st));
             const QString sym = atomSymbol(a);
             const QRectF box = fm.tightBoundingRect(sym).translated(-fm.horizontalAdvance(sym) / 2, fm.capHeight() / 2);
-            clear = std::max(clear, 1 + exitAlong(box, toward));
+            clear = std::max(clear, st.labelMargin + exitAlong(box, toward));
         }
-        if (!massNumber(a).isEmpty()) clear = std::max(clear, 1 + exitAlong(massBox(a, st), toward));
+        if (!massNumber(a).isEmpty()) clear = std::max(clear, st.labelMargin + exitAlong(massBox(a, st), toward));
         return clear;
     };
     QPointF a = labeled[b.a] ? pa + d * trim(b.a, d) : pa;
@@ -1108,7 +1115,7 @@ QRectF pageRect(const Document& doc) {
     return {};
 }
 
-double exportScale(const Document& doc) { return drawingStyle(doc.style).bondLength / kBondLength; }
+double exportScale(const Document& doc) { return documentStyle(doc).bondLength / kBondLength; }
 
 // The exported area (model units) and the points per model unit.
 static std::pair<QRectF, double> exportFrame(const Document& doc, const ExportOptions& o) {

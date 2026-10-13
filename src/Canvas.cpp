@@ -1338,6 +1338,8 @@ QRectF bounds(const Document& doc, const Piece& p) {
     for (int i : p.arrows) part.arrows.push_back(doc.arrows[i]);
     for (int i : p.texts) part.texts.push_back(doc.texts[i]);
     part.style = doc.style;
+    part.styleSettings = doc.styleSettings;
+    part.labelRatio = doc.labelRatio;
     return documentBounds(part);
 }
 

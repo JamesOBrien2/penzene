@@ -31,7 +31,7 @@ endif()
 
 # The engine: document, chemistry, editing and rendering. QtGui only, no
 # widgets, so it can back a command line or Python module as well as the app.
-add_library(penzene_core STATIC src/Document.cpp src/Chem.cpp src/Edit.cpp src/Render.cpp src/ChemDrawIO.cpp)
+add_library(penzene_core STATIC src/Document.cpp src/Chem.cpp src/Edit.cpp src/Render.cpp src/Styles.cpp src/ChemDrawIO.cpp)
 target_include_directories(penzene_core PUBLIC src)
 target_compile_definitions(penzene_core PUBLIC PENZENE_VERSION="${PROJECT_VERSION}")
 # Revvity's ChemDraw file library (BSD-3, third_party/chemdraw): binary CDX in and out on
@@ -90,7 +90,7 @@ endif()
 if(PENZENE_APP)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network PrintSupport Test)
 # The app's widgets; tests link this too, so they exercise the same code.
-add_library(penzene_ui STATIC src/Canvas.cpp src/MainWindow.cpp src/Online.cpp src/Templates.cpp src/WhatsNew.cpp)
+add_library(penzene_ui STATIC src/Canvas.cpp src/MainWindow.cpp src/StyleEditor.cpp src/Online.cpp src/Templates.cpp src/WhatsNew.cpp)
 target_link_libraries(penzene_ui PUBLIC penzene_core Qt6::Widgets Qt6::Network Qt6::PrintSupport)
 if(WIN32)  # drawings embedded in Word and PowerPoint, edited here (#229)
     target_sources(penzene_ui PRIVATE src/OleServer.cpp)
