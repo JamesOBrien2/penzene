@@ -2203,7 +2203,7 @@ void MainWindow::buildTools() {
     };
     auto section = [&] { frame->newRow(); };
     auto* group = new QActionGroup(this);
-    auto button = [&](QAction* a) {
+    auto button = [&](QAction* a, bool onRail = false) {
         auto* b = new QToolButton;
         pressable(b);
         b->setDefaultAction(a);
@@ -2214,6 +2214,18 @@ void MainWindow::buildTools() {
         static const QRegularExpression end(R"(\s*(:| \(| —).*$)");
         b->setAccessibleName(QString(a->toolTip()).remove(end));
         b->setAccessibleDescription(a->toolTip());
+        if (onRail) {
+            a->setText(tr("Text"));
+            b->setObjectName("railButton");
+            b->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+            b->setIconSize({24, 24});
+            b->setAutoRaise(false);
+            rail->addWidget(b);
+            connect(a, &QAction::triggered, this, [railGroup] {
+                if (auto* current = railGroup->checkedAction()) current->setChecked(false);
+            });
+            return b;
+        }
         frame->add(b);
         const int index = int(groups->size()) - 1;
         if (!(*groups)[index].last) (*groups)[index].last = a;
@@ -2224,7 +2236,7 @@ void MainWindow::buildTools() {
         });
         return b;
     };
-    auto add = [&](const IconMaker& icon, const QString& tip, auto setup) {
+    auto add = [&](const IconMaker& icon, const QString& tip, auto setup, bool onRail = false) {
         auto* a = new QAction(icon(), {}, this);
         icons_.push_back({a, icon});
         a->setToolTip(tip);
@@ -2233,7 +2245,7 @@ void MainWindow::buildTools() {
         group->addAction(a);
         connect(a, &QAction::triggered, this, setup);
         connect(a, &QAction::triggered, this, [this, tip] { statusBar()->showMessage(tip); });
-        button(a);
+        button(a, onRail);
         return a;
     };
     using T = Canvas::Tool;
@@ -2465,8 +2477,7 @@ void MainWindow::buildTools() {
                                   {ArrowKind::Lobe, tr("lobe")}, {ArrowKind::HybridOrbital, tr("hybrid orbital")}})
             add(docIcon(orbitalDoc(kind, look)), name + ", " + lookName + orbital,
                 [this, kind, look] { canvas_->setTool(T::Arrow), canvas_->setArrow(kind, false, false, look); });
-    section();
-    keys["t"] = add(docIcon(textDoc("T")), tr("Text (click to add or edit; H2O is set as H₂O) — t"), tool(T::Text));
+    keys["t"] = add(docIcon(textDoc("T")), tr("Text (click to add or edit; H2O is set as H₂O) — t"), tool(T::Text), true);
     (*groups)[1].railButton->defaultAction()->setChecked(true);  // the single bond, chosen at start
     connect(canvas_, &Canvas::toolKey, this, [keys](const QString& k) {
         if (auto* a = keys.value(k)) a->trigger();
