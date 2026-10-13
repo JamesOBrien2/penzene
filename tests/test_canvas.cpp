@@ -2166,6 +2166,69 @@ TEST_CASE("template library: built-ins insert, selections save as templates (#32
     }
 }
 
+TEST_CASE("Added templates retain their chemical identities and bond geometry (#474)") {
+    App app;
+    QFile file(QString(PENZENE_TEST_DATA) + "/template-identities.tsv");
+    REQUIRE(file.open(QIODevice::ReadOnly | QIODevice::Text));
+    Document gallery;
+    int checked = 0;
+    for (const auto& line : QString::fromUtf8(file.readAll()).split('\n', Qt::SkipEmptyParts)) {
+        if (line.startsWith('#')) continue;
+        const auto columns = line.split('\t');
+        REQUIRE(columns.size() == 5);
+        INFO(columns[1].toStdString());
+        const auto& templates = builtinTemplates();
+        const auto found = std::find_if(templates.begin(), templates.end(), [&](const Template& t) { return t.name == columns[1]; });
+        REQUIRE(found != templates.end());
+        CHECK(found->category == columns[0]);
+        CHECK(std::count_if(templates.begin(), templates.end(), [&](const Template& t) { return t.name == columns[1]; }) == 1);
+        const Document doc = templateDocument(*found);
+        const auto properties = chem::properties(doc);
+        REQUIRE(properties);
+        CHECK(properties->formula == columns[2].toStdString());
+        CHECK(chem::toInchiKey(doc) == columns[3].toStdString());
+        for (const auto& bond : doc.bonds) {
+            const QLineF edge(doc.atoms[bond.a].pos, doc.atoms[bond.b].pos);
+            CHECK(std::abs(edge.length() - kBondLength) < 0.1 * kBondLength);
+            for (const auto& other : doc.bonds)
+                if (bond.a != other.a && bond.a != other.b && bond.b != other.a && bond.b != other.b)
+                    CHECK(edge.intersects(QLineF(doc.atoms[other.a].pos, doc.atoms[other.b].pos)) != QLineF::BoundedIntersection);
+        }
+        const QPointF at((checked % 4) * 340, (checked / 4) * 240);
+        gallery.append(doc, at - documentBounds(doc).center());
+        gallery.texts.push_back({at + QPointF(-150, 100), found->name, 0.8});
+        ++checked;
+    }
+    CHECK(checked == 24);
+    const QString preview = qEnvironmentVariable("PENZENE_MORE_TEMPLATES_PREVIEW");
+    if (!preview.isEmpty()) {
+        QDir().mkpath(preview);
+        REQUIRE(renderImage(gallery, {110, Qt::white}).save(preview + "/gallery.png"));
+    }
+    MainWindow w;
+    w.resize(1100, 750);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently({});
+    for (auto* action : w.findChildren<QAction*>())
+        if (action->text() == "&Templates") action->trigger();
+    QApplication::processEvents();
+    auto* tree = w.findChild<QDockWidget*>("templates")->findChild<QTreeWidget*>();
+    REQUIRE(tree);
+    tree->collapseAll();
+    const auto macrocycles = tree->findItems("Macrocycles", Qt::MatchExactly);
+    REQUIRE(macrocycles.size() == 1);
+    macrocycles[0]->setExpanded(true);
+    tree->scrollToItem(macrocycles[0]);
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/before.png"));
+    const auto found = tree->findItems("Cyclen", Qt::MatchExactly | Qt::MatchRecursive);
+    REQUIRE(found.size() == 1);
+    emit tree->itemClicked(found[0], 0);
+    CHECK(chem::properties(canvas->document())->formula == "C8H20N4");
+    canvas->fitToDocument();
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/after.png"));
+}
+
 TEST_CASE("Haworth and Fischer projections read with PubChem's stereo (#108)") {
     App app;
     int checked = 0;

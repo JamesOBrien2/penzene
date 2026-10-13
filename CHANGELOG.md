@@ -6,6 +6,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- The Templates library adds 24 heterocycles, macrocycles, ligands and reagents, including cyclen, bipyridine, dppe, DMAP and CDI (#474).
+
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 
 - View → Mark Valence Errors can turn off red error colouring on screen and in exports; structure checks are unchanged (#620).
