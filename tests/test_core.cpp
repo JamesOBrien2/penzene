@@ -169,6 +169,17 @@ TEST_CASE("circled charges cover signs, magnitudes, bare carbons and portable st
     CHECK_FALSE(Document::fromJson(R"({"format":"penzene","version":1,"atoms":[],"bonds":[]})")->circledCharges);
 }
 
+TEST_CASE("circled charges preserve bonds around a crowded metal centre (#623)") {
+    for (const auto& preset : builtInDrawingStyles()) {
+        INFO(preset.name.toStdString());
+        Document d = *chem::fromSmiles("[NH3]->[Pt+2](<-[NH3])(Cl)Cl");
+        REQUIRE(applyDrawingStyle(d, preset.name));
+        CHECK(renderSvg(d).count("<polyline") == d.bonds.size());
+        d.circledCharges = true;
+        CHECK(renderSvg(d).count("<polyline") == d.bonds.size());
+    }
+}
+
 TEST_CASE("deleting a bond removes only endpoints left isolated") {
     Document chain;
     chain.atoms = {{{0, 0}}, {{kBondLength, 0}}, {{2 * kBondLength, 0}}};
