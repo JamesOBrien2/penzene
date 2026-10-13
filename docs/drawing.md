@@ -120,6 +120,11 @@ lane labels like any text.
 
 ### Saved drawing styles
 
+**Format → Circled Charges** surrounds each displayed charge sign with a circle,
+including charges on skeletal carbons. Charge magnitudes remain beside the sign.
+This is a saved, undoable document setting; it changes the drawing, not chemistry.
+The default is off. Canvas, print and graphics exports use the same appearance.
+
 **Format → Drawing Style → Edit Styles…** opens the style editor. Built-in styles
 are read-only: **Duplicate** one, give it a unique name, adjust its measurements
 in points, and **Save**. The live preview includes a charged metal complex.

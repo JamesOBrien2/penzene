@@ -122,6 +122,7 @@ QByteArray Document::toJson() const {
     }
     if (!bs2.isEmpty()) root["brackets"] = bs2;
     if (!style.isEmpty()) root["style"] = style;
+    if (circledCharges) root["circledCharges"] = true;
     if (styleSettings) root["styleSettings"] = styleToJson(*styleSettings);
     if (carbonLabels != CarbonLabels::None) root["carbonLabels"] = carbonLabels == CarbonLabels::All ? "all" : "terminal";
     if (labelRatio > 0) root["labelRatio"] = labelRatio;
@@ -198,6 +199,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
     doc.showAtomNumbers = root["showAtomNumbers"].toBool();
     doc.showShifts = root["showShifts"].toBool();
     doc.aromaticCircles = root["aromaticCircles"].toBool();
+    doc.circledCharges = root["circledCharges"].toBool();
     const auto page = root["page"].toObject();
     doc.page = page["name"].toString();
     doc.pageOrigin = {page["x"].toDouble(), page["y"].toDouble()};
@@ -479,7 +481,7 @@ static QJsonObject sheetObject(const Sheet& s) {
 
 // Document settings: at the top of a version 2 file when every page has the same, else on each page.
 static const char* kShared[] = {"style", "styleSettings", "carbonLabels", "labelRatio", "showStereo",
-                                "showAtomNumbers", "showShifts", "aromaticCircles"};
+                                "showAtomNumbers", "showShifts", "aromaticCircles", "circledCharges"};
 
 QByteArray sheetsToJson(const std::vector<Sheet>& sheets) {
     QJsonArray pages;
