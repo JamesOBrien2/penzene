@@ -33,8 +33,7 @@ jobs:
         shell: pwsh
         run: |
           # Hosted images can ship an older client that rejects the submission schema.
-          Install-PackageProvider -Name NuGet -Force | Out-Null
-          Install-Module Microsoft.WinGet.Client -Force -Repository PSGallery
+          Install-PSResource Microsoft.WinGet.Client -Repository PSGallery -TrustRepository -Quiet
           Repair-WinGetPackageManager -AllUsers -Latest
           winget --version
       - name: Validate
