@@ -138,6 +138,7 @@ private:
     void drawRulers(QPainter* p);
     void fit(const Document& part);
     std::vector<QPointF> dragPath() const;
+    void collectErase(QPointF from, QPointF to);
 
     Document doc_;
     bool fitOnShow_ = false;
@@ -173,7 +174,9 @@ private:
     void announceHotspot();
 
     // Drag state
-    enum class Drag { None, Bond, Chain, Arrow, Ring, Move, Rotate, Rubber, Pan, Scale, Rotate3D, Reshape } drag_ = Drag::None;
+    enum class Drag { None, Bond, Chain, Arrow, Ring, Move, Rotate, Rubber, Pan, Scale, Rotate3D, Reshape, Erase } drag_ = Drag::None;
+    QSet<int> eraseAtoms_, eraseBonds_, eraseArrows_, eraseTexts_;
+    bool eraseMoved_ = false;
     std::vector<int> moleculesOfSelection() const;  // whole molecules; all atoms if none selected
     std::optional<chem::Pose3D> pose_;  // during a 3D rotation drag
     // Scale handles around the selection: corners scale, edges stretch along one axis.
