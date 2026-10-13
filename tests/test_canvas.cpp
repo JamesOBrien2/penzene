@@ -6,9 +6,12 @@
 #include "Online.h"
 #include "WhatsNew.h"
 #include "Templates.h"
+#include "Stoichiometry.h"
 #include "Render.h"
 
 #include <QApplication>
+#include <QDoubleSpinBox>
+#include <QTableWidget>
 #include <QNativeGestureEvent>
 #include <QSettings>
 #include <QStatusBar>
@@ -63,6 +66,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/reporters/catch_reporter_event_listener.hpp>
 #include <catch2/reporters/catch_reporter_registrars.hpp>
 
@@ -115,6 +119,112 @@ struct Fixture : App {
     QUndoStack undo;
     Canvas canvas{&undo};
 };
+
+TEST_CASE("stoichiometry calculates mmol, mg and liquid volumes and copies a table (#486)") {
+    App app;
+    MainWindow w;
+    w.resize(1200, 900);
+    w.show();
+    const Document doc = *chem::fromReactionSmiles("CCO.CC(=O)O>O>CCOC(C)=O");
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(doc);
+    auto* dock = w.findChild<QDockWidget*>("stoichiometry");
+    REQUIRE(dock);
+    dock->show();
+    QApplication::processEvents();
+    auto* table = dock->findChild<QTableWidget*>("stoichTable");
+    auto* scale = dock->findChild<QDoubleSpinBox*>("stoichScale");
+    auto* limiting = dock->findChild<QComboBox*>("stoichLimiting");
+    auto* copy = dock->findChild<QPushButton*>("stoichCopy");
+    REQUIRE(table->rowCount() == 3);
+    CHECK(limiting->count() == 3);
+    const QString preview = qEnvironmentVariable("PENZENE_STOICHIOMETRY_PREVIEW");
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/before.png"));
+    scale->setValue(2.5);
+    qobject_cast<QDoubleSpinBox*>(table->cellWidget(1, 3))->setValue(1.5);
+    qobject_cast<QDoubleSpinBox*>(table->cellWidget(0, 6))->setValue(0.789);
+    qobject_cast<QDoubleSpinBox*>(table->cellWidget(2, 3))->setValue(2);
+    qobject_cast<QDoubleSpinBox*>(table->cellWidget(2, 6))->setValue(0.997);
+    CHECK(table->item(0, 4)->text().toDouble() == Catch::Approx(2.5));
+    CHECK(table->item(0, 5)->text().toDouble() == Catch::Approx(115.1725).margin(0.01));
+    CHECK(table->item(0, 7)->text().toDouble() == Catch::Approx(145.973).margin(0.02));
+    CHECK(table->item(1, 4)->text().toDouble() == Catch::Approx(3.75));
+    CHECK(table->item(1, 5)->text().toDouble() == Catch::Approx(225.195).margin(0.01));
+    CHECK(table->item(1, 7)->text() == "—");
+    CHECK(table->item(2, 7)->text().toDouble() == Catch::Approx(90.346).margin(0.02));
+    CHECK_FALSE(table->cellWidget(0, 3)->isEnabled());
+    copy->click();
+    CHECK(QApplication::clipboard()->text().contains("Mass (mg)"));
+    CHECK(QApplication::clipboard()->text().contains("Volume (µL)"));
+    CHECK(QApplication::clipboard()->text().contains("C2H6O\t46.069\t1\t2.5\t115.1725"));
+    CHECK(canvas->document() == doc);
+    canvas->fitToDocument();
+    QApplication::processEvents();
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/after.png"));
+    limiting->setCurrentIndex(1);
+    CHECK(table->cellWidget(0, 3)->isEnabled());
+    CHECK_FALSE(table->cellWidget(1, 3)->isEnabled());
+    CHECK(table->item(1, 4)->text().toDouble() == Catch::Approx(2.5));
+}
+
+TEST_CASE("stoichiometry retains page and reaction inputs but refuses unknown formulas (#486)") {
+    App app;
+    StoichiometryPanel panel;
+    QUndoStack first, second;
+    const Document a = *chem::fromReactionSmiles("CCO>O>CC=O");
+    const Document b = *chem::fromReactionSmiles("CCN>N>CC=N");
+    Document scheme = a;
+    scheme.append(b, {0, 150});
+    panel.setDocument(scheme, &first);
+    auto* reaction = panel.findChild<QComboBox*>("stoichReaction");
+    auto* scale = panel.findChild<QDoubleSpinBox*>("stoichScale");
+    auto* table = panel.findChild<QTableWidget*>("stoichTable");
+    auto* copy = panel.findChild<QPushButton*>("stoichCopy");
+    REQUIRE(reaction->count() == 2);
+    scale->setValue(2.5);
+    reaction->setCurrentIndex(1);
+    scale->setValue(4);
+    reaction->setCurrentIndex(0);
+    CHECK(scale->value() == Catch::Approx(2.5));
+    Document swapped = b;
+    swapped.append(a, {0, 150});
+    panel.setDocument(swapped, &first);
+    CHECK(reaction->currentIndex() == 1);
+    CHECK(scale->value() == Catch::Approx(2.5));
+    reaction->setCurrentIndex(0);
+    CHECK(scale->value() == Catch::Approx(4));
+    swapped.atoms[b.atoms.size() - 1].z = 8;  // edit B's product while keeping B's starting materials
+    panel.setDocument(swapped, &first);
+    CHECK(scale->value() == Catch::Approx(4));
+    reaction->setCurrentIndex(1);
+    Document moved = scheme;
+    for (auto& a : moved.atoms) a.pos += QPointF(40, 20);
+    for (auto& a : moved.arrows) a.from += QPointF(40, 20), a.to += QPointF(40, 20);
+    panel.setDocument(moved, &first);
+    CHECK(scale->value() == Catch::Approx(2.5));
+    panel.setDocument(scheme, &second);
+    CHECK(scale->value() == Catch::Approx(1));
+    panel.setDocument(scheme, &first);
+    CHECK(scale->value() == Catch::Approx(2.5));
+    Document unknown = *chem::fromReactionSmiles("CCO>*>CC=O");
+    panel.setDocument(unknown, &first);
+    REQUIRE(table->rowCount() == 2);
+    CHECK(table->item(1, 1)->text() == "Unknown structure");
+    CHECK(table->item(1, 5)->text() == "—");
+    CHECK_FALSE(table->cellWidget(1, 3)->isEnabled());
+    panel.setDocument(Document{}, &first);
+    CHECK(table->rowCount() == 0);
+    CHECK_FALSE(scale->isEnabled());
+    CHECK_FALSE(copy->isEnabled());
+    panel.reset();
+    panel.setDocument(scheme, &first);
+    CHECK(scale->value() == Catch::Approx(1));
+    auto* disposable = new QUndoStack;
+    panel.setDocument(scheme, disposable);
+    delete disposable;
+    CHECK(table->rowCount() == 0);
+    CHECK_FALSE(copy->isEnabled());
+}
 
 TEST_CASE("benzene then fused ring gives naphthalene") {
     Fixture f;
