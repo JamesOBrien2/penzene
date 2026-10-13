@@ -2720,6 +2720,31 @@ TEST_CASE("Circled Charges is an undoable document setting (#623)") {
     CHECK(canvas->selectedSubset().circledCharges);
 }
 
+TEST_CASE("changing charge magnitude removes and restores its circle (#623)") {
+    Fixture f;
+    for (const auto& smiles : {"[Na+]", "[Cl-]", "C[CH2+]"}) {
+        Document d = *chem::fromSmiles(smiles);
+        d.circledCharges = true;
+        const int at = int(d.atoms.size()) - 1;
+        f.canvas.setDocumentSilently(d);
+        f.canvas.setHotspot(at);
+        const int single = d.atoms[at].charge;
+        const QImage before = renderImage(d);
+        f.key(single > 0 ? "+" : "-");
+        CHECK(f.doc().atoms[at].charge == single * 2);
+        CHECK(f.doc().circledCharges);
+        CHECK_FALSE(renderSvg(f.doc()).contains("<circle"));
+        Document plain = f.doc();
+        plain.circledCharges = false;
+        CHECK(renderImage(f.doc()) == renderImage(plain));
+        f.undo.undo();
+        CHECK(renderImage(f.doc()) == before);
+        CHECK(renderSvg(f.doc()).contains("<circle"));
+        f.undo.redo();
+        CHECK_FALSE(renderSvg(f.doc()).contains("<circle"));
+    }
+}
+
 TEST_CASE("journal presets appear in the menu and change physical canvas size (#473)") {
     App app;
     QApplication::processEvents();
