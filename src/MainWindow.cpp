@@ -1398,7 +1398,7 @@ void MainWindow::showPreferences() {
     settings.setValue("updates/auto", updates->isChecked());
     settings.setValue("language", languageBox->currentData().toString());
     applyTheme(themeBox->currentText());
-    for (auto* a : themeGroup_->actions()) a->setChecked(a->text() == themeBox->currentText());
+    for (auto* a : themeGroup_->actions()) a->setChecked(a->data().toString() == themeBox->currentText());
 }
 
 QWidget* MainWindow::checkStructure() {
@@ -2370,7 +2370,9 @@ void MainWindow::refreshThemeMenu() {
     themeMenu_->clear();
     const QString current = theme(QSettings().value("theme", "System").toString()).name;
     for (const auto& t : themes()) {
-        auto* a = themeMenu_->addAction(t.name, this, [this, n = t.name] { applyTheme(n); });
+        QString label = t.name;
+        auto* a = themeMenu_->addAction(label.replace('&', "&&"), this, [this, n = t.name] { applyTheme(n); });
+        a->setData(t.name);
         a->setCheckable(true);
         a->setChecked(t.name == current);
         themeGroup_->addAction(a);
@@ -2396,9 +2398,12 @@ void MainWindow::importTheme() {
         QMessageBox::warning(this, tr("Import Theme"), tr("Built-in themes cannot be replaced; use a different name."));
         return;
     }
-    if (existing != all.end() && existing->toJson() != imported->toJson() &&
-        QMessageBox::question(this, tr("Import Theme"), tr("Replace the saved theme \"%1\"?").arg(imported->name)) != QMessageBox::Yes)
-        return;
+    if (existing != all.end() && existing->toJson() != imported->toJson()) {
+        QMessageBox confirm(QMessageBox::Question, tr("Import Theme"), tr("Replace the saved theme \"%1\"?").arg(imported->name),
+                            QMessageBox::Yes | QMessageBox::No, this);
+        confirm.setTextFormat(Qt::PlainText);
+        if (confirm.exec() != QMessageBox::Yes) return;
+    }
     if (!saveUserTheme(*imported)) {
         QMessageBox::warning(this, tr("Import Theme"), tr("Could not save the theme."));
         return;

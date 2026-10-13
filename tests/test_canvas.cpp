@@ -742,7 +742,7 @@ TEST_CASE("themes: Catppuccin palettes; exports stay black") {
 TEST_CASE("imported themes persist, appear in the menu and keep exports black (#475)") {
     App app;
     Theme custom = theme("Light");
-    custom.name = "Shared ../theme";
+    custom.name = "Shared & ../theme";
     custom.paper = QColor("#eff1f5");
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/themes";
     const QStringList before = QDir(dir).entryList({"*.json"}, QDir::Files);
@@ -757,7 +757,7 @@ TEST_CASE("imported themes persist, appear in the menu and keep exports black (#
     REQUIRE(canvas);
     canvas->setDocumentSilently(*chem::fromSmiles("CCO"));
     auto action = [&](const QString& name) {
-        for (auto* a : w.findChildren<QAction*>()) if (a->text() == name) return a;
+        for (auto* a : w.findChildren<QAction*>()) if (a->text() == name || a->data().toString() == name) return a;
         return static_cast<QAction*>(nullptr);
     };
     const QString preview = qEnvironmentVariable("PENZENE_THEME_PREVIEW");
@@ -788,6 +788,7 @@ TEST_CASE("imported themes persist, appear in the menu and keep exports black (#
     CHECK(QSettings().value("theme").toString() == custom.name);
     REQUIRE(action(custom.name));
     CHECK(action(custom.name)->isChecked());
+    CHECK(action(custom.name)->text() == "Shared && ../theme");
     CHECK(QApplication::palette().color(QPalette::Base) == custom.paper);
     CHECK(renderSvg(canvas->document()).contains("#000000"));
     if (!preview.isEmpty()) REQUIRE(w.grab().save(preview));
@@ -806,7 +807,7 @@ TEST_CASE("imported themes persist, appear in the menu and keep exports black (#
     QApplication::setAttribute(Qt::AA_DontUseNativeDialogs, false);
     MainWindow reopened;
     bool found = false;
-    for (auto* a : reopened.findChildren<QAction*>()) if (a->text() == custom.name) found = a->isChecked();
+    for (auto* a : reopened.findChildren<QAction*>()) if (a->data().toString() == custom.name) found = a->isChecked();
     CHECK(found);
     Theme preset = theme("Light");
     preset.ink = Qt::red;
