@@ -2834,6 +2834,7 @@ TEST_CASE("format toolbar model: text and separate fills round trip (#621)") {
     CHECK(*Document::fromJson(d.toJson()) == d);
     CHECK(sheetsFromJson(sheetsToJson({{"Sample", d}}))[0].doc == d);
     for (const QByteArray& bytes : {chem::toCdxml(d), chem::toCdx(d)}) {
+        if (bytes.isEmpty()) continue;  // a build without binary CDX
         const auto back = chem::fromChemDraw(bytes);
         REQUIRE(back);
         REQUIRE(back->arrows.size() == 1);
@@ -2851,9 +2852,15 @@ TEST_CASE("format toolbar model: text and separate fills round trip (#621)") {
     const auto xml = chem::toCdxml(d);
     CHECK(xml.contains("bgcolor="));
     CHECK(xml.contains("face=\"3\""));
-    Text plain = text;
-    plain.font.clear(), plain.bold = plain.italic = false;
-    CHECK(textPath(plain, documentStyle(d)).boundingRect() != textPath(text, documentStyle(d)).boundingRect());
+    Text styled = text;
+    styled.text = "Format";
+    QFont expected = labelFont(documentStyle(d), styled.scale);
+    expected.setFamily(styled.font);
+    expected.setBold(styled.bold);
+    expected.setItalic(styled.italic);
+    QPainterPath expectedPath;
+    expectedPath.addText(styled.pos, expected, styled.text);
+    CHECK(textPath(styled, documentStyle(d)) == expectedPath);
     CHECK(renderSvg(d).contains("#cfe3ff"));
 }
 
