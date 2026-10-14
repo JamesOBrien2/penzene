@@ -838,6 +838,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Stoichiometry</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;b&gt;EI ions to look for&lt;/b&gt; (from the groups drawn; no intensities)</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1094,6 +1098,10 @@
     </message>
     <message>
         <source>&amp;NMR Panel</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Stoichiometry</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2282,6 +2290,113 @@ moves off, so you can keep typing.&lt;/p&gt;
     </message>
     <message>
         <source>under the nmrshiftdb2 Database License (%1).</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>StoichiometryPanel</name>
+    <message>
+        <source>Choose a limiting reagent</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reaction:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Limiting reagent:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Scale (mmol):</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reaction quantities</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Component</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Formula</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>MW (g/mol)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Equiv.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>mmol</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Mass (mg)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Density (g/mL)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Volume (µL)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Quantities are kept for this session. Copy as Text to keep a table in your lab notebook.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy as Text</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reaction %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Draw a reaction arrow to identify reactants and reagents.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reactant</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reagent</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%1 %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unknown structure</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Equivalents for %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Density for %1, grams per millilitre</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Choose a limiting reagent with a complete molecular formula.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unknown structures have no calculated quantities. Check or complete their labels.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reaction %1; limiting reagent: %2; scale: %3 mmol</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
