@@ -6,6 +6,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Predicted NMR names quintets, sextets and septets when one equivalent set of neighbouring hydrogens splits a signal; mixed sets stay multiplets (#574).
+
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 
 - View → Mark Valence Errors can turn off red error colouring on screen and in exports; structure checks are unchanged (#620).
