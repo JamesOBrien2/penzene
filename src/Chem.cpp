@@ -1069,6 +1069,7 @@ struct LabelNode {
     double textScale = 1;
     std::vector<QPointF> inner;  // positions of the atoms inside its fragment
     int headCharge = 0;  // the charge on the fragment's atom under the label (RDKit drops it)
+    int group = -1;
 };
 
 // The colours the file gives atoms and bonds, by node position: RDKit reads none of them.
@@ -1078,6 +1079,7 @@ struct FileMarks {
     std::vector<std::tuple<QPointF, QPointF, QColor>> bonds;  // from, to
     std::vector<std::pair<QPointF, std::vector<QPointF>>> variable;  // variable attachment points and their atoms
     std::vector<std::tuple<QPointF, QPointF, BondStereo>> styles;  // dative and hydrogen-bond orders, from, to
+    std::vector<std::pair<QPointF, int>> groups;
 };
 
 // Arrows, free text and label nodes from the CDXML itself; RDKit only reads the
@@ -1088,7 +1090,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     QXmlStreamReader r(xml);
     double scale = kBondLength / 30;  // CDXML's default BondLength
     double lineWidth = 1;  // and LineWidth, in points
-    struct Open { QString tag; int label = -1; };  // label: index into `labels` for label <n>s
+    struct Open { QString tag; int label = -1, group = -1; };  // label: index into `labels` for label <n>s
     std::vector<Open> stack;
     std::vector<LabelNode> labels;
     auto point = [&](QStringView s) {
@@ -1118,6 +1120,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     // Layers: a graphic whose Z is below every atom's is drawn behind the molecule.
     double moleculeZ = std::numeric_limits<double>::infinity();
     std::vector<double> arrowZ;
+    int nextGroup = 0;
     while (!r.atEnd()) {
         auto tok = r.readNext();
         if (tok == QXmlStreamReader::EndElement) {
@@ -1145,11 +1148,15 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         const auto at = r.attributes();
         auto pushArrow = [&](Arrow a) {
             a.color = ink(at);
+            a.group = stack.empty() ? -1 : stack.back().group;
             doc.arrows.push_back(a);
             arrowZ.push_back(at.hasAttribute("Z") ? at.value("Z").toDouble() : std::numeric_limits<double>::quiet_NaN());
         };
         const int parentLabel = stack.empty() ? -1 : stack.back().label;
-        stack.push_back({tag});
+        int group = stack.empty() ? -1 : stack.back().group;
+        // Flatten nested groups to their outer group; an inline group must not split a fragment.
+        if (tag == "group" && group < 0 && !inside("fragment")) group = nextGroup++;
+        stack.push_back({tag, -1, group});
         const bool inLabel = std::any_of(stack.begin(), stack.end(), [](const Open& o) { return o.label >= 0; });
         if (tag == "color")
             table.push_back(QColor(qRound(at.value("r").toDouble() * 255), qRound(at.value("g").toDouble() * 255),
@@ -1178,6 +1185,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             if (at.hasAttribute("Z")) moleculeZ = std::min(moleculeZ, at.value("Z").toDouble());
             const int id = at.value("id").toInt();
             nodePos[id] = point(at.value("p"));
+            if (!inLabel && group >= 0) inks.groups.push_back({nodePos[id], group});
             if (at.value("NodeType") == u"VariableAttachment")
                 variable.push_back({id, at.value("Attachments").toString().split(' ', Qt::SkipEmptyParts)});
             if (const QColor c = ink(at); c.isValid() && !inLabel) inks.atoms.push_back({nodePos[id], c});
@@ -1189,6 +1197,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
                 }
             if (labelTypes.contains(at.value("NodeType").toString())) {
                 labels.push_back({id, point(at.value("p"))});
+                labels.back().group = group;
                 stack.back().label = int(labels.size()) - 1;
             }
         } else if (tag == "t" && parentLabel >= 0) {
@@ -1210,6 +1219,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             doc.texts.push_back({p, {}});
             text = &doc.texts.back();
             text->color = ink(at);
+            text->group = group;
         } else if (tag == "graphic") {
             // Plain lines, boxes and ellipses (filled or not), and orbitals. A graphic ChemDraw
             // marks SupersededBy is the old copy of an <arrow> read above: skip it.
@@ -1337,7 +1347,10 @@ static void placeLabels(Document& doc, const std::vector<LabelNode>& labels,
             continue;
         }
         if (bondCount.value(l.id) == 0) {
-            if (!l.text.isEmpty()) doc.texts.push_back({l.textPos, l.text, l.textScale});
+            if (!l.text.isEmpty()) {
+                doc.texts.push_back({l.textPos, l.text, l.textScale});
+                doc.texts.back().group = l.group;
+            }
             drop.insert(drop.end(), atoms.begin(), atoms.end());
             continue;
         }
@@ -1379,12 +1392,27 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
     QByteArray chemistry;
     QXmlStreamReader reader(data);
     QXmlStreamWriter writer(&chemistry);
+    int fragmentDepth = 0;
+    std::vector<bool> inlineGroups;
     while (!reader.atEnd()) {
         reader.readNext();
         if (reader.isStartElement() && reader.name() == u"b" &&
-            reader.attributes().value("Order").compare(u"hydrogen", Qt::CaseInsensitive) == 0)
+            reader.attributes().value("Order").compare(u"hydrogen", Qt::CaseInsensitive) == 0) {
             reader.skipCurrentElement();
-        else writer.writeCurrentToken(reader);
+            continue;
+        }
+        bool omit = false;
+        if (reader.isStartElement()) {
+            // RDKit skips nodes inside an inline group; unwrap it without dropping chemistry.
+            omit = reader.name() == u"group" && fragmentDepth > 0;
+            inlineGroups.push_back(omit);
+            if (reader.name() == u"fragment") ++fragmentDepth;
+        } else if (reader.isEndElement() && !inlineGroups.empty()) {
+            omit = inlineGroups.back();
+            inlineGroups.pop_back();
+            if (reader.name() == u"fragment") --fragmentDepth;
+        }
+        if (!omit) writer.writeCurrentToken(reader);
     }
     if (reader.hasError()) return std::nullopt;
     // The two readings share coordinates, not atom order (only one drops hydrogens).
@@ -1444,6 +1472,8 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         };
         for (const auto& [p, c] : inks.atoms)
             if (const int i = atomAt(p); i >= 0) doc.atoms[i].color = c;
+        for (const auto& [p, group] : inks.groups)
+            if (const int i = atomAt(p); i >= 0) doc.atoms[i].group = group;
         for (const auto& [from, to, c] : inks.bonds)
             for (Bond& b : doc.bonds)
                 if ((atomAt(from) == b.a && atomAt(to) == b.b) || (atomAt(from) == b.b && atomAt(to) == b.a)) b.color = c;
@@ -1957,12 +1987,11 @@ QByteArray toCdxml(const Document& doc) {
         }
         w.writeEndElement();
     };
-    for (const Arrow& a : doc.arrows)
-        if (a.behind) writeArrow(a);
-    if (!doc.atoms.empty()) {
+    const auto mol = drawingMol(doc);  // bond lookup uses drawing atom indices, including eta points
+    auto writeFragment = [&](std::vector<size_t> order) {
+        if (order.empty()) return;
         w.writeStartElement("fragment");
         w.writeAttribute("id", QString::number(id++));
-        const auto mol = drawingMol(doc);  // bond lookup uses drawing atom indices, including eta points
         std::vector<int> node(doc.atoms.size());  // each atom's id, for the bonds
         auto element = [&](const Atom& a) {
             if (a.z != 6) w.writeAttribute("Element", QString::number(a.z));
@@ -1975,8 +2004,7 @@ QByteArray toCdxml(const Document& doc) {
                 if (a.stereoGroupNumber) w.writeAttribute("EnhancedStereoGroupNum", QString::number(a.stereoGroupNumber));
             }
         };
-        std::vector<size_t> order(doc.atoms.size());  // variable attachment points last, after the ids they name
-        std::iota(order.begin(), order.end(), 0);
+        // Variable attachment points last, after the ids they name.
         std::stable_partition(order.begin(), order.end(), [&](size_t i) { return doc.atoms[i].attachments.empty(); });
         for (size_t i : order) {
             const Atom& a = doc.atoms[i];
@@ -2076,6 +2104,7 @@ QByteArray toCdxml(const Document& doc) {
         // A plain line that coordinates a ligand to a metal goes out as the dative bond it is, donor first,
         // so a reader doesn't take a hydrogen from NH3 for it.
         for (const Bond& b : doc.bonds) {
+            if (!node[b.a] || !node[b.b]) continue;
             const auto* coordinate = b.stereo == BondStereo::None ? mol->getBondBetweenAtoms(b.a, b.b) : nullptr;
             const bool dative = b.stereo == BondStereo::Dative || (coordinate && RDKit::isDative(*coordinate));
             const bool flip = coordinate && dative && int(coordinate->getBeginAtomIdx()) != b.a;
@@ -2094,8 +2123,8 @@ QByteArray toCdxml(const Document& doc) {
             w.writeEndElement();
         }
         w.writeEndElement();
-    }
-    for (const Text& t : doc.texts) {
+    };
+    auto writeText = [&](const Text& t) {
         w.writeStartElement("t");
         w.writeAttribute("id", QString::number(id++));
         w.writeAttribute("p", pt(t.pos));
@@ -2129,10 +2158,48 @@ QByteArray toCdxml(const Document& doc) {
             if (!chars.isEmpty()) run(current, chars);
         }
         w.writeEndElement();
+    };
+    // Keep bonded atoms and variable attachment points in one fragment. Only a group covering
+    // the whole fragment can be represented by a ChemDraw group.
+    std::map<int, std::vector<size_t>> fragments;
+    const auto joined = doc.joined();
+    std::vector<bool> seen(doc.atoms.size());
+    for (size_t start = 0; start < doc.atoms.size(); ++start) {
+        if (seen[start]) continue;
+        std::vector<size_t> atoms{start};
+        seen[start] = true;
+        int group = doc.atoms[start].group;
+        for (size_t k = 0; k < atoms.size(); ++k) {
+            if (doc.atoms[atoms[k]].group != group) group = -1;
+            for (int nb : joined[atoms[k]])
+                if (!seen[nb]) seen[nb] = true, atoms.push_back(size_t(nb));
+        }
+        auto& fragment = fragments[group];
+        fragment.insert(fragment.end(), atoms.begin(), atoms.end());
     }
-    ++z;  // the molecule's layer
-    for (const Arrow& a : doc.arrows)
-        if (!a.behind) writeArrow(a);
+    std::set<int> groups;
+    for (const auto& [group, atoms] : fragments) groups.insert(group);
+    for (const auto& a : doc.arrows) groups.insert(a.group);
+    for (const auto& t : doc.texts) groups.insert(t.group);
+    for (int group : groups) {
+        if (group >= 0) {
+            w.writeStartElement("group");
+            w.writeAttribute("id", QString::number(id++));
+        }
+        for (size_t i = 0; i < doc.arrows.size(); ++i)
+            if (doc.arrows[i].group == group && doc.arrows[i].behind) z = int(i) + 1, writeArrow(doc.arrows[i]);
+        z = int(doc.arrows.size()) + 1;  // the shared molecule layer, regardless of its group
+        if (auto it = fragments.find(group); it != fragments.end()) {
+            std::sort(it->second.begin(), it->second.end());
+            writeFragment(it->second);
+        }
+        for (const Text& t : doc.texts)
+            if (t.group == group) writeText(t);
+        for (size_t i = 0; i < doc.arrows.size(); ++i)
+            if (doc.arrows[i].group == group && !doc.arrows[i].behind)
+                z = int(doc.arrows.size() + i) + 2, writeArrow(doc.arrows[i]);
+        if (group >= 0) w.writeEndElement();
+    }
     w.writeEndDocument();
     return out;
 }
