@@ -116,6 +116,7 @@ private:
     void updateMassSpec();  // the Mass Spec panel, likewise
     void updateNmr();       // and the NMR panel
     void applyTheme(const QString& name);
+    void findSubstructure();
     void remember(const QString& path);  // most recent first, at most 10
 
     QUndoStack* undo_;  // the page on the canvas's history

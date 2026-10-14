@@ -1600,6 +1600,24 @@ void MainWindow::importSmiles() {
     else QMessageBox::warning(this, tr("Import SMILES"), tr("Not a valid SMILES string."));
 }
 
+void MainWindow::findSubstructure() {
+    bool ok = false;
+    const QString initial = canvas_->selection().isEmpty() ? QString() : QString::fromStdString(chem::toSmarts(canvas_->selectedSubset()));
+    const QString pattern = QInputDialog::getText(this, tr("Find Substructure"), tr("SMILES or SMARTS (current page):"),
+                                                 QLineEdit::Normal, initial, &ok).trimmed();
+    if (!ok || pattern.isEmpty()) return;
+    const auto matches = chem::substructureMatches(canvas_->document(), pattern.toStdString());
+    if (!matches) {
+        QMessageBox::warning(this, tr("Find Substructure"), tr("Could not search. Check the SMILES or SMARTS pattern and the drawing's structure."));
+        return;
+    }
+    QSet<int> atoms;
+    for (const auto& match : *matches) for (int atom : match) atoms.insert(atom);
+    canvas_->setSelection(atoms);
+    statusBar()->showMessage(matches->empty() ? tr("No matches found") : matches->size() == 1 ? tr("1 match selected")
+                                                                                         : tr("%1 matches selected").arg(matches->size()));
+}
+
 void MainWindow::importSequence() {
     bool ok = false;
     const QString s = QInputDialog::getText(this, tr("Import Peptide Sequence"),
@@ -2463,6 +2481,7 @@ void MainWindow::buildMenus() {
     edit->addAction(tr("&Delete"), canvas_, &Canvas::deleteSelection);
     edit->addSeparator();
     edit->addAction(tr("Select &All"), QKeySequence::SelectAll, canvas_, &Canvas::selectAll);
+    edit->addAction(tr("&Find Substructure…"), QKeySequence::Find, this, &MainWindow::findSubstructure);
     edit->addSeparator();
     auto* prefs = edit->addAction(tr("Pr&eferences…"), QKeySequence::Preferences, this, &MainWindow::showPreferences);
     prefs->setMenuRole(QAction::PreferencesRole);  // the app menu on macOS
@@ -2849,6 +2868,7 @@ moves off, so you can keep typing.</p>
 <tr><th colspan="2" align="left">No hotspot (Esc)</th></tr>
 <tr><td><b>x X j e t Space</b></td><td>bond, chain, benzene, arrow, text, select tool</td></tr>
 <tr><th colspan="2" align="left">Selection</th></tr>
+<tr><td><b>Ctrl+F</b></td><td>find a SMILES or SMARTS substructure on the current page</td></tr>
 <tr><td><b>←↑→↓</b></td><td>nudge 1 pt; with <b>Shift</b> 10 pt</td></tr>
 <tr><td><b>Enter</b></td><td>back to a hotspot on the selection</td></tr>
 <tr><td><b>Drag onto an atom</b></td><td>merge (Select tool) &nbsp;•&nbsp; <b>Shift+drag</b> move straight; draw a bond at any angle</td></tr>

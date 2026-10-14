@@ -38,6 +38,33 @@ TEST_CASE("SMILES gives 2D coordinates") {
     CHECK(std::abs(std::hypot(d.x(), d.y()) - kBondLength) < 0.5);
 }
 
+TEST_CASE("substructure search finds unique chemistry matches and maps abbreviations (#485)") {
+    const Document doc = *chem::fromSmiles("CC(=O)OC.CC=O");
+    const auto matches = chem::substructureMatches(doc, "C=O");
+    REQUIRE(matches);
+    CHECK(*matches == std::vector<std::vector<int>>{{1, 2}, {6, 7}});
+    CHECK(chem::substructureMatches(doc, "[#8]")->size() == 3);
+    CHECK(chem::substructureMatches(doc, "[$(C=O)]")->size() == 2);
+    CHECK(chem::substructureMatches(doc, "N")->empty());
+    CHECK_FALSE(chem::substructureMatches(doc, "C1"));
+    CHECK_FALSE(chem::substructureMatches(doc, ""));
+    const auto overlap = chem::substructureMatches(*chem::fromSmiles("CCC"), "CC");
+    REQUIRE(overlap);
+    CHECK(*overlap == std::vector<std::vector<int>>{{0, 1}, {1, 2}});
+    Document abbrev = *chem::fromSmiles("CO");
+    REQUIRE(edit::applyLabel(abbrev, 0, "tBu", true));
+    const auto methyls = chem::substructureMatches(abbrev, "[CH3]");
+    REQUIRE(methyls);
+    CHECK(*methyls == std::vector<std::vector<int>>{{0}, {0}, {0}});
+    const Document stereo = *chem::fromSmiles("F[C@H](Cl)Br");
+    CHECK(chem::substructureMatches(stereo, "F[C@H](Cl)Br")->size() == 1);
+    CHECK(chem::substructureMatches(stereo, "F[C@@H](Cl)Br")->empty());
+    Document many;
+    for (int i = 0; i < 1100; ++i) many.addAtom({double(i), 0}, 8);
+    CHECK(chem::substructureMatches(many, "O")->size() == 1100);
+    CHECK(chem::substructureMatches(Document{}, "O")->empty());
+}
+
 TEST_CASE("bad SMILES is rejected") {
     CHECK_FALSE(chem::fromSmiles("C1CC"));
 }

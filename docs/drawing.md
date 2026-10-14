@@ -92,6 +92,12 @@ lane labels like any text.
 
 ## Selecting and arranging
 
+**Edit → Find Substructure…** (Ctrl/Cmd+F) selects every match of a SMILES or SMARTS pattern on the
+current page. A selection supplies the initial pattern. Try `C=O` for carbonyls or `[#7,#8]` for
+nitrogen and oxygen atoms. The status bar reports the match count; colour, delete, copy and arrange
+commands act on the selected atoms and the bonds joining them. Matches inside abbreviations select
+their visible label. Cancelling or entering an invalid pattern keeps the selection unchanged.
+
 - Drag to select, or Alt+drag from empty space to draw a loop round what you want; double-click selects a whole molecule. Drag a selection to move it, and drop an
   atom on another to merge them.
 - The arrow keys nudge a selection (Shift for 10 points). Ctrl+arrow duplicates it across the next
