@@ -6,6 +6,7 @@ results should match the ones shown here.
 | Tutorial | You'll make |
 |---|---|
 | [Caffeine from the keyboard](keyboard.md) | a structure drawn with hotkeys: one click, then twelve keys |
+| [Coming from another editor](coming-from-another-editor.md) | a CDXML drawing edited with familiar hotkeys and saved for another editor |
 | [A reaction scheme](reaction-scheme.md) | an aspirin synthesis with reagents and conditions, exported as SVG and PDF |
 | [A dataset of structures](dataset.md) | a grid of drugs and a descriptor table, from a `.smi` file |
 | [A publication figure](publication-figure.md) | a coloured structure in a journal style, at print size |
@@ -16,6 +17,7 @@ results should match the ones shown here.
 :hidden:
 
 keyboard
+coming-from-another-editor
 reaction-scheme
 dataset
 publication-figure
