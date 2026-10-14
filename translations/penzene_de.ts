@@ -1053,6 +1053,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>One-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser, H-Gly-D-Phe-OH, Ac-Gly-Phe-NH2):</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Dative bond: an arrow from the donor to the acceptor, which takes none of the donor&apos;s hydrogens — k on a bond</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1274,10 +1278,6 @@
     </message>
     <message>
         <source>Import Peptide Sequence</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>One-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser, H-Gly-D-Phe-OH):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
