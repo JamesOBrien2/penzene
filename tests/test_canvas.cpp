@@ -1803,7 +1803,7 @@ TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the 
     QTest::keyClick(view, Qt::Key_Right);
     QTest::keyClick(view, Qt::Key_Left);
     CHECK(canvas->highlight() == QSet<int>{4});
-    dock->findChild<QPushButton*>()->click();
+    dock->findChild<QPushButton*>("copyNmrSi")->click();
     CHECK(QGuiApplication::clipboard()->text().startsWith("13C NMR (predicted) δ 13"));  // toluene's, not ethanol's
     CHECK(QGuiApplication::clipboard()->text().count(", ") == 4);
     canvas->setHotspot(5);  // and the other way: an ortho carbon under the pointer marks its stick
@@ -1824,10 +1824,115 @@ TEST_CASE("NMR panel: a stick per set of equivalent atoms, lighting them on the 
     REQUIRE_FALSE(canvas->highlight().isEmpty());
     for (int i : canvas->highlight()) CHECK(i < 3);
     canvas->commit(*chem::fromSmiles("[Na+].[Cl-]"), "Replace");
-    dock->findChild<QPushButton*>()->click();  // nothing predicted: the clipboard keeps what it had
+    dock->findChild<QPushButton*>("copyNmrSi")->click();  // nothing predicted: the clipboard keeps what it had
     CHECK(QGuiApplication::clipboard()->text().startsWith("13C NMR"));
     dock->hide();
     CHECK(canvas->highlight().isEmpty());
+}
+
+TEST_CASE("Experimental JCAMP overlay: import, nucleus, removal and failed replacement (#553)") {
+    App app;
+    QTemporaryDir dir;
+    MainWindow w;
+    w.resize(1100, 700);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("CCO"));
+    for (auto* action : w.findChildren<QAction*>())
+        if (action->text() == "&NMR Panel") action->trigger();
+    QApplication::processEvents();
+    auto* dock = w.findChild<QDockWidget*>("nmr");
+    auto* view = dock->findChild<QWidget*>("nmrSpectrum");
+    auto* label = dock->findChild<QLabel*>("experimentalSpectrum");
+    auto* remove = dock->findChild<QPushButton*>("removeExperimental");
+    auto* nucleus = dock->findChild<QComboBox*>();
+    REQUIRE(view);
+    REQUIRE(label);
+    REQUIRE(remove);
+    CHECK_FALSE(remove->isEnabled());
+    const QString preview = qEnvironmentVariable("PENZENE_JCAMP_PREVIEW");
+    if (!preview.isEmpty()) {
+        QDir().mkpath(preview);
+        canvas->fitToDocument();
+        REQUIRE(w.grab().save(preview + "/before.png"));
+    }
+    QByteArray measured = "##TITLE=synthetic ethanol\n##DATA TYPE=NMR SPECTRUM\n##.OBSERVE NUCLEUS=1H\n"
+                          "##XUNITS=PPM\n##NPOINTS=1201\n##XYPOINTS=(XY..XY)\n";
+    for (int i = 0; i <= 1200; ++i) {
+        const double ppm = 12 - i / 100.0;
+        const double intensity = std::exp(-std::pow((ppm - 3.55) / 0.10, 2)) +
+                                 1.5 * std::exp(-std::pow((ppm - 1.12) / 0.08, 2));
+        measured += QByteArray::number(ppm) + "," + QByteArray::number(intensity) + "\n";
+    }
+    measured += "##END=\n";
+    auto write = [&](const QString& name, const QByteArray& data) {
+        const QString path = dir.filePath(name);
+        QFile f(path);
+        REQUIRE(f.open(QIODevice::WriteOnly));
+        REQUIRE(f.write(data) == data.size());
+        return path;
+    };
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+    auto import = [&](const QString& path, bool invalid = false, int choice = -1) {
+        QTimer::singleShot(0, &w, [&, path, invalid, choice] {
+            auto* files = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+            REQUIRE(files);
+            if (path.isEmpty()) return files->reject();
+            if (invalid || choice >= 0) QTimer::singleShot(0, &w, [&, invalid, choice] {
+                if (invalid) {
+                    auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+                    REQUIRE(warning);
+                    CHECK_FALSE(warning->text().isEmpty());
+                    warning->accept();
+                } else {
+                    auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+                    REQUIRE(dialog);
+                    dialog->findChild<QComboBox*>()->setCurrentIndex(choice);
+                    dialog->accept();
+                }
+            });
+            files->selectFile(path);
+            static_cast<QDialog*>(files)->accept();
+        });
+        dock->findChild<QPushButton*>("importExperimental")->click();
+        QApplication::processEvents();
+    };
+    import(write("ethanol.jdx", measured));
+    CHECK(nucleus->currentIndex() == 1);
+    CHECK(label->text().contains("ethanol.jdx"));
+    CHECK(view->accessibleDescription().contains("Experimental synthetic ethanol: 1201 samples"));
+    CHECK(remove->isEnabled());
+    const auto imported = view->grab().toImage();
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/after.png"));
+    dock->findChild<QPushButton*>("copyNmrSi")->click();
+    CHECK(QGuiApplication::clipboard()->text().startsWith("1H NMR (predicted)"));
+    const auto identity = label->text();
+    import(write("broken.dx", "##TITLE=broken\n"), true);
+    CHECK(label->text() == identity);
+    CHECK(view->grab().toImage() == imported);
+    import({});
+    CHECK(label->text() == identity);
+    nucleus->setCurrentIndex(0);
+    CHECK(label->text().contains("matching nucleus"));
+    CHECK_FALSE(view->accessibleDescription().contains("Experimental"));
+    nucleus->setCurrentIndex(1);
+    canvas->commit({}, "Clear drawing");
+    CHECK(view->accessibleDescription().contains("Experimental synthetic ethanol"));
+    CHECK_FALSE(view->grab().isNull());
+    remove->click();
+    CHECK(label->text().isEmpty());
+    CHECK_FALSE(remove->isEnabled());
+    const QByteArray carbon = "##TITLE=carbon\n##DATA TYPE=NMR PEAK TABLE\n##.OBSERVE NUCLEUS=13C\n"
+                              "##XUNITS=PPM\n##PEAK TABLE=(XY..XY)\n77,1;60,-0.5;20,?;15,2\n##END=\n";
+    import(write("linked.jcamp", "##TITLE=two\n##DATA TYPE=LINK\n" + measured + carbon + "##END=\n"), false, 1);
+    CHECK(nucleus->currentIndex() == 0);
+    CHECK(view->accessibleDescription().contains("Experimental carbon: 4 samples"));
+    CHECK_FALSE(view->grab().isNull());
+    const QString drawing = write("fresh.penz", Document().toJson());
+    REQUIRE(w.openFile(drawing));
+    CHECK(label->text().isEmpty());
+    CHECK_FALSE(remove->isEnabled());
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs, false);
 }
 
 TEST_CASE("PubChem name lookup: URL and response parsing (#28)") {

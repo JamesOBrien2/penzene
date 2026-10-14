@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "Canvas.h"
 #include "Chem.h"
+#include "Jcamp.h"
 #include "Edit.h"
 #include "Online.h"
 #include "Templates.h"
@@ -143,6 +144,8 @@ public:
     Document molecule;       // and it alone, drawn as the legend
     std::function<void(const std::vector<int>&)> light;
     int current = -1;
+    std::optional<JcampSpectrum> experimental;
+    bool hasExperimental() const { return experimental && experimental->proton == proton; }
     NmrView() {
         setMinimumSize(260, 200);
         setMouseTracking(true);
@@ -160,6 +163,8 @@ public:
     }
     QString reading() const {  // for screen readers: the stick in hand, else all of them
         QStringList all;
+        if (hasExperimental()) all << QCoreApplication::translate("MainWindow", "Experimental %1: %2 samples, normalized intensity")
+                                        .arg(experimental->title).arg(experimental->points.size());
         for (int k = 0; k < int(sticks.size()); ++k)
             if (current < 0 || k == current) all << describe(k);
         return all.join("; ");
@@ -180,17 +185,14 @@ protected:
     std::pair<double, double> range() const {  // ppm at the left and right edges
         double left = proton ? 12 : 220, right = 0;
         for (const auto& s : sticks) left = std::max(left, s.ppm + 1), right = std::min(right, s.ppm - 1);
+        if (hasExperimental()) for (const auto& p : experimental->points) left = std::max(left, p.x()), right = std::min(right, p.x());
         return {left, right};
-    }
-    double x(double ppm) const {
-        const auto [l, r] = range();
-        return plot().left() + (l - ppm) / (l - r) * plot().width();
     }
     void paintEvent(QPaintEvent*) override {
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
         const QColor ink = palette().color(QPalette::WindowText);
-        if (sticks.empty()) {
+        if (sticks.empty() && !hasExperimental()) {
             p.setPen(ink);
             p.drawText(rect(), Qt::AlignCenter | Qt::TextWordWrap,
                        QCoreApplication::translate("MainWindow", "Draw or select a structure with predicted shifts."));
@@ -199,9 +201,11 @@ protected:
         const QFontMetrics fm(font());
         const QRectF plot = this->plot();
         const auto [l, r] = range();
+        auto x = [&](double ppm) { return plot.left() + (l - ppm) / (l - r) * plot.width(); };
         p.setPen(QPen(ink, 1));
         p.drawLine(plot.bottomLeft(), plot.bottomRight());
-        const int step = proton ? 1 : 20;
+        int step = proton ? 1 : 20;
+        while ((l - r) / step > 30) step *= 5;
         for (int v = int(std::floor(l / step)) * step; v >= r; v -= step) {
             p.drawLine(QPointF(x(v), plot.bottom()), QPointF(x(v), plot.bottom() + 3));
             const QString t = QString::number(v);
@@ -213,6 +217,20 @@ protected:
         // than a real J so they can be read.
         std::vector<std::vector<QPointF>> lines;
         std::vector<QPointF> all;
+        double amplitude = 0, positive = 0, negative = 0;
+        if (hasExperimental()) {
+            for (const auto& point : experimental->points)
+                if (std::isfinite(point.y())) amplitude = std::max(amplitude, std::abs(point.y()));
+            if (!amplitude) amplitude = 1;
+            for (const auto& point : experimental->points)
+                if (std::isfinite(point.y())) {
+                    positive = std::max(positive, point.y() / amplitude);
+                    negative = std::max(negative, -point.y() / amplitude);
+                }
+            if (!positive && !negative) positive = 1;
+            for (const auto& point : experimental->points)
+                if (std::isfinite(point.y())) all.push_back({x(point.x()), 0.85 * (point.y() / amplitude + negative) / (positive + negative)});
+        }
         for (const auto& s : sticks) {
             const int n = proton ? std::min(s.coupled, 6) : 0;
             std::vector<double> row{1};
@@ -230,11 +248,36 @@ protected:
         const double fit = std::min({0.45 * plot.width() / std::max(bounds.width(), 1.0), 0.5 * plot.height() / std::max(bounds.height(), 1.0),
                                      22 / kBondLength});  // a bond no longer than 22 px
         const Legend legend = placeLegend(plot, bounds.size() * fit, all, fm.height() + 6);
-        auto top = [&](int k) { return plot.bottom() - double(sticks[k].count) / tallest * legend.scale * plot.height(); };
+        const double baseline = plot.bottom() - (negative ? negative / (positive + negative) * 0.85 * legend.scale * plot.height() : 0);
+        const double height = baseline - plot.top();
+        auto top = [&](int k) { return baseline - double(sticks[k].count) / tallest * legend.scale * height; };
+        if (hasExperimental()) {
+            QColor measured = ink;
+            measured.setAlpha(160);
+            p.save();
+            p.setClipRect(plot);
+            p.setPen(QPen(measured, 1));
+            const double scale = 0.85 * legend.scale * plot.height() / (positive + negative);
+            QPainterPath trace;
+            bool start = true;
+            for (const auto& point : experimental->points) {
+                if (!std::isfinite(point.y())) { start = true; continue; }
+                const QPointF here{x(point.x()), baseline - point.y() / amplitude * scale};
+                if (experimental->peaks) p.drawLine(QPointF(here.x(), baseline), here);
+                else if (start) trace.moveTo(here), start = false;
+                else trace.lineTo(here);
+            }
+            if (!experimental->peaks) p.drawPath(trace);
+            if (negative) {
+                p.setPen(QPen(measured, 1, Qt::DashLine));
+                p.drawLine(QPointF(plot.left(), baseline), QPointF(plot.right(), baseline));
+            }
+            p.restore();
+        }
         for (size_t k = 0; k < sticks.size(); ++k) {
             const QColor c = int(k) == current ? ink : palette().color(QPalette::Highlight);
             p.setPen(QPen(c, int(k) == current ? 3 : 2, Qt::SolidLine, Qt::FlatCap));
-            for (QPointF l : lines[k]) p.drawLine(QPointF(l.x(), plot.bottom()), QPointF(l.x(), plot.bottom() - l.y() * legend.scale * plot.height()));
+            for (QPointF l : lines[k]) p.drawLine(QPointF(l.x(), baseline), QPointF(l.x(), baseline - l.y() * legend.scale * height));
         }
         p.save();
         p.translate(legend.rect.topLeft());
@@ -261,8 +304,11 @@ protected:
     void mouseMoveEvent(QMouseEvent* e) override {
         int best = -1;
         double nearest = 6;  // px
+        const auto [l, r] = range();
+        const QRectF area = plot();
         for (size_t k = 0; k < sticks.size(); ++k)
-            if (double d = std::abs(x(sticks[k].ppm) - e->position().x()); d < nearest) nearest = d, best = int(k);
+            if (double d = std::abs(area.left() + (l - sticks[k].ppm) / (l - r) * area.width() - e->position().x()); d < nearest)
+                nearest = d, best = int(k);
         setCurrent(best);
     }
     void leaveEvent(QEvent*) override { setCurrent(-1); }
@@ -646,6 +692,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     nucleus_->addItems({"¹³C", "¹H"});
     nucleus_->setAccessibleName(tr("Nucleus"));
     nmr_ = new NmrView;
+    nmr_->setObjectName("nmrSpectrum");
     nmr_->setAccessibleName(tr("Predicted spectrum"));
     nmr_->setToolTip(tr("Point at a stick, or press Left and Right, to light its atoms"));
     nmr_->light = [this](const std::vector<int>& atoms) { canvas_->setHighlight(QSet<int>(atoms.begin(), atoms.end())); };
@@ -655,7 +702,28 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     notice->setStyleSheet("font-size: 10px;");
     nmrLayout->addWidget(nucleus_);
     nmrLayout->addWidget(nmr_, 1);
+    auto* experimentalButtons = new QHBoxLayout;
+    auto* importExperimental = new QPushButton(tr("Import Experimental…"));
+    importExperimental->setObjectName("importExperimental");
+    auto* removeExperimental = removeExperimental_ = new QPushButton(tr("Remove Overlay"));
+    removeExperimental->setObjectName("removeExperimental");
+    removeExperimental->setEnabled(false);
+    experimentalButtons->addWidget(importExperimental);
+    experimentalButtons->addWidget(removeExperimental);
+    experimentalName_ = new QLabel;
+    experimentalName_->setObjectName("experimentalSpectrum");
+    experimentalName_->setTextFormat(Qt::PlainText);
+    experimentalName_->setWordWrap(true);
+    nmrLayout->addLayout(experimentalButtons);
+    nmrLayout->addWidget(experimentalName_);
+    connect(importExperimental, &QPushButton::clicked, this, &MainWindow::importExperimental);
+    connect(removeExperimental, &QPushButton::clicked, this, [this] {
+        nmr_->experimental.reset();
+        experimentalFile_.clear();
+        updateNmr();
+    });
     auto* copyNmr = new QPushButton(tr("Copy SI Line"));
+    copyNmr->setObjectName("copyNmrSi");
     copyNmr->setToolTip(tr("The predicted shifts as a supporting-information line, to replace with measured ones"));
     connect(copyNmr, &QPushButton::clicked, this, [this] {
         const QString line = chem::nmrLine(nmr_->doc, nmr_->proton, nmr_->atoms);
@@ -893,6 +961,10 @@ void MainWindow::updateNmr() {
     }
     std::sort(nmr_->atoms.begin(), nmr_->atoms.end());
     nmr_->proton = nucleus_->currentIndex() == 1;
+    removeExperimental_->setEnabled(nmr_->experimental.has_value());
+    const QString identity = nmr_->experimental ? tr("Experimental %1: %2 (normalized)")
+                                                   .arg(nmr_->experimental->proton ? "¹H" : "¹³C", experimentalFile_) : QString();
+    experimentalName_->setText(nmr_->experimental && !nmr_->hasExperimental() ? identity + tr(" — choose the matching nucleus to show it") : identity);
     nmr_->doc = d;
     nmr_->molecule = d;
     std::vector<int> others;
@@ -903,6 +975,36 @@ void MainWindow::updateNmr() {
     nmr_->sticks = nmr_->atoms.empty() ? std::vector<chem::NmrStick>{} : chem::nmrSticks(d, nmr_->proton, nmr_->atoms);
     nmr_->setAccessibleDescription(nmr_->reading());
     nmr_->update();
+}
+
+void MainWindow::importExperimental() {
+    const QString path = QFileDialog::getOpenFileName(this, tr("Import Experimental NMR Spectrum"), {},
+                                                     tr("JCAMP-DX spectra (*.jdx *.dx *.jcamp);;All files (*)"));
+    if (path.isEmpty()) return;
+    QFile file(path);
+    QString error;
+    std::vector<JcampSpectrum> spectra;
+    if (file.size() <= 200'000'000 && file.open(QIODevice::ReadOnly)) spectra = readJcamp(file.readAll(), &error);
+    else error = tr("Could not read the spectrum file (maximum 200 MB).");
+    if (spectra.empty()) {
+        QMessageBox::warning(this, tr("Import Experimental NMR Spectrum"), error);
+        return;
+    }
+    int chosen = 0;
+    if (spectra.size() > 1) {
+        QStringList names;
+        for (size_t i = 0; i < spectra.size(); ++i)
+            names << tr("%1: %2 · %3").arg(i + 1).arg(spectra[i].proton ? "¹H" : "¹³C", spectra[i].title);
+        bool ok = false;
+        const QString name = QInputDialog::getItem(this, tr("Choose Spectrum"), tr("Spectrum:"), names, 0, false, &ok);
+        if (!ok) return;
+        chosen = int(names.indexOf(name));
+    }
+    nmr_->experimental = std::move(spectra[chosen]);
+    experimentalFile_ = QFileInfo(path).fileName();
+    QSignalBlocker quiet(nucleus_);
+    nucleus_->setCurrentIndex(nmr_->experimental->proton ? 1 : 0);
+    updateNmr();
 }
 
 // Formula and masses of the selection, or of everything.
@@ -944,6 +1046,8 @@ std::vector<Sheet> MainWindow::sheets() const {
 }
 
 void MainWindow::setPages(const std::vector<Sheet>& sheets) {
+    nmr_->experimental.reset();
+    experimentalFile_.clear();
     QUndoStack* first = pages_[0].undo;
     // Off the old pages before their stacks go: deleting the group's active stack signals
     // cleanChanged, and updateTitle would read the stacks already deleted.
