@@ -11,6 +11,7 @@ results should match the ones shown here.
 | [A publication figure](publication-figure.md) | a coloured structure in a journal style, at print size |
 | [Batch rendering from the command line](cli-batch.md) | a folder of images from MOL files, a SMILES library and SMILES strings |
 | [Batch rendering from Python](python-batch.md) | one figure per row of a CSV, and drawings inline in Jupyter |
+| [Penzene documents in Jupyter](jupyter.md) | an executable notebook with inline drawings, independent edits and file round trips |
 
 ```{toctree}
 :hidden:
@@ -21,4 +22,5 @@ dataset
 publication-figure
 cli-batch
 python-batch
+jupyter
 ```
