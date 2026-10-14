@@ -63,7 +63,7 @@ are always black on clear or white.
 Penzene installed with the Windows installer registers a **Penzene Drawing Object**, as ChemDraw
 does. Copy a drawing and paste it into Word or PowerPoint: Ctrl+V gives the object, and
 **Paste Special** also lists it by that name. You can also add a new, empty one with **Insert → Object**.
-The document shows the picture and keeps the drawing (every page, as a `.penz`) inside the
+The document shows the picture and keeps the drawing (initially the copied selection or current page, as a `.penz`) inside the
 `.docx` or `.pptx`, so the picture still shows on a computer without Penzene.
 
 Double-click the object to open it in a Penzene window titled "Drawing in …". Edit it, then
@@ -71,8 +71,13 @@ Double-click the object to open it in a Penzene window titled "Drawing in …". 
 Save the Word or PowerPoint file to keep the change. The picture is page 1, drawn with the export
 settings in Preferences.
 
-The portable `.zip` doesn't register Penzene, so from it Copy pastes a picture. macOS Office has no
-embedded objects; there, a pasted PDF or PNG from Penzene opens back up in Penzene (see above).
+The portable `.zip` doesn't register Penzene, so from it Copy pastes a picture. Office for Mac
+and Office on the web do not support this Penzene OLE workflow. Keep the original `.penz`:
+Office may re-render a pasted picture and remove its embedded drawing, as PowerPoint does on
+macOS. The original Penzene exports reopen editable; an Office copy may not.
+
+[Figures in Word, PowerPoint and LaTeX](tutorials/office-latex.md) walks through vector insertion,
+copy and paste, Windows object editing and a complete LaTeX example.
 
 ## Page mode
 
