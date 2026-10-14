@@ -2191,6 +2191,21 @@ TEST_CASE("Haworth and Fischer projections read with PubChem's stereo (#108)") {
     CHECK(chem::toSmiles(cyclohexanol) == "OC1CCCCC1");
 }
 
+TEST_CASE("The anti-butane Newman template puts its methyls 180 degrees apart (#604)") {
+    App app;
+    const auto& templates = builtinTemplates();
+    const auto t = std::find_if(templates.begin(), templates.end(), [](const Template& t) { return t.name == "Newman: butane, anti (staggered)"; });
+    REQUIRE(t != templates.end());
+    const auto doc = templateDocument(*t);
+    std::vector<QPointF> methyls;
+    for (const auto& text : doc.texts)
+        if (text.text == "CH3") methyls.push_back(text.pos + QPointF(2.9 * text.text.size(), -3.5));
+    REQUIRE(methyls.size() == 2);
+    CHECK(QLineF(methyls[0], -methyls[1]).length() < 1e-6);
+    CHECK(doc.atoms.empty());
+    CHECK(chem::toSmiles(doc).empty());
+}
+
 TEST_CASE("Arrange Scheme lines a reaction up (#109)") {
     Fixture f;
     // Salicylic acid + acetic anhydride → aspirin, drawn untidily, pyridine over a tilted arrow.
