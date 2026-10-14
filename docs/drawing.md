@@ -71,7 +71,7 @@ Ring tools draw 3- to 8-membered rings and benzene: click empty space, an atom (
 or a bond (fused). On a bond, `a z v 4–8 9 0` fuse rings, `9` and `0` chair cyclohexanes.
 
 **View → Templates** opens the template library: amino acids, sugars, nucleobases, common scaffolds,
-and Haworth, Fischer and Newman projections. Haworth and Fischer drawings give the right stereo
+heterocycles, macrocycles, ligands and reagents, and Haworth, Fischer and Newman projections. Haworth and Fischer drawings give the right stereo
 when converted to SMILES. **Structure → Save Selection as Template** adds your own.
 
 The **Lab** section has a TLC plate: a baseline, a dashed solvent front, and starting material,
@@ -148,3 +148,36 @@ lane labels like any text.
   and rulers in centimetres from the page's corner. Both start on; turn either off there and
   Penzene remembers. On a trackpad, spread two fingers to zoom in and pinch to zoom out, and drag
   with two fingers to pan.
+
+### Additional template sources
+
+The heterocycles, macrocycles, ligands and reagents added to the library use chemical names and
+molecular connectivity checked against the PubChem records below. Their drawings are generated
+by RDKit within Penzene and distributed under Penzene’s GPL-3.0-or-later licence.
+
+| Category | Template | PubChem |
+|---|---|---|
+| Heterocycles | Pyrazole | [CID 1048](https://pubchem.ncbi.nlm.nih.gov/compound/1048) |
+| Heterocycles | Oxazole | [CID 9255](https://pubchem.ncbi.nlm.nih.gov/compound/9255) |
+| Heterocycles | Isoxazole | [CID 9254](https://pubchem.ncbi.nlm.nih.gov/compound/9254) |
+| Heterocycles | Thiazole | [CID 9256](https://pubchem.ncbi.nlm.nih.gov/compound/9256) |
+| Heterocycles | Pyrazine | [CID 9261](https://pubchem.ncbi.nlm.nih.gov/compound/9261) |
+| Heterocycles | Pyridazine | [CID 9259](https://pubchem.ncbi.nlm.nih.gov/compound/9259) |
+| Heterocycles | 1H-1,2,4-triazole | [CID 9257](https://pubchem.ncbi.nlm.nih.gov/compound/9257) |
+| Heterocycles | Benzofuran | [CID 9223](https://pubchem.ncbi.nlm.nih.gov/compound/9223) |
+| Heterocycles | Benzothiazole | [CID 7222](https://pubchem.ncbi.nlm.nih.gov/compound/7222) |
+| Heterocycles | Pyrrolidine | [CID 31268](https://pubchem.ncbi.nlm.nih.gov/compound/31268) |
+| Macrocycles | 12-Crown-4 | [CID 9269](https://pubchem.ncbi.nlm.nih.gov/compound/9269) |
+| Macrocycles | 15-Crown-5 | [CID 36336](https://pubchem.ncbi.nlm.nih.gov/compound/36336) |
+| Macrocycles | Cyclen | [CID 64963](https://pubchem.ncbi.nlm.nih.gov/compound/64963) |
+| Macrocycles | Cyclam | [CID 64964](https://pubchem.ncbi.nlm.nih.gov/compound/64964) |
+| Ligands | 2,2'-Bipyridine | [CID 1474](https://pubchem.ncbi.nlm.nih.gov/compound/1474) |
+| Ligands | 1,10-Phenanthroline | [CID 1318](https://pubchem.ncbi.nlm.nih.gov/compound/1318) |
+| Ligands | Triphenylphosphine | [CID 11776](https://pubchem.ncbi.nlm.nih.gov/compound/11776) |
+| Ligands | 1,2-Bis(diphenylphosphino)ethane (dppe) | [CID 74267](https://pubchem.ncbi.nlm.nih.gov/compound/74267) |
+| Ligands | Ethylenediamine | [CID 3301](https://pubchem.ncbi.nlm.nih.gov/compound/3301) |
+| Ligands | Acetylacetone | [CID 31261](https://pubchem.ncbi.nlm.nih.gov/compound/31261) |
+| Reagents | 4-Dimethylaminopyridine (DMAP) | [CID 14284](https://pubchem.ncbi.nlm.nih.gov/compound/14284) |
+| Reagents | Triethylamine | [CID 8471](https://pubchem.ncbi.nlm.nih.gov/compound/8471) |
+| Reagents | N,N′-Dicyclohexylcarbodiimide (DCC) | [CID 10868](https://pubchem.ncbi.nlm.nih.gov/compound/10868) |
+| Reagents | 1,1′-Carbonyldiimidazole (CDI) | [CID 68263](https://pubchem.ncbi.nlm.nih.gov/compound/68263) |
