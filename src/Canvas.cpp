@@ -361,6 +361,7 @@ void Canvas::commit(const Document& next, const QString& text) {
 }
 
 void Canvas::setDocumentSilently(const Document& doc) {
+    if (drag_ == Drag::Erase && !(doc == doc_)) drag_ = Drag::None;  // changed indices cancel a pending erase
     // Items added or removed (an erase, an undo) renumber the rest, so indices from
     // before would point at other atoms: drop them. Callers that know the new
     // numbering (insert, duplicate) set the selection afterwards.
@@ -657,6 +658,16 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
     QColor sel = theme_.accent, hover = theme_.accent, line = theme_.accent;
     sel.setAlpha(90), hover.setAlpha(60);
     p->setRenderHint(QPainter::Antialiasing);
+    if (drag_ == Drag::Erase) {
+        QColor pending = theme_.error;
+        pending.setAlpha(90);
+        p->fillPath(shapeOf(doc_, labels_, eraseAtoms_, eraseArrows_, eraseTexts_), pending);
+        QPen pen(pending, 6, Qt::SolidLine, Qt::RoundCap);
+        pen.setCosmetic(true);
+        p->setPen(pen);
+        for (int i : eraseBonds_)
+            p->drawLine(doc_.atoms[doc_.bonds[i].a].pos, doc_.atoms[doc_.bonds[i].b].pos);
+    }
     // The selection is one smooth tinted shape, however its atoms, bonds, arrows and text overlap.
     if (!selectedAtoms_.isEmpty() || !selectedArrows_.isEmpty() || !selectedTexts_.isEmpty()) {
         const QPainterPath shape = shapeOf(doc_, labels_, selectedAtoms_, selectedArrows_, selectedTexts_);
@@ -834,6 +845,50 @@ int Canvas::bondAt(QPointF p) const {
     return -1;
 }
 
+void Canvas::collectErase(QPointF from, QPointF to) {
+    QPainterPath trace;
+    trace.moveTo(from);
+    trace.lineTo(to);
+    auto sweep = [&](double radius) {
+        if (from == to) {
+            QPainterPath area;
+            area.addEllipse(from, radius, radius);
+            return area;
+        }
+        QPainterPathStroker brush;
+        brush.setCapStyle(Qt::RoundCap);
+        brush.setWidth(2 * radius);
+        return brush.createStroke(trace);
+    };
+    const double zoom = transform().m11();
+    const auto atoms = sweep(8 / zoom + 2), bonds = sweep(6 / zoom + 1);
+    for (int i = 0; i < int(doc_.atoms.size()); ++i)
+        if (atoms.contains(doc_.atoms[i].pos)) eraseAtoms_.insert(i);
+    for (int i = 0; i < int(doc_.bonds.size()); ++i) {
+        QPainterPath line;
+        line.moveTo(doc_.atoms[doc_.bonds[i].a].pos);
+        line.lineTo(doc_.atoms[doc_.bonds[i].b].pos);
+        if (bonds.intersects(line)) eraseBonds_.insert(i);
+    }
+    QPainterPathStroker arrowStroke;
+    arrowStroke.setWidth(2 * (5 / zoom + 1));
+    for (int i = 0; i < int(doc_.arrows.size()); ++i) {
+        const auto hit = arrowStroke.createStroke(arrowPath(doc_.arrows[i]));
+        if (hit.intersects(trace) || hit.contains(from) || hit.contains(to)) eraseArrows_.insert(i);
+    }
+    for (int i = 0; i < int(doc_.texts.size()); ++i)
+        if (trace.intersects(textPath(doc_.texts[i], documentStyle(doc_)).boundingRect().adjusted(-2, -2, 2, 2))) eraseTexts_.insert(i);
+    // As with a click erase, remove neighbours left without any bonds, but keep untouched isolated atoms.
+    std::vector<int> before(doc_.atoms.size()), after(doc_.atoms.size());
+    for (int i = 0; i < int(doc_.bonds.size()); ++i) {
+        const Bond& b = doc_.bonds[i];
+        ++before[b.a], ++before[b.b];
+        if (!eraseBonds_.contains(i) && !eraseAtoms_.contains(b.a) && !eraseAtoms_.contains(b.b)) ++after[b.a], ++after[b.b];
+    }
+    for (int i = 0; i < int(doc_.atoms.size()); ++i)
+        if (before[i] && !after[i]) eraseAtoms_.insert(i);
+}
+
 // Points of the bond or chain the user is dragging out.
 std::vector<QPointF> Canvas::dragPath() const {
     QPointF start = pressAtom_ >= 0 ? doc_.atoms[pressAtom_].pos : pressPos_;
@@ -867,6 +922,15 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
     beforeDrag_ = doc_;
 
     switch (tool_) {
+    case Tool::Erase:
+        drag_ = Drag::Erase;
+        eraseAtoms_.clear(), eraseBonds_.clear(), eraseArrows_.clear(), eraseTexts_.clear();
+        eraseMoved_ = false;
+        if (pressAtom_ >= 0) eraseAtoms_.insert(pressAtom_);
+        else if (bond >= 0) eraseBonds_.insert(bond);
+        else if (int a = arrowAt(pressPos_); a >= 0) eraseArrows_.insert(a);
+        else if (int t = textAt(pressPos_); t >= 0) eraseTexts_.insert(t);
+        break;
     case Tool::Select: case Tool::Rotate3D: {
         const bool threeD = tool_ == Tool::Rotate3D;
         if (const int k = threeD ? -1 : reshapeHandleAt(pressPos_); k >= 0) {
@@ -941,7 +1005,13 @@ void Canvas::mouseMoveEvent(QMouseEvent* e) {
         verticalScrollBar()->setValue(verticalScrollBar()->value() - d.y());
         return;
     }
+    const QPointF previous = curPos_;
     curPos_ = mapToScene(e->pos());
+    if (drag_ == Drag::Erase) {
+        const bool moved = eraseMoved_;
+        eraseMoved_ |= len(curPos_ - pressRaw_) >= 3 / transform().m11();
+        if (eraseMoved_) collectErase(moved ? previous : pressRaw_, curPos_);
+    }
     shift_ = e->modifiers() & Qt::ShiftModifier;
     if (drag_ == Drag::Move && shift_) {  // Shift: along whichever axis the drag mostly follows
         QPointF d = curPos_ - pressPos_;
@@ -1050,6 +1120,8 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
         return;
     }
     if (e->button() != Qt::LeftButton) return;
+    if (tool_ == Tool::Erase && drag_ != Drag::Erase) return;  // a cancelled gesture cannot erase on release
+    const QPointF previous = curPos_;
     curPos_ = mapToScene(e->pos());
     shift_ = e->modifiers() & Qt::ShiftModifier;
     const bool click = len(curPos_ - pressRaw_) < 3 / transform().m11();
@@ -1058,6 +1130,23 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
     preview_.clear();
     Document next = beforeDrag_;
     QString what;
+    if (drag == Drag::Erase) {
+        eraseMoved_ |= !click;
+        if (eraseMoved_) {
+            collectErase(previous, curPos_);
+            for (int i = int(next.bonds.size()) - 1; i >= 0; --i)
+                if (eraseBonds_.contains(i)) next.bonds.erase(next.bonds.begin() + i);
+            for (int i = int(next.arrows.size()) - 1; i >= 0; --i)
+                if (eraseArrows_.contains(i)) next.arrows.erase(next.arrows.begin() + i);
+            for (int i = int(next.texts.size()) - 1; i >= 0; --i)
+                if (eraseTexts_.contains(i)) next.texts.erase(next.texts.begin() + i);
+            next.removeAtoms({eraseAtoms_.begin(), eraseAtoms_.end()});
+            if (!(next == beforeDrag_)) commit(next, tr("Erase"));
+            viewport()->update();
+            emit selectionChanged();
+            return;
+        }
+    }
 
     const BondStereo stereo = tool_ == Tool::Wedge ? BondStereo::Wedge
                               : tool_ == Tool::Hash ? BondStereo::Hash
@@ -1940,6 +2029,10 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
     if (arrow && (e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier)))
         return duplicateSelection(arrowDirection(key));
     if (key == Qt::Key_Escape) {
+        if (drag_ == Drag::Erase) {
+            drag_ = Drag::None;
+            return viewport()->update();
+        }
         hoverAtom_ = hoverBond_ = -1, arrowMark_ = {};
         if (std::exchange(keyHotspot_, false)) return viewport()->update();  // what was picked stays selected
         return setSelection({});
