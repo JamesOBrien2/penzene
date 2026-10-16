@@ -252,6 +252,7 @@ void editDrawingStyles(QWidget* parent, const Document& document) {
     Document sample = chem::fromSmiles("[NH3]->[Pt+2](<-[NH3])(Cl)Cl").value_or(Document());
     sample.append(chem::fromSmiles("C[C@H](O)[C@@H](N)C(=O)O").value_or(Document()), {0, 55});
     sample.texts.push_back({{0, 100}, "R1 · conditions"});
+    sample.circledCharges = document.circledCharges;
     auto draft = [&] {
         if (!editing) return source;
         StyleSettings s = source;
