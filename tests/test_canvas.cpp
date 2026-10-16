@@ -2852,7 +2852,7 @@ TEST_CASE("White and teal theme; tools on a rail whose groups open beside it (#2
     // Properties and Templates are in the View menu, not the palette.
     CHECK(w.findChild<QDockWidget*>("properties"));
     CHECK(w.findChild<QDockWidget*>("templates"));
-    CHECK(w.findChildren<QFrame*>("panelCard").size() == 4);  // Properties, Templates, Mass Spec, NMR
+    CHECK(w.findChildren<QFrame*>("panelCard").size() == 5);  // Properties, Templates, Mass Spec, NMR
     for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
         for (auto* b : f->findChildren<QToolButton*>()) CHECK(b->toolButtonStyle() != Qt::ToolButtonTextOnly);
 }
