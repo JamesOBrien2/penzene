@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 #include "Styles.h"
 #include "StyleEditor.h"
+#include "NumberBox.h"
 #include "Canvas.h"
 #include "Chem.h"
 #include "Edit.h"
@@ -319,6 +320,14 @@ static QString uiStyle(const Theme& t) {
         QTabBar#pageTabs::tab:selected { color: %6; background: %2; border-top-color: %6; font-weight: 600; }
         QToolButton#addPage { color: %5; background: transparent; border: none; border-radius: 6px; padding: 2px 9px; font-size: 15px; }
         QToolButton#addPage:hover { background: %7; color: %6; }
+        QToolBar#formatToolbar { background: %1; border: none; padding: 6px 12px; spacing: 8px; }
+        QToolBar#formatToolbar QToolButton { color: %4; background: transparent; border: 1px solid transparent;
+                                           border-radius: 7px; padding: 5px 24px 5px 10px; min-height: 22px; }
+        QToolBar#formatToolbar QToolButton:hover { background: %7; }
+        QToolBar#formatToolbar QToolButton:focus { border-color: %6; }
+        QToolBar#formatToolbar QToolButton::menu-indicator { image: url(:/ui/chevron-down-%8.svg); width: 8px; height: 5px;
+                                                           subcontrol-position: right center; right: 8px; }
+        QToolBar#formatToolbar QCheckBox { margin: 0 5px; }
         QTreeWidget, QListWidget, QTableWidget, QTextEdit, QLineEdit, QComboBox, QAbstractSpinBox {
             background: %2; color: %4; border: 1px solid %3; border-radius: 7px; padding: 3px;
             selection-background-color: %7; selection-color: %6;
@@ -1994,7 +2003,6 @@ static QWidget* periodicTable(const std::function<void(int)>& picked) {
 void MainWindow::buildFormatToolbar() {
     auto* bar = new QToolBar(tr("Format"), centralWidget());
     bar->setObjectName("formatToolbar");
-    bar->setStyleSheet("QToolButton { padding: 4px 16px 4px 6px; }");
     bar->setMovable(false);
     qobject_cast<QVBoxLayout*>(centralWidget()->layout())->insertWidget(0, bar);
     auto button = [&](const QString& name, const QString& label) {
@@ -2025,11 +2033,11 @@ void MainWindow::buildFormatToolbar() {
     font->setMinimumWidth(150);
     font->setMaximumWidth(200);
     bar->addWidget(font);
-    auto* size = new QDoubleSpinBox(bar);
+    auto* size = new NumberBox(bar);
     size->setObjectName("formatSize");
     size->setAccessibleName(tr("Text size in points"));
     size->setRange(0, 288);
-    size->setDecimals(1);
+    size->setDecimals(6);
     size->setSuffix(tr(" pt"));
     size->setSpecialValueText(tr("Mixed"));
     size->setKeyboardTracking(false);
