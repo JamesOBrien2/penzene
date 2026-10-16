@@ -51,8 +51,7 @@ const std::vector<DrawingStyle>& builtInDrawingStyles() {
         nature.circledCharges = nature.aromaticCircles = false;
         out.push_back(modelStyle(nature));
         StyleSettings angew{"Angewandte", 17, 0.75, 2.6015625, 1.5 * 2.6015625, 2.6015625, 0.18, 0, 2, "Arial", 400, 12};
-        out.push_back(modelStyle(angew));
-        angew.name = "Angewandte (8 pt final)";
+        // The publisher asks for 7–8 pt at final size; scale its linked 12 pt template once.
         for (auto member : {&StyleSettings::bondLength, &StyleSettings::lineWidth, &StyleSettings::boldWidth,
                             &StyleSettings::wedgeWidth, &StyleSettings::hashSpacing, &StyleSettings::labelMargin, &StyleSettings::fontSize})
             angew.*member *= 8.0 / 12;
