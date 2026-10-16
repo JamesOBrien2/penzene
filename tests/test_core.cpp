@@ -196,8 +196,7 @@ TEST_CASE("circled charges preserve visible bonds around a crowded metal centre 
 TEST_CASE("journal presets match publisher measurements and ChemDraw physical sizes (#473)") {
     for (const auto& [name, bond, font, line, bold, margin, hash] : {
         std::tuple{"Nature", 10.8, 6.0, 0.5952755906, 1.5590551181, 1.1905511811, 1.7007874016},
-        {"Angewandte", 17.0, 12.0, 0.75, 2.6015625, 2.0, 2.6015625},
-        {"Angewandte (8 pt final)", 17.0 * 2 / 3, 8.0, 0.5, 1.734375, 4.0 / 3, 1.734375},
+        {"Angewandte", 17.0 * 2 / 3, 8.0, 0.5, 1.734375, 4.0 / 3, 1.734375},
         {"SYNLETT/SYNTHESIS", 10.1196850394, 6.0, 0.5669291339, 1.3889763780, 0.9070866142, 1.7574803150}}) {
         INFO(name);
         const auto s = styleSettings(drawingStyle(name));
