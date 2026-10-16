@@ -21,6 +21,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - The predicted NMR spectrum and its SI line count the atoms inside an abbreviation such as tBu, as if it were drawn out (#611).
 - Opening an SDF or SMILES library with records Penzene can't read names them instead of leaving them out silently; Python's `read` warns (#584).
 - Lettered compound numbers shared across pages (2a, 2b) keep one number when a step is inserted, undone or redone (#583).
+- Brackets enclose everything their atoms draw around them (δ marks, charges, radical dots, lone pairs), so a transition state's δ+ is no longer left outside (#657).
 
 ## 1.9.0 (2026-09-29)
 
