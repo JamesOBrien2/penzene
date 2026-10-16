@@ -131,7 +131,7 @@ in points, and **Save**. Bonds, Labels, Captions and Layout group the controls.
 Set line, bold and wedge widths, hash spacing, relative or absolute multiple-bond
 spacing, label margins and minimum clearance independently. Captions can use a
 different font, size, weight and italic setting from atom labels. Chain angle,
-fixed angle increment, script size/position, hydrogen visibility, charge position,
+fixed angle increment, script size/position, hydrogen visibility, charge position/circles,
 R-group numbering and carbon labels are also adjustable.
 
 The preview shows a metal complex, stereochemistry and a caption. **100%** and

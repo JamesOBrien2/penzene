@@ -2561,6 +2561,18 @@ moves off, so you can keep typing.&lt;/p&gt;
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Plain signs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Circled signs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Charges:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Preview</source>
         <translation type="unfinished"></translation>
     </message>

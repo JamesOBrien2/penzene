@@ -29,6 +29,7 @@ StyleSettings styleSettings(const DrawingStyle& s) {
     result.rGroupSuperscript = s.rGroupSuperscript;
     result.hideImplicitHydrogens = s.hideImplicitHydrogens;
     result.carbonLabels = s.carbonLabels;
+    result.circledCharges = s.circledCharges;
     return result;
 }
 
@@ -51,11 +52,12 @@ DrawingStyle modelStyle(const StyleSettings& s) {
     result.rGroupSuperscript = s.rGroupSuperscript;
     result.hideImplicitHydrogens = s.hideImplicitHydrogens;
     result.carbonLabels = s.carbonLabels;
+    result.circledCharges = s.circledCharges;
     return result;
 }
 
 QJsonObject styleToJson(const StyleSettings& s) {
-    return {{"format", "penzene-drawing-style"}, {"version", 1}, {"name", s.name},
+    QJsonObject result{{"format", "penzene-drawing-style"}, {"version", 1}, {"name", s.name},
             {"bondLength", s.bondLength}, {"lineWidth", s.lineWidth}, {"boldWidth", s.boldWidth},
             {"wedgeWidth", s.wedgeWidth}, {"hashSpacing", s.hashSpacing}, {"bondSpacing", s.bondSpacing},
             {"labelRadius", s.labelRadius}, {"labelMargin", s.labelMargin},
@@ -66,6 +68,8 @@ QJsonObject styleToJson(const StyleSettings& s) {
             {"subscriptOffset", s.subscriptOffset}, {"superscriptOffset", s.superscriptOffset},
             {"chargesOnAtom", s.chargesOnAtom}, {"rGroupSuperscript", s.rGroupSuperscript},
             {"hideImplicitHydrogens", s.hideImplicitHydrogens}, {"carbonLabels", s.carbonLabels}};
+    if (s.circledCharges) result["circledCharges"] = *s.circledCharges;
+    return result;
 }
 
 std::optional<StyleSettings> styleFromJson(const QJsonObject& o) {
@@ -120,6 +124,10 @@ std::optional<StyleSettings> styleFromJson(const QJsonObject& o) {
     }
     if (s.captionFont.size() > 200 || s.captionFont != s.captionFont.trimmed() ||
         (!s.carbonLabels.isEmpty() && s.carbonLabels != "none" && s.carbonLabels != "terminal" && s.carbonLabels != "all")) return std::nullopt;
+    if (o.contains("circledCharges")) {
+        if (!o["circledCharges"].isBool()) return std::nullopt;
+        s.circledCharges = o["circledCharges"].toBool();
+    }
     return s;
 }
 
@@ -187,6 +195,7 @@ bool applyDrawingStyle(Document& doc, const QString& name) {
         doc.style = s.name == "ACS 1996" ? QString() : s.name;
         doc.styleSettings.reset();
         doc.labelRatio = 0;
+        if (s.circledCharges) doc.circledCharges = *s.circledCharges;
         if (!s.carbonLabels.isEmpty()) doc.carbonLabels = s.carbonLabels == "all" ? Document::CarbonLabels::All :
             s.carbonLabels == "terminal" ? Document::CarbonLabels::Terminal : Document::CarbonLabels::None;
         return true;
@@ -196,6 +205,7 @@ bool applyDrawingStyle(Document& doc, const QString& name) {
         doc.style = s.name;
         doc.styleSettings = s;
         doc.labelRatio = 0;
+        if (s.circledCharges) doc.circledCharges = *s.circledCharges;
         if (!s.carbonLabels.isEmpty()) doc.carbonLabels = s.carbonLabels == "all" ? Document::CarbonLabels::All :
             s.carbonLabels == "terminal" ? Document::CarbonLabels::Terminal : Document::CarbonLabels::None;
         return true;

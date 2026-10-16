@@ -58,6 +58,7 @@ struct DrawingStyle {
     bool captionItalic = false;
     double scriptScale = 0.7, subscriptOffset = 0.35, superscriptOffset = 0.7;
     bool chargesOnAtom = false, rGroupSuperscript = false, hideImplicitHydrogens = false;
+    std::optional<bool> circledCharges;  // unset: keep the document choice
     QString carbonLabels;  // empty: keep the document choice; otherwise none, terminal or all
 };
 std::vector<DrawingStyle> drawingStyles();  // built-ins, then saved user styles; ACS 1996 first

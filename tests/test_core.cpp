@@ -3176,3 +3176,26 @@ TEST_CASE("absolute double spacing and hash spacing reach the actual rendered st
     for (size_t i = 2; i < centres.size(); ++i)
         CHECK(centres[i] - centres[i - 1] == Catch::Approx(style.hashSpacing).margin(0.1));
 }
+
+TEST_CASE("styles carry an optional charge-circle choice without locking document overrides") {
+    auto style = styleSettings(drawingStyle("RSC"));
+    style.name = "Charge style regression";
+    style.circledCharges = false;
+    deleteDrawingStyle(style.name);
+    struct Cleanup { QString name; ~Cleanup() { deleteDrawingStyle(name); } } cleanup{style.name};
+    REQUIRE(saveDrawingStyle(style));
+    Document doc = *chem::fromSmiles("C[NH3+]");
+    doc.circledCharges = true;
+    REQUIRE(applyDrawingStyle(doc, style.name));
+    CHECK_FALSE(doc.circledCharges);
+    CHECK(doc.styleSettings->circledCharges == false);
+    CHECK(Document::fromJson(doc.toJson()) == doc);
+    doc.circledCharges = true;
+    CHECK(Document::fromJson(doc.toJson())->circledCharges);
+    auto json = styleToJson(style);
+    json.remove("circledCharges");
+    REQUIRE(styleFromJson(json));
+    CHECK_FALSE(styleFromJson(json)->circledCharges.has_value());
+    json["circledCharges"] = "false";
+    CHECK_FALSE(styleFromJson(json));
+}
