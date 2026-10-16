@@ -80,6 +80,7 @@ struct App {  // base class so the QApplication exists before any widget member
         static QApplication app(argc, argv);
         QApplication::setOrganizationName("penzene-tests");  // keep the user's settings out of it
         QStandardPaths::setTestModeEnabled(true);  // and their app data (autosave)
+        if (const auto theme = qgetenv("PENZENE_PREVIEW_THEME"); !theme.isEmpty()) QSettings().setValue("theme", QString::fromUtf8(theme));
     }
 };
 

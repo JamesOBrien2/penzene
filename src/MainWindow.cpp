@@ -707,7 +707,12 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     stoichiometryDock_ = new QDockWidget(tr("Stoichiometry"), this);
     stoichiometryDock_->setObjectName("stoichiometry");
     stoichiometry_ = new StoichiometryPanel;
-    stoichiometryDock_->setWidget(stoichiometry_);
+    auto* stoichiometryCard = new QFrame;
+    stoichiometryCard->setObjectName("panelCard");
+    auto* stoichiometryLayout = new QVBoxLayout(stoichiometryCard);
+    stoichiometryLayout->setContentsMargins(0, 0, 0, 0);
+    stoichiometryLayout->addWidget(stoichiometry_);
+    stoichiometryDock_->setWidget(stoichiometryCard);
     addDockWidget(Qt::BottomDockWidgetArea, stoichiometryDock_);
     stoichiometryDock_->hide();
     connect(stoichiometryDock_, &QDockWidget::visibilityChanged, this, &MainWindow::updateStoichiometry);

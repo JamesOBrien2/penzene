@@ -1,4 +1,5 @@
 #include "Stoichiometry.h"
+#include "NumberBox.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -16,13 +17,15 @@
 
 StoichiometryPanel::StoichiometryPanel(QWidget* parent) : QWidget(parent) {
     auto* layout = new QVBoxLayout(this);
+    layout->setContentsMargins(12, 12, 12, 12);
+    layout->setSpacing(10);
     auto* form = new QFormLayout;
     reaction_ = new QComboBox;
     reaction_->setObjectName("stoichReaction");
     limiting_ = new QComboBox;
     limiting_->setObjectName("stoichLimiting");
     limiting_->setPlaceholderText(tr("Choose a limiting reagent"));
-    scale_ = new QDoubleSpinBox;
+    scale_ = new NumberBox;
     scale_->setObjectName("stoichScale");
     scale_->setDecimals(6);
     scale_->setRange(0, 1e9);
@@ -37,6 +40,9 @@ StoichiometryPanel::StoichiometryPanel(QWidget* parent) : QWidget(parent) {
     table_->setHorizontalHeaderLabels({tr("Component"), tr("Formula"), tr("MW (g/mol)"), tr("Equiv."),
                                       tr("mmol"), tr("Mass (mg)"), tr("Density (g/mL)"), tr("Volume (µL)")});
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table_->setShowGrid(false);
+    table_->verticalHeader()->hide();
+    table_->verticalHeader()->setDefaultSectionSize(38);
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setStretchLastSection(true);
     layout->addWidget(table_);
@@ -45,11 +51,12 @@ StoichiometryPanel::StoichiometryPanel(QWidget* parent) : QWidget(parent) {
     layout->addWidget(message_);
     auto* note = new QLabel(tr("Quantities are kept for this session. Copy as Text to keep a table in your lab notebook."));
     note->setWordWrap(true);
+    note->setObjectName("secondary");
     layout->addWidget(note);
     copy_ = new QPushButton(tr("Copy as Text"));
     copy_->setObjectName("stoichCopy");
     copy_->setEnabled(false);
-    layout->addWidget(copy_);
+    layout->addWidget(copy_, 0, Qt::AlignRight);
     connect(copy_, &QPushButton::clicked, this, &StoichiometryPanel::copyText);
     connect(reaction_, &QComboBox::currentIndexChanged, this, [this](int i) {
         if (!page_ || i < 0) return;
@@ -138,18 +145,22 @@ void StoichiometryPanel::rebuild() {
             table_->insertRow(row);
             components_.push_back({key, valid ? properties->mw : 0});
             const QString name = tr("%1 %2").arg(role).arg(i + 1);
-            for (int col = 0; col < table_->columnCount(); ++col) table_->setItem(row, col, new QTableWidgetItem);
+            for (int col = 0; col < table_->columnCount(); ++col) {
+                auto* item = new QTableWidgetItem;
+                if (col >= 2) item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+                table_->setItem(row, col, item);
+            }
             table_->item(row, 0)->setText(name);
             table_->item(row, 1)->setText(valid ? QString::fromStdString(properties->formula) : tr("Unknown structure"));
             table_->item(row, 2)->setText(valid ? QString::number(properties->mw, 'g', 8) : "—");
             if (valid) limiting_->addItem(name + " · " + QString::fromStdString(properties->formula), row);
             Inputs& input = state.inputs[key];
-            auto* eq = new QDoubleSpinBox;
+            auto* eq = new NumberBox;
             eq->setDecimals(6);
             eq->setRange(0, 1e6);
             eq->setValue(valid ? input.equivalents : 0);
             eq->setAccessibleName(tr("Equivalents for %1").arg(name));
-            auto* density = new QDoubleSpinBox;
+            auto* density = new NumberBox;
             density->setDecimals(6);
             density->setRange(0, 100);
             density->setSpecialValueText("—");
