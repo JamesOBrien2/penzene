@@ -3,6 +3,7 @@
 #include "Edit.h"
 #include "Geometry.h"
 #include "MainWindow.h"
+#include "NumberBox.h"
 #include "Online.h"
 #include "WhatsNew.h"
 #include "Templates.h"
@@ -4736,4 +4737,29 @@ TEST_CASE("metal ligand labels and dative hotkeys work on the canvas (#616)") {
     f.undo.undo();
     CHECK(f.doc().bonds[0].stereo == BondStereo::None);
     CHECK(chem::atomInfo(f.doc())[1].hydrogens == 3);
+}
+
+TEST_CASE("measurement fields keep precision and localized keyboard entry without trailing zeroes") {
+    App app;
+    for (const QLocale& locale : {QLocale::c(), QLocale(QLocale::German), QLocale(QLocale::Arabic)}) {
+        NumberBox box;
+        box.setLocale(locale);
+        box.setDecimals(6);
+        box.setRange(0, 1000);
+        box.setValue(20);
+        CHECK(box.cleanText() == locale.toString(20));
+        box.setValue(0.595276);
+        CHECK(box.value() == Catch::Approx(0.595276));
+        CHECK(box.cleanText() == locale.toString(0.595276, 'f', 6));
+        box.show();
+        box.setFocus();
+        box.selectAll();
+        if (locale.language() == QLocale::Arabic)
+            box.findChild<QLineEdit*>()->setText(locale.toString(1.125, 'f', 3));
+        else QTest::keyClicks(&box, locale.language() == QLocale::German ? "1,125" : "1.125");
+        QTest::keyClick(&box, Qt::Key_Return);
+        CHECK(box.value() == Catch::Approx(1.125));
+        box.stepUp();
+        CHECK(box.value() == Catch::Approx(2.125));
+    }
 }
