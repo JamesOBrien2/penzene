@@ -21,6 +21,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - The NMR panel imports processed ¹H and ¹³C JCAMP-DX spectra as a normalized experimental trace beneath the prediction (#553).
 - View → Theme imports and exports versioned JSON theme files; imported themes remain available after restarting (#475).
 - Edit → Find Substructure (Ctrl/Cmd+F) selects every SMILES or SMARTS match on the current page, including groups inside abbreviations (#485).
+- The Templates library adds 24 heterocycles, macrocycles, ligands and reagents, including cyclen, bipyridine, dppe, DMAP and CDI (#474).
 
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 
