@@ -90,7 +90,7 @@ endif()
 if(PENZENE_APP)
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network PrintSupport Test)
 # The app's widgets; tests link this too, so they exercise the same code.
-add_library(penzene_ui STATIC src/Canvas.cpp src/MainWindow.cpp src/StyleEditor.cpp src/Online.cpp src/Templates.cpp src/WhatsNew.cpp)
+add_library(penzene_ui STATIC src/Canvas.cpp src/MainWindow.cpp src/StyleEditor.cpp src/Online.cpp src/Templates.cpp src/WhatsNew.cpp src/Stoichiometry.cpp)
 target_link_libraries(penzene_ui PUBLIC penzene_core Qt6::Widgets Qt6::Network Qt6::PrintSupport)
 if(WIN32)  # drawings embedded in Word and PowerPoint, edited here (#229)
     target_sources(penzene_ui PRIVATE src/OleServer.cpp)

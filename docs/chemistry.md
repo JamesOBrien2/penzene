@@ -106,6 +106,20 @@ SMILES, InChI, InChIKey and reaction SMILES (Edit → Copy As).
 text are drawn only. Free-text labels are generic atoms (`*` in SMILES).
 :::
 
+## Reaction quantities
+
+**View → Stoichiometry** lists the reactants and reagents around a reaction arrow, using the same
+grouping as Copy as Reaction SMILES. For a multi-step scheme, choose a reaction in the panel.
+Choose the limiting reagent and enter its scale in **mmol**. It has one equivalent; edit the other
+components' equivalents to calculate their mmol and mass in **mg**. Enter a liquid's density in
+**g/mL** to calculate its volume in **µL**. No density means no calculated volume.
+
+**Copy as Text** copies a tab-separated table with its limiting reagent, scale and units. Values
+stay separate for each page and reaction while the file is open; they are session calculations,
+not saved in `.penz`. Copy the table to keep it. Moving the drawing or editing a product preserves
+the starting materials' values. Unknown or incomplete formulas keep a row but have no calculated
+quantities; check the structure before using the table.
+
 ## NMR prediction
 
 Shifts are looked up by HOSE code in a table built from [nmrshiftdb2](https://nmrshiftdb.nmr.uni-koeln.de),
