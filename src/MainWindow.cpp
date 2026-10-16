@@ -319,10 +319,36 @@ static QString uiStyle(const Theme& t) {
         QTabBar#pageTabs::tab:selected { color: %6; background: %2; border-top-color: %6; font-weight: 600; }
         QToolButton#addPage { color: %5; background: transparent; border: none; border-radius: 6px; padding: 2px 9px; font-size: 15px; }
         QToolButton#addPage:hover { background: %7; color: %6; }
-        QTreeWidget, QTextEdit, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+        QTreeWidget, QListWidget, QTableWidget, QTextEdit, QLineEdit, QComboBox, QAbstractSpinBox {
             background: %2; color: %4; border: 1px solid %3; border-radius: 7px; padding: 3px;
             selection-background-color: %7; selection-color: %6;
         }
+        QLineEdit, QComboBox, QAbstractSpinBox { min-height: 22px; padding: 4px 8px; }
+        QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus { border-color: %6; }
+        QLineEdit:disabled, QComboBox:disabled, QAbstractSpinBox:disabled, QPushButton:disabled { color: %5; background: %1; }
+        QAbstractSpinBox { padding-right: 24px; }
+        QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { subcontrol-origin: border; width: 22px; border: none; background: transparent; }
+        QAbstractSpinBox::up-button { subcontrol-position: top right; }
+        QAbstractSpinBox::down-button { subcontrol-position: bottom right; }
+        QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover { background: %7; }
+        QComboBox { padding-right: 24px; }
+        QComboBox::drop-down { subcontrol-origin: border; width: 22px; border: none; background: transparent; }
+        QComboBox QLineEdit { border: none; background: transparent; padding: 0; }
+        QAbstractSpinBox::up-arrow { image: url(:/ui/chevron-up-%8.svg); width: 8px; height: 5px; }
+        QAbstractSpinBox::down-arrow, QComboBox::down-arrow { image: url(:/ui/chevron-down-%8.svg); width: 8px; height: 5px; }
+
+        QListWidget#styleList { background: transparent; border: none; padding: 0; outline: none; }
+        QListWidget#styleList::item { padding: 9px 10px; margin: 1px 0; border-radius: 7px; }
+        QListWidget#styleList::item:hover { background: %2; }
+        QListWidget#styleList::item:selected { background: %7; color: %6; }
+        QHeaderView::section { background: %1; color: %5; padding: 8px; border: none; border-bottom: 1px solid %3; }
+        QTableWidget { gridline-color: %3; }
+        QLabel#secondary { color: %5; }
+        QLabel#sectionTitle { font-weight: 600; }
+        QTabWidget::pane { border: none; }
+        QTabBar::tab { color: %5; background: transparent; padding: 8px 12px; border-bottom: 2px solid transparent; }
+        QTabBar::tab:selected { color: %6; border-bottom-color: %6; }
+
         QPushButton { background: %2; color: %4; border: 1px solid %3; border-radius: 8px; padding: 6px 12px; }
         QPushButton:hover { border-color: %6; }
         QPushButton:default { background: %6; color: %1; border-color: %6; }
@@ -333,7 +359,7 @@ static QString uiStyle(const Theme& t) {
         QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
         QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
     )").arg(t.window.name(), t.surface.name(), c.border.name(), t.text.name(), c.secondary.name(), t.accent.name(),
-              c.accentBg.name());
+              c.accentBg.name(), t.dark ? "dark" : "light");
 }
 
 // A tool flyout: the tools flow into as many columns as fit its width. Drag it by any part that
