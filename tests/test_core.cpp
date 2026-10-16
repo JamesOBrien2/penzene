@@ -122,7 +122,7 @@ TEST_CASE("custom styles are snapshots shared by files, pages and exports (#625)
 }
 
 TEST_CASE("circled charges cover signs, magnitudes, bare carbons and portable styles (#623)") {
-    for (const std::string smiles : {"[Na+]", "[Cl-]", "[Pt+2]", "C[CH2+]", "[N+](C)(C)(C)C", "[O-][N+](=O)c1ccccc1"}) {
+    for (const std::string smiles : {"[Na+]", "[Cl-]", "[Pt+2]", "[O-2]", "C[CH2+]", "[N+](C)(C)(C)C", "[O-][N+](=O)c1ccccc1"}) {
         INFO(smiles);
         Document d = *chem::fromSmiles(smiles);
         REQUIRE(chem::properties(d));
@@ -133,10 +133,11 @@ TEST_CASE("circled charges cover signs, magnitudes, bare carbons and portable st
         d.circledCharges = true;
         CHECK(chem::properties(d)->formula == formula);
         CHECK(chem::toSmiles(d) == chemistry);
-        CHECK(renderImage(d) != image);
+        const auto singles = std::count_if(d.atoms.begin(), d.atoms.end(), [](const Atom& a) { return std::abs(a.charge) == 1; });
+        CHECK((renderImage(d) != image) == (singles > 0));
         CHECK(outputBounds(d).width() >= plain.width());
-        if (d.atoms.size() == 1) CHECK(outputBounds(d).width() > plain.width());
-        CHECK(renderSvg(d).contains("<circle"));
+        if (d.atoms.size() == 1 && singles) CHECK(outputBounds(d).width() > plain.width());
+        CHECK(renderSvg(d).count("<circle") == singles);
         CHECK(Document::fromJson(d.toJson()) == d);
         CHECK(Document::fromEmbedded(renderPng(d)) == d);
         const auto pages = sheetsFromJson(sheetsToJson({{"A", d}, {"B", d}}));
@@ -158,7 +159,7 @@ TEST_CASE("circled charges cover signs, magnitudes, bare carbons and portable st
         settings.fontSize = 12;
         d.style = settings.name;
         d.styleSettings = settings;
-        CHECK(renderSvg(d).contains("<circle"));
+        CHECK(renderSvg(d).count("<circle") == singles);
         CHECK(Document::fromEmbedded(renderSvg(d)) == d);
     }
     Document group;
@@ -167,6 +168,13 @@ TEST_CASE("circled charges cover signs, magnitudes, bare carbons and portable st
     group.atoms[atom].charge = 1;
     group.circledCharges = true;
     CHECK(renderSvg(group).contains("<circle"));
+    for (int charge : {-12, -2, 2, 12}) {
+        group.atoms[atom].charge = charge;
+        CHECK_FALSE(renderSvg(group).contains("<circle"));
+        Document plain = group;
+        plain.circledCharges = false;
+        CHECK(renderImage(group) == renderImage(plain));
+    }
     CHECK_FALSE(Document::fromJson(R"({"format":"penzene","version":1,"atoms":[],"bonds":[]})")->circledCharges);
 }
 

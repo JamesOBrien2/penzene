@@ -11,7 +11,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Style editing now separates bonds, labels, captions and layout, keeps fractional print sizes and shows presets at a matching physical scale.
 - Journal drawing styles now include Nature, Angewandte and SYNLETT/SYNTHESIS, with publisher measurements and sources (#473).
 
-- Format → Circled Charges draws circles around charge signs, including bare carbons; the setting is saved with the drawing (#623).
+- Format → Circled Charges draws circles around single +/− charge signs, including bare carbons; multiple charges use ordinary superscripts. The setting is saved with the drawing (#623).
 
 - Drawing styles can be duplicated, edited, saved and shared as JSON; custom styles travel with the drawing and work from the command line and Python (#625).
 
