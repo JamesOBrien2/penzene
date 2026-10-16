@@ -1553,6 +1553,49 @@ TEST_CASE("ChemDraw superscripts come in with a ^ only where it's needed (#371)"
     CHECK(read(R"(<s>10</s><s face="64">5</s><s> M</s>)") == "10^5 M");  // plain, it wouldn't be raised
 }
 
+TEST_CASE("brackets enclose their atoms' δ marks (#657)") {
+    // A three-centre TS in square brackets: R···N, R···C partial, δ+ on R, δ− on C.
+    auto doc = Document::fromJson(R"({"format":"penzene","version":1,"atoms":[
+        {"x":0,"y":0,"z":0,"label":"R","partial":1},{"x":16,"y":-7.6,"z":7},{"x":16,"y":7.6,"z":6,"label":"C","partial":-1}],
+        "bonds":[{"a":0,"b":1,"stereo":"partial"},{"a":1,"b":2,"order":3},{"a":0,"b":2,"stereo":"partial"}],
+        "brackets":[{"atoms":[0,1,2]}]})");
+    REQUIRE(doc);
+    const double k = 10;
+    auto render = [&](const Document& d) {
+        QImage img(600, 600, QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter p(&img);
+        p.translate(300, 300);
+        p.scale(k, k);
+        p.translate(-8, 0);
+        paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+        return img;
+    };
+    // Ink only in `a`, not in `b`.
+    auto only = [](const QImage& a, const QImage& b) {
+        QRect r;
+        for (int y = 0; y < a.height(); ++y)
+            for (int x = 0; x < a.width(); ++x)
+                if (qGray(a.pixel(x, y)) < 128 && qGray(b.pixel(x, y)) >= 128) r |= QRect(x, y, 1, 1);
+        return r;
+    };
+    Document unbracketed = *doc, unmarked = *doc;
+    unbracketed.brackets.clear();
+    for (Atom& a : unmarked.atoms) a.partial = 0;
+    const QImage drawn = render(*doc);
+    const QRect brackets = only(drawn, render(unbracketed)), marks = only(render(unbracketed), render([&] {
+        Document d = unmarked;
+        d.brackets.clear();
+        return d;
+    }()));
+    REQUIRE(brackets.isValid());
+    REQUIRE(marks.isValid());
+    CHECK(brackets.left() < marks.left());
+    CHECK(brackets.right() > marks.right());
+    CHECK(brackets.top() < marks.top());
+    CHECK(brackets.bottom() > marks.bottom());
+}
+
 TEST_CASE("merging atoms keeps the dropped atom's brackets and ring overrides (#303)") {
     Document doc;
     for (int i = 0; i < 4; ++i) doc.addAtom({i * kBondLength, 0});
