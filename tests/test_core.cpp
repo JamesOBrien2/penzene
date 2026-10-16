@@ -1081,6 +1081,16 @@ TEST_CASE("interaction and partial bonds are drawn, not chemistry (#169)") {
     CHECK(chem::toCdxml(ts).contains("Order=\"0.5\""));
     CHECK(chem::toCdxml(dimer).contains("Order=\"hydrogen\""));
 }
+TEST_CASE("atoms on partial bonds keep the reactants' hydrogens (#655)") {
+    // Isocyanide to nitrile through a three-centre TS: Ca...N breaking, Ca...C forming, N#C kept.
+    Document ts = *chem::fromSmiles("CC(C)(C)[N+]#[C-]");  // tBu-NC, C5H9N
+    const int ca = 1, n = 4, c = 5;
+    ts.atoms[n].charge = ts.atoms[c].charge = 0;
+    ts.bonds[ts.bondBetween(ca, n)].stereo = BondStereo::Partial;
+    ts.bonds.push_back({ca, c});
+    ts.bonds.back().stereo = BondStereo::Partial;
+    CHECK(chem::properties(ts)->formula == "C5H9N");  // no H invented on Ca or the cyanide C
+}
 TEST_CASE("Clean keeps partial doubles partial (#169)") {
     Document ts = *chem::fromSmiles("C=CC=C");
     for (int bi = 0; bi < int(ts.bonds.size()); ++bi)
