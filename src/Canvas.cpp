@@ -1507,12 +1507,12 @@ void Canvas::arrangeScheme() {
     commit(next, tr("Arrange scheme"));
 }
 
-void Canvas::bracketSelection(bool square, const QString& label) {
+void Canvas::bracketSelection(bool square, const QString& label, const QString& superscript) {
     if (selectedAtoms_.isEmpty()) return;
     std::vector<int> atoms(selectedAtoms_.begin(), selectedAtoms_.end());
     std::sort(atoms.begin(), atoms.end());
     Document next = doc_;
-    next.brackets.push_back({atoms, square, label});
+    next.brackets.push_back({atoms, square, label, superscript});
     commit(next, tr("Brackets"));
 }
 

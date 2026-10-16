@@ -2539,10 +2539,20 @@ void MainWindow::buildMenus() {
     for (bool square : {true, false})
         brackets->addAction(square ? tr("&Square Brackets Around Selection…") : tr("&Round Brackets Around Selection…"), this,
                             [this, square] {
-                                bool ok = false;
-                                const QString label = QInputDialog::getText(this, tr("Brackets"), tr("Subscript (e.g. n; may be empty):"),
-                                                                            QLineEdit::Normal, "n", &ok);
-                                if (ok) canvas_->bracketSelection(square, label.trimmed());
+                                QDialog dialog(this);
+                                dialog.setWindowTitle(tr("Brackets"));
+                                auto* form = new QFormLayout(&dialog);
+                                auto* sub = new QLineEdit("n");
+                                auto* sup = new QLineEdit;
+                                sup->setPlaceholderText(tr("e.g. ‡, •+, 3−"));
+                                form->addRow(tr("Subscript (may be empty):"), sub);
+                                form->addRow(tr("Superscript (may be empty):"), sup);
+                                auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+                                form->addRow(buttons);
+                                connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+                                connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+                                if (dialog.exec() == QDialog::Accepted)
+                                    canvas_->bracketSelection(square, sub->text().trimmed(), sup->text().trimmed());
                             });
     brackets->addAction(tr("Remove &Brackets"), this, [this] { canvas_->removeBrackets(); });
     structure->addAction(tr("&Variable Attachment"), canvas_, &Canvas::variableAttachment);
