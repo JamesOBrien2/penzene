@@ -1948,6 +1948,15 @@ TEST_CASE("a charged abbreviation keeps the group: N3- is azide, not nitride (#3
     CHECK(fe.atoms[0].charge == 3);
 }
 
+TEST_CASE("an atom labelled with its own element keeps its charge and isotope (#654)") {
+    auto d = Document::fromJson(R"({"format":"penzene","version":1,"atoms":[
+        {"x":0,"y":0,"z":6,"label":"C","charge":-1,"isotope":13},{"x":14.4,"y":0,"z":7}],
+        "bonds":[{"a":0,"b":1,"order":3}]})");
+    REQUIRE(d);
+    CHECK(chem::toSmiles(*d) == "[13C-]#N");
+    CHECK(chem::properties(*d)->formula == "[13C]N-");
+}
+
 TEST_CASE("a lone abbreviation comes back from ChemDraw as a labelled atom (#384)") {
     for (const char* label : {"Boc", "N3-"}) {
         Document d;
