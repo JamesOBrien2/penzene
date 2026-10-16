@@ -185,6 +185,48 @@ TEST_CASE("circled charges preserve visible bonds around a crowded metal centre 
     }
 }
 
+TEST_CASE("journal presets match publisher measurements and ChemDraw physical sizes (#473)") {
+    for (const auto& [name, bond, font, line, bold, margin, hash] : {
+        std::tuple{"Nature", 10.8, 6.0, 0.5952755906, 1.5590551181, 1.1905511811, 1.7007874016},
+        {"Angewandte", 17.0, 12.0, 0.75, 2.6015625, 2.0, 2.6015625},
+        {"Angewandte (8 pt final)", 17.0 * 2 / 3, 8.0, 0.5, 1.734375, 4.0 / 3, 1.734375},
+        {"SYNLETT/SYNTHESIS", 10.1196850394, 6.0, 0.5669291339, 1.3889763780, 0.9070866142, 1.7574803150}}) {
+        INFO(name);
+        const auto s = styleSettings(drawingStyle(name));
+        CHECK(s.name == name);
+        CHECK(s.bondLength == Catch::Approx(bond).margin(1e-6));
+        CHECK(s.fontSize == Catch::Approx(font));
+        CHECK(s.lineWidth == Catch::Approx(line).margin(1e-6));
+        CHECK(s.boldWidth == Catch::Approx(bold).margin(1e-6));
+        CHECK(s.labelMargin == Catch::Approx(margin).margin(1e-6));
+        CHECK(s.hashSpacing == Catch::Approx(hash).margin(1e-6));
+        CHECK(s.bondSpacing == Catch::Approx(0.18));
+        CHECK(s.wedgeWidth == Catch::Approx(1.5 * bold));
+        CHECK(s.labelRadius == 0);
+        CHECK(s.chainAngle == 120);
+        CHECK_FALSE(saveDrawingStyle(s));
+        Document d = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
+        d.circledCharges = true;
+        REQUIRE(applyDrawingStyle(d, name));
+        CHECK(d.circledCharges == (QString(name) != "Nature"));  // Nature applies its explicit publisher convention
+        CHECK_FALSE(d.styleSettings);
+        CHECK(exportScale(d) == Catch::Approx(bond / kBondLength));
+        const auto xml = chem::toCdxml(d);
+        QXmlStreamReader reader(xml);
+        REQUIRE(reader.readNextStartElement());
+        CHECK(reader.attributes().value("BondLength").toDouble() == Catch::Approx(bond));
+        CHECK(reader.attributes().value("LabelSize").toDouble() == Catch::Approx(font));
+        CHECK(reader.attributes().value("LineWidth").toDouble() == Catch::Approx(line));
+        const auto back = chem::fromChemDraw(xml);
+        REQUIRE(back);
+        CHECK(back->style == name);
+        CHECK(chem::toSmiles(*back) == chem::toSmiles(d));
+        CHECK(Document::fromJson(d.toJson()) == d);
+        CHECK_FALSE(renderPng(d).isEmpty());
+        CHECK_FALSE(renderPdf(d).isEmpty());
+    }
+}
+
 TEST_CASE("deleting a bond removes only endpoints left isolated") {
     Document chain;
     chain.atoms = {{{0, 0}}, {{kBondLength, 0}}, {{2 * kBondLength, 0}}};
@@ -546,7 +588,9 @@ TEST_CASE("ChemDraw keeps drawing styles at their physical size (#624)") {
                     CHECK(len(found->from - moved - arrow.from) < 0.04);
                     CHECK(len(found->to - moved - arrow.to) < 0.04);
                     CHECK(found->bend == Catch::Approx(arrow.bend).margin(0.04));
-                    if (!isShape(arrow.kind)) CHECK(found->head == Catch::Approx(arrow.head).margin(0.01));
+                    // CDX rounds stroke widths to hundredths of a point; compare physical head lengths.
+                    if (!isShape(arrow.kind)) CHECK(found->head * kHeadLength * exportScale(d) ==
+                        Catch::Approx(arrow.head * kHeadLength * exportScale(d)).margin(0.05));
                 }
             }
         }
@@ -3210,4 +3254,24 @@ TEST_CASE("caption typography does not change abbreviated atom labels") {
     doc.styleSettings->captionSize = 25;
     doc.styleSettings->captionWeight = 700;
     CHECK(renderImage(doc) == before);
+}
+
+TEST_CASE("Nature applies its complete supported label conventions and keeps them portable") {
+    Document doc = *chem::fromSmiles("c1ccccc1[NH3+]");
+    doc.circledCharges = doc.aromaticCircles = true;
+    doc.aromaticCircleOverrides = {{0, 1, 2, 3, 4, 5}};
+    doc.carbonLabels = Document::CarbonLabels::All;
+    REQUIRE(applyDrawingStyle(doc, "Nature"));
+    CHECK_FALSE(doc.circledCharges);
+    CHECK_FALSE(doc.aromaticCircles);
+    CHECK(doc.aromaticCircleOverrides.empty());
+    CHECK(doc.carbonLabels == Document::CarbonLabels::None);
+    const auto settings = styleSettings(documentStyle(doc));
+    CHECK(settings.chargesOnAtom);
+    CHECK(settings.rGroupSuperscript);
+    CHECK_FALSE(settings.hideImplicitHydrogens);
+    CHECK(settings.weight == 400);
+    CHECK(settings.captionSize == 6);
+    CHECK(styleFromJson(styleToJson(settings)) == settings);
+    CHECK(Document::fromJson(doc.toJson()) == doc);
 }

@@ -2721,6 +2721,40 @@ TEST_CASE("Circled Charges is an undoable document setting (#623)") {
     CHECK(canvas->selectedSubset().circledCharges);
 }
 
+TEST_CASE("journal presets appear in the menu and change physical canvas size (#473)") {
+    App app;
+    QApplication::processEvents();
+    MainWindow w;
+    w.resize(1100, 750);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    Document d = *chem::fromSmiles("Oc1ccccc1");
+    d.append(*chem::fromSmiles("COc1ccccc1"), {95, 0});
+    d.arrows.push_back({{40, 0}, {60, 0}});
+    d.texts.push_back({{37, -6}, "MeI, base", 0.7});
+    d.append(*chem::fromSmiles("[NH3]->[Pt+2](<-[NH3])(Cl)Cl"), {40, 55});
+    canvas->setDocumentSilently(d);
+    canvas->fitToDocument();
+    canvas->zoomBy(0.8);  // Leave room for the larger Angewandte preset.
+    const double zoom = canvas->transform().m11();
+    const QString preview = qEnvironmentVariable("PENZENE_JOURNALS_PREVIEW");
+    for (const QString& name : {QString("Nature"), QString("Angewandte"), QString("SYNLETT/SYNTHESIS")}) {
+        QAction* action = nullptr;
+        for (auto* a : w.findChildren<QAction*>()) if (a->text() == name) action = a;
+        REQUIRE(action);
+        action->trigger();
+        CHECK(canvas->document().style == name);
+        CHECK(canvas->transform().m11() / zoom == Catch::Approx(drawingStyle(name).bondLength / kBondLength));
+        CHECK(action->isChecked());
+        QApplication::processEvents();
+        if (!preview.isEmpty()) {
+            const QString file = name == "SYNLETT/SYNTHESIS" ? "synlett-synthesis" : name.toLower();
+            REQUIRE(w.grab().save(preview + "/" + file + ".png"));
+            REQUIRE(writeWhole(preview + "/" + file + ".penz", canvas->document().toJson()));
+        }
+    }
+}
+
 TEST_CASE("Text has its own rail button and keeps its hotkey (#622)") {
     App app;
     // Cocoa treats Catch's test filter as a file to open; consume launch events before the window listens.
