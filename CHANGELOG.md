@@ -13,6 +13,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Metal complexes use coordination geometry with clear ligand labels; Clean keeps metal interaction bonds connected and preserves the donor arrangement (#618).
 
 - Metal ligands keep their hydrogens and valence, including typed ammine and aqua labels; dative arrows and ligand abbreviations round-trip through chemistry formats (#616).
+- Python draws mechanisms without editing JSON: `set_charge`, `set_radicals`, `set_partial`, `set_bond_style` (partial, interaction, wedge…), `show_symbol`, `add_bracket` (with a ‡ or charge superscript) and `add_text`; `add_atom` and `set_label` take `generic=True` for R, X and other generic labels; atoms report `label`, `radicals` and `partial`, bonds their `style` (#659).
 
 - Bonds keep clear of wide element labels such as Pt and Fe, on screen and in exports (#617).
 - Ferrocene and other η-bound rings report formula and mass without their drawing centroids; Clean keeps each centroid at its ring centre (#619).
