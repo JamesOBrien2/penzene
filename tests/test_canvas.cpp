@@ -59,6 +59,7 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <QMenu>
 #include <QTabBar>
+#include <QTabWidget>
 #include <QToolButton>
 #include <QTextBrowser>
 #include <QWidgetAction>
@@ -3137,6 +3138,15 @@ TEST_CASE("custom style editor saves a portable style and canvas undo restores i
         CHECK(dialog->findChild<QPushButton*>("deleteStyle")->isEnabled());
         const QString preview = qEnvironmentVariable("PENZENE_STYLES_PREVIEW");
         if (!preview.isEmpty()) {
+            auto* sections = dialog->findChild<QTabWidget*>("styleSections");
+            REQUIRE(sections);
+            for (int i = 0; i < sections->count(); ++i) {
+                sections->setCurrentIndex(i);
+                sections->setFocus();
+                QApplication::processEvents();
+                REQUIRE(dialog->grab().save(preview + "/style-" + sections->tabText(i).toLower() + ".png"));
+            }
+            sections->setCurrentIndex(0);
             REQUIRE(dialog->grab().save(preview + "/style-editor.png"));
             if (qEnvironmentVariableIsSet("PENZENE_FEEDBACK_PREVIEW_LIVE")) {
                 QEventLoop loop;
@@ -3461,7 +3471,7 @@ TEST_CASE("White and teal theme; tools on a rail whose groups open beside it (#2
     // Properties and Templates are in the View menu, not the palette.
     CHECK(w.findChild<QDockWidget*>("properties"));
     CHECK(w.findChild<QDockWidget*>("templates"));
-    CHECK(w.findChildren<QFrame*>("panelCard").size() == 4);  // Properties, Templates, Mass Spec, NMR
+    CHECK(w.findChildren<QFrame*>("panelCard").size() == 5);  // Properties, Templates, Mass Spec, NMR
     for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
         for (auto* b : f->findChildren<QToolButton*>()) CHECK(b->toolButtonStyle() != Qt::ToolButtonTextOnly);
 }
