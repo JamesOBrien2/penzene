@@ -3111,3 +3111,15 @@ TEST_CASE("absolute double spacing and hash spacing reach the actual rendered st
     for (size_t i = 2; i < centres.size(); ++i)
         CHECK(centres[i] - centres[i - 1] == Catch::Approx(style.hashSpacing).margin(0.1));
 }
+
+TEST_CASE("caption typography does not change abbreviated atom labels") {
+    Document doc = *chem::fromSmiles("CO");
+    REQUIRE(edit::applyLabel(doc, 1, "OMe", true));
+    auto settings = styleSettings(drawingStyle("RSC"));
+    doc.styleSettings = settings;
+    const auto before = renderImage(doc);
+    doc.styleSettings->captionFont = "Times New Roman";
+    doc.styleSettings->captionSize = 25;
+    doc.styleSettings->captionWeight = 700;
+    CHECK(renderImage(doc) == before);
+}
