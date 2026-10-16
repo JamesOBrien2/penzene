@@ -12,14 +12,46 @@
 
 StyleSettings styleSettings(const DrawingStyle& s) {
     const double k = s.bondLength / kBondLength;
-    return {s.name, s.bondLength, s.lineWidth * k, s.boldWidth * k, s.wedgeWidth * k, s.hashSpacing * k,
-            s.bondSpacing, s.labelRadius * k, s.labelMargin * k, s.font, int(s.weight), s.fontSize * k};
+    StyleSettings result{s.name, s.bondLength, s.lineWidth * k, s.boldWidth * k, s.wedgeWidth * k, s.hashSpacing * k,
+                         s.bondSpacing, s.labelRadius * k, s.labelMargin * k, s.font, int(s.weight), s.fontSize * k};
+    result.chainAngle = s.chainAngle;
+    result.snapAngle = s.snapAngle;
+    result.bondSpacingAbsolute = s.bondSpacingAbsolute * k;
+    result.italic = s.italic;
+    result.captionFont = s.captionFont;
+    result.captionWeight = s.captionWeight;
+    result.captionSize = s.captionSize * k;
+    result.captionItalic = s.captionItalic;
+    result.scriptScale = s.scriptScale;
+    result.subscriptOffset = s.subscriptOffset;
+    result.superscriptOffset = s.superscriptOffset;
+    result.chargesOnAtom = s.chargesOnAtom;
+    result.rGroupSuperscript = s.rGroupSuperscript;
+    result.hideImplicitHydrogens = s.hideImplicitHydrogens;
+    result.carbonLabels = s.carbonLabels;
+    return result;
 }
 
 DrawingStyle modelStyle(const StyleSettings& s) {
     const double k = kBondLength / s.bondLength;
-    return {s.name, s.bondLength, s.lineWidth * k, s.boldWidth * k, s.wedgeWidth * k, s.hashSpacing * k,
-            s.bondSpacing, s.labelRadius * k, s.font, QFont::Weight(s.weight), s.fontSize * k, s.labelMargin * k};
+    DrawingStyle result{s.name, s.bondLength, s.lineWidth * k, s.boldWidth * k, s.wedgeWidth * k, s.hashSpacing * k,
+                        s.bondSpacing, s.labelRadius * k, s.font, QFont::Weight(s.weight), s.fontSize * k, s.labelMargin * k};
+    result.chainAngle = s.chainAngle;
+    result.snapAngle = s.snapAngle;
+    result.bondSpacingAbsolute = s.bondSpacingAbsolute * k;
+    result.italic = s.italic;
+    result.captionFont = s.captionFont;
+    result.captionWeight = s.captionWeight;
+    result.captionSize = s.captionSize * k;
+    result.captionItalic = s.captionItalic;
+    result.scriptScale = s.scriptScale;
+    result.subscriptOffset = s.subscriptOffset;
+    result.superscriptOffset = s.superscriptOffset;
+    result.chargesOnAtom = s.chargesOnAtom;
+    result.rGroupSuperscript = s.rGroupSuperscript;
+    result.hideImplicitHydrogens = s.hideImplicitHydrogens;
+    result.carbonLabels = s.carbonLabels;
+    return result;
 }
 
 QJsonObject styleToJson(const StyleSettings& s) {
@@ -27,7 +59,13 @@ QJsonObject styleToJson(const StyleSettings& s) {
             {"bondLength", s.bondLength}, {"lineWidth", s.lineWidth}, {"boldWidth", s.boldWidth},
             {"wedgeWidth", s.wedgeWidth}, {"hashSpacing", s.hashSpacing}, {"bondSpacing", s.bondSpacing},
             {"labelRadius", s.labelRadius}, {"labelMargin", s.labelMargin},
-            {"font", s.font}, {"weight", s.weight}, {"fontSize", s.fontSize}};
+            {"font", s.font}, {"weight", s.weight}, {"fontSize", s.fontSize},
+            {"chainAngle", s.chainAngle}, {"snapAngle", s.snapAngle}, {"bondSpacingAbsolute", s.bondSpacingAbsolute}, {"italic", s.italic},
+            {"captionFont", s.captionFont}, {"captionWeight", s.captionWeight}, {"captionSize", s.captionSize},
+            {"captionItalic", s.captionItalic}, {"scriptScale", s.scriptScale},
+            {"subscriptOffset", s.subscriptOffset}, {"superscriptOffset", s.superscriptOffset},
+            {"chargesOnAtom", s.chargesOnAtom}, {"rGroupSuperscript", s.rGroupSuperscript},
+            {"hideImplicitHydrogens", s.hideImplicitHydrogens}, {"carbonLabels", s.carbonLabels}};
 }
 
 std::optional<StyleSettings> styleFromJson(const QJsonObject& o) {
@@ -51,6 +89,37 @@ std::optional<StyleSettings> styleFromJson(const QJsonObject& o) {
     const double weight = o["weight"].toDouble();
     if (!o["weight"].isDouble() || weight < 1 || weight > 1000 || std::floor(weight) != weight) return std::nullopt;
     s.weight = int(weight);
+    for (auto [key, field, minimum, maximum] : {
+        std::tuple{"chainAngle", &s.chainAngle, 1.0, 179.0}, {"snapAngle", &s.snapAngle, 1.0, 90.0},
+        {"bondSpacingAbsolute", &s.bondSpacingAbsolute, 0.0, 1000.0},
+        {"captionSize", &s.captionSize, 0.0, 200.0}, {"scriptScale", &s.scriptScale, 0.05, 2.0},
+        {"subscriptOffset", &s.subscriptOffset, -2.0, 2.0}, {"superscriptOffset", &s.superscriptOffset, -2.0, 2.0}}) {
+        if (!o.contains(key)) continue;
+        const auto value = o[key];
+        const double number = value.toDouble(std::numeric_limits<double>::quiet_NaN());
+        if (!value.isDouble() || !std::isfinite(number) || number < minimum || number > maximum) return std::nullopt;
+        *field = number;
+    }
+    for (auto [key, field] : {std::pair{"italic", &s.italic}, {"captionItalic", &s.captionItalic},
+         {"chargesOnAtom", &s.chargesOnAtom}, {"rGroupSuperscript", &s.rGroupSuperscript},
+         {"hideImplicitHydrogens", &s.hideImplicitHydrogens}}) {
+        if (!o.contains(key)) continue;
+        if (!o[key].isBool()) return std::nullopt;
+        *field = o[key].toBool();
+    }
+    if (o.contains("captionWeight")) {
+        const auto value = o["captionWeight"];
+        const double number = value.toDouble();
+        if (!value.isDouble() || number < 1 || number > 1000 || std::floor(number) != number) return std::nullopt;
+        s.captionWeight = int(number);
+    }
+    for (auto [key, field] : {std::pair{"captionFont", &s.captionFont}, {"carbonLabels", &s.carbonLabels}}) {
+        if (!o.contains(key)) continue;
+        if (!o[key].isString()) return std::nullopt;
+        *field = o[key].toString();
+    }
+    if (s.captionFont.size() > 200 || s.captionFont != s.captionFont.trimmed() ||
+        (!s.carbonLabels.isEmpty() && s.carbonLabels != "none" && s.carbonLabels != "terminal" && s.carbonLabels != "all")) return std::nullopt;
     return s;
 }
 
@@ -118,6 +187,8 @@ bool applyDrawingStyle(Document& doc, const QString& name) {
         doc.style = s.name == "ACS 1996" ? QString() : s.name;
         doc.styleSettings.reset();
         doc.labelRatio = 0;
+        if (!s.carbonLabels.isEmpty()) doc.carbonLabels = s.carbonLabels == "all" ? Document::CarbonLabels::All :
+            s.carbonLabels == "terminal" ? Document::CarbonLabels::Terminal : Document::CarbonLabels::None;
         return true;
     }
     for (const auto& s : userDrawingStyles()) {
@@ -125,6 +196,8 @@ bool applyDrawingStyle(Document& doc, const QString& name) {
         doc.style = s.name;
         doc.styleSettings = s;
         doc.labelRatio = 0;
+        if (!s.carbonLabels.isEmpty()) doc.carbonLabels = s.carbonLabels == "all" ? Document::CarbonLabels::All :
+            s.carbonLabels == "terminal" ? Document::CarbonLabels::Terminal : Document::CarbonLabels::None;
         return true;
     }
     return false;

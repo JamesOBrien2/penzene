@@ -50,6 +50,15 @@ struct DrawingStyle {
     QFont::Weight weight;
     double fontSize;
     double labelMargin = 1;
+    double chainAngle = 120, snapAngle = 30, bondSpacingAbsolute = 0;
+    bool italic = false;
+    QString captionFont;
+    int captionWeight = 400;
+    double captionSize = 0;  // zero: inherit the atom-label size
+    bool captionItalic = false;
+    double scriptScale = 0.7, subscriptOffset = 0.35, superscriptOffset = 0.7;
+    bool chargesOnAtom = false, rGroupSuperscript = false, hideImplicitHydrogens = false;
+    QString carbonLabels;  // empty: keep the document choice; otherwise none, terminal or all
 };
 std::vector<DrawingStyle> drawingStyles();  // built-ins, then saved user styles; ACS 1996 first
 DrawingStyle drawingStyle(const QString& name);  // unknown or empty: ACS 1996
@@ -98,10 +107,11 @@ QByteArray renderEmf(const Document& doc, const ExportOptions& options = {});  /
 #endif
 QPainterPath arrowPath(const Arrow& a);
 QFont labelFont(const DrawingStyle& s, double scale = 1);
+DrawingStyle captionStyle(DrawingStyle style);
 constexpr double kHeadLength = 6;  // an arrowhead of size 1, in drawing units
 constexpr int kTabSpaces = 8;  // text tab stops, in spaces: the canvas and the text dialog agree
 QPainterPath textPath(const Text& t, const DrawingStyle& s = drawingStyles()[0]);
 // How one line of text is set, character by character: formula counts subscripted, charges
 // superscripted, and a ^ that marks a charge hidden (see Render.cpp).
 enum class Script : char { Base, Sub, Super, Hidden };
-std::vector<Script> scripts(const QString& line);
+std::vector<Script> scripts(const QString& line, bool rGroupSuperscript = false);

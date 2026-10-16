@@ -1,6 +1,7 @@
 #include "Chem.h"
 #include "Geometry.h"
 #include "Render.h"
+#include "Styles.h"
 
 #include <GraphMol/CIPLabeler/CIPLabeler.h>
 #include <GraphMol/Chirality.h>
@@ -1107,6 +1108,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     // Black is the ink (it follows the theme), so it comes back as no colour.
     std::vector<QColor> table;
     QHash<int, QString> fonts;
+    int labelFontId = -1, captionFontId = -1;
     QHash<int, QPointF> nodePos;
     std::vector<std::pair<int, QStringList>> variable;  // node id, its Attachments
     auto ink = [&](const QXmlStreamAttributes& at) {
@@ -1161,7 +1163,15 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         if (tag == "color")
             table.push_back(QColor(qRound(at.value("r").toDouble() * 255), qRound(at.value("g").toDouble() * 255),
                                    qRound(at.value("b").toDouble() * 255)));  // 8-bit, as the colours are chosen
-        if (tag == "font") fonts[at.value("id").toInt()] = at.value("name").toString();
+        if (tag == "font") {
+            const int id = at.value("id").toInt();
+            const QString family = at.value("name").toString().trimmed();
+            fonts[id] = family;
+            if (doc.styleSettings && !family.isEmpty() && family.size() <= 200) {
+                if (id == labelFontId) doc.styleSettings->font = family;
+                if (id == captionFontId) doc.styleSettings->captionFont = family;
+            }
+        }
         if (tag == "CDXML") {
             const double bond = at.hasAttribute("BondLength") ? std::max(1.0, at.value("BondLength").toDouble()) : 30;
             scale = kBondLength / bond;
@@ -1174,6 +1184,29 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             if (const double w = at.value("LineWidth").toDouble(); w > 0) lineWidth = w;
             // The file's labels relative to its bonds, which may be far from our styles' (#203).
             if (at.hasAttribute("LabelSize")) doc.labelRatio = at.value("LabelSize").toDouble() / bond;
+            if (at.hasAttribute("LineWidth") || at.hasAttribute("CaptionSize") || at.hasAttribute("MarginWidth")) {
+                auto settings = styleSettings(drawingStyle(doc.style));
+                settings.bondLength = bond;
+                for (auto [key, member] : {std::pair{"LineWidth", &StyleSettings::lineWidth}, {"BoldWidth", &StyleSettings::boldWidth},
+                     {"HashSpacing", &StyleSettings::hashSpacing}, {"MarginWidth", &StyleSettings::labelMargin},
+                     {"LabelSize", &StyleSettings::fontSize}, {"CaptionSize", &StyleSettings::captionSize},
+                     {"ChainAngle", &StyleSettings::chainAngle}})
+                    if (at.hasAttribute(key)) settings.*member = at.value(key).toDouble();
+                settings.wedgeWidth = 1.5 * settings.boldWidth;
+                if (at.hasAttribute("BondSpacing")) settings.bondSpacing = at.value("BondSpacing").toDouble() / 100;
+                if (at.value("BondSpacingType") == u"1") settings.bondSpacingAbsolute = at.value("BondSpacingAbs").toDouble();
+                if (at.hasAttribute("LabelFace")) {
+                    settings.weight = at.value("LabelFace").toInt() & 1 ? 700 : 400;
+                    settings.italic = at.value("LabelFace").toInt() & 2;
+                }
+                if (at.hasAttribute("CaptionFace")) {
+                    settings.captionWeight = at.value("CaptionFace").toInt() & 1 ? 700 : 400;
+                    settings.captionItalic = at.value("CaptionFace").toInt() & 2;
+                }
+                labelFontId = at.value("LabelFont").toInt();
+                captionFontId = at.value("CaptionFont").toInt();
+                if (styleFromJson(styleToJson(settings))) doc.styleSettings = settings;
+            }
         } else if (tag == "b") {
             const int from = at.value("B").toInt(), to = at.value("E").toInt();
             ++bondCount[from], ++bondCount[to];
@@ -1209,13 +1242,13 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         if (tag == "s" && text) {
             // shortcut: one font/face per text object; add rich runs if per-word formatting is needed.
             const QString family = fonts.value(at.value("font").toInt());
-            if (!family.isEmpty() && family != documentStyle(doc).font) text->font = family;
+            if (!family.isEmpty() && family != captionStyle(documentStyle(doc)).font) text->font = family;
             text->bold = at.value("face").toInt() & 1;
             text->italic = at.value("face").toInt() & 2;
         }
         if (tag == "s" && text && !text->color.isValid()) text->color = ink(at);
         if (tag == "s" && (text || labelText >= 0) && at.hasAttribute("size")) {
-            const double rel = at.value("size").toDouble() * scale / documentStyle(doc).fontSize;
+            const double rel = at.value("size").toDouble() * scale / (text ? captionStyle(documentStyle(doc)).fontSize : documentStyle(doc).fontSize);
             if (rel > 0) (text ? text->scale : labels[labelText].textScale) = rel;  // size="0" would save unopenable (#316)
         } else if (tag == "t" && !inside("n") && !inside("fragment")) {
             // p is the first baseline; the bounding box gives the left edge whatever the justification.
@@ -1488,6 +1521,7 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
         }
         doc.arrows = graphics.arrows;
         doc.style = graphics.style;
+        doc.styleSettings = graphics.styleSettings;
         doc.labelRatio = graphics.labelRatio;
         doc.texts.insert(doc.texts.end(), graphics.texts.begin(), graphics.texts.end());
     }
@@ -1862,16 +1896,29 @@ QByteArray toCdxml(const Document& doc) {
         if (a.color.isValid()) colorNo(a.color);
         if (a.fill.isValid()) colorNo(a.fill);
     }
+    const DrawingStyle caption = captionStyle(st);
+    auto fontFace = [](const DrawingStyle& style) { return (style.weight >= QFont::Bold ? 1 : 0) | (style.italic ? 2 : 0); };
     QStringList fonts{st.font};
+    if (!fonts.contains(caption.font)) fonts << caption.font;
     for (const Text& t : doc.texts) if (!t.font.isEmpty() && !fonts.contains(t.font)) fonts << t.font;
     w.writeStartElement("CDXML");
     w.writeAttribute("BondLength", QString::number(st.bondLength));
     w.writeAttribute("LabelSize", QString::number(st.fontSize * physicalScale));
     w.writeAttribute("LabelFont", "3");
+    w.writeAttribute("LabelFace", QString::number(fontFace(st)));
+    w.writeAttribute("CaptionFont", QString::number(fonts.indexOf(caption.font) + 3));
+    w.writeAttribute("CaptionSize", QString::number(caption.fontSize * physicalScale));
+    w.writeAttribute("CaptionFace", QString::number(fontFace(caption)));
+    w.writeAttribute("MarginWidth", QString::number(st.labelMargin * physicalScale));
+    w.writeAttribute("ChainAngle", QString::number(st.chainAngle));
     w.writeAttribute("LineWidth", QString::number(st.lineWidth * physicalScale));
     w.writeAttribute("BoldWidth", QString::number(st.boldWidth * physicalScale));
     w.writeAttribute("HashSpacing", QString::number(st.hashSpacing * physicalScale));
     w.writeAttribute("BondSpacing", QString::number(st.bondSpacing * 100));
+    if (st.bondSpacingAbsolute > 0) {
+        w.writeAttribute("BondSpacingAbs", QString::number(st.bondSpacingAbsolute * physicalScale));
+        w.writeAttribute("BondSpacingType", "1");
+    }
     w.writeAttribute("CreationProgram", "Penzene");
     if (palette.size() > 2) {
         w.writeStartElement("colortable");
@@ -2129,10 +2176,10 @@ QByteArray toCdxml(const Document& doc) {
         // One run per script, as ChemDraw styles them: subscript face 32, superscript 64.
         auto run = [&](Script s, const QString& chars) {
             w.writeStartElement("s");
-            w.writeAttribute("font", QString::number(t.font.isEmpty() ? 3 : fonts.indexOf(t.font) + 3));
-            w.writeAttribute("size", QString::number(st.fontSize * t.scale * physicalScale));
+            w.writeAttribute("font", QString::number(fonts.indexOf(t.font.isEmpty() ? caption.font : t.font) + 3));
+            w.writeAttribute("size", QString::number(caption.fontSize * t.scale * physicalScale));
             paint(t.color);
-            const int face = ((t.compound || t.bold) ? 1 : 0) | (t.italic ? 2 : 0) | (s == Script::Sub ? 32 : s == Script::Super ? 64 : 0);
+            const int face = ((t.compound || t.bold) ? 1 : 0) | (t.italic ? 2 : 0) | fontFace(caption) | (s == Script::Sub ? 32 : s == Script::Super ? 64 : 0);
             if (face) w.writeAttribute("face", QString::number(face));
             w.writeCharacters(chars);
             w.writeEndElement();
@@ -2142,7 +2189,7 @@ QByteArray toCdxml(const Document& doc) {
         Script current = Script::Base;
         for (int li = 0; li < lines.size(); ++li) {
             const QString& line = lines[li];
-            const auto sc = scripts(line);
+            const auto sc = scripts(line, st.rGroupSuperscript);
             for (int i = 0; i < line.size(); ++i) {
                 if (sc[i] == Script::Hidden) continue;
                 if (sc[i] != current && !chars.isEmpty()) run(current, chars), chars.clear();

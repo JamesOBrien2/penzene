@@ -4951,3 +4951,26 @@ TEST_CASE("measurement fields keep precision and localized keyboard entry withou
         CHECK(box.value() == Catch::Approx(2.125));
     }
 }
+
+TEST_CASE("embedded custom styles can be edited without the original style library") {
+    App app;
+    MainWindow window;
+    Document doc = *chem::fromSmiles("CCO");
+    auto style = styleSettings(drawingStyle("RSC"));
+    style.name = "Portable embedded style regression";
+    style.bondLength = 18.75;
+    style.captionSize = 6.5;
+    doc.styleSettings = style;
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        REQUIRE(dialog);
+        CHECK(dialog->findChild<QLineEdit*>("styleName")->text() == style.name);
+        CHECK(dialog->findChild<QDoubleSpinBox*>("bondLength")->value() == Catch::Approx(18.75));
+        CHECK(dialog->findChild<QDoubleSpinBox*>("captionSize")->value() == Catch::Approx(6.5));
+        CHECK(dialog->findChild<QPushButton*>("saveStyle")->isEnabled());
+        CHECK_FALSE(dialog->findChild<QPushButton*>("deleteStyle")->isEnabled());
+        dialog->reject();
+    });
+    editDrawingStyles(&window, doc);
+    CHECK(doc.styleSettings == style);
+}

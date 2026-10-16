@@ -2106,7 +2106,7 @@ void MainWindow::buildFormatToolbar() {
             font->setCurrentIndex(name.isEmpty() ? 0 : font->findText(name));
             if (!name.isEmpty() && font->currentIndex() < 0) font->setEditText(name);
         }
-        size->setValue(mixed([](const Text& t) { return t.scale; }) ? 0 : texts.front().scale * documentStyle(doc).fontSize * exportScale(doc));
+        size->setValue(mixed([](const Text& t) { return t.scale; }) ? 0 : texts.front().scale * captionStyle(documentStyle(doc)).fontSize * exportScale(doc));
         auto check = [&](QCheckBox* b, auto get) {
             const bool m = mixed(get);
             b->setText(b == bold ? tr("Bold") : tr("Italic"));

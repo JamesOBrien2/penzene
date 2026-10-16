@@ -122,7 +122,16 @@ lane labels like any text.
 
 **Format → Drawing Style → Edit Styles…** opens the style editor. Built-in styles
 are read-only: **Duplicate** one, give it a unique name, adjust its measurements
-in points, and **Save**. The live preview includes a charged metal complex.
+in points, and **Save**. Bonds, Labels, Captions and Layout group the controls.
+Set line, bold and wedge widths, hash spacing, relative or absolute multiple-bond
+spacing, label margins and minimum clearance independently. Captions can use a
+different font, size, weight and italic setting from atom labels. Chain angle,
+fixed angle increment, script size/position, hydrogen visibility, charge position,
+R-group numbering and carbon labels are also adjustable.
+
+The preview shows a metal complex, stereochemistry and a caption. **100%** and
+**200%** preserve the physical scale across styles; **Fit** fills the preview only.
+Changing the preview scale does not change exported measurements.
 **Import** and **Export** exchange versioned JSON definitions; **Delete** removes
 only a saved user style. Names are unique without regard to case.
 
@@ -132,7 +141,14 @@ and Python's `drawing_styles()` and `Document.style`. All three use the same
 Applying a custom style embeds a snapshot in the drawing, so changes to the
 library do not change existing documents. Reapply the style to take a newer
 definition. Font files are not embedded; install the named font on another
-computer for the same lettering. The editor reports unavailable fonts.
+computer for the same lettering. The editor reports unavailable fonts. An embedded
+style remains editable even when its library entry is absent or different; save
+it under a new name to add it to the local library.
+
+PDF, SVG and PNG use the same renderer as the preview. ChemDraw exchange carries
+its supported document dimensions and caption typography. ChemDraw has its own
+wedge, script and charge-placement rules, so use Penzene's vector exports when
+those custom details must look identical.
 
 The **Format toolbar** above the canvas sets the selection’s colour, shape or ring fill,
 and text font, size in points, bold and italic. Mixed selections show **Mixed**. Each

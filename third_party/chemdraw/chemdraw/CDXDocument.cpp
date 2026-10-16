@@ -305,6 +305,10 @@ void CDXDocument::StoreAttribute(CDXDataSource &src_arg, CDXTag attribTag_arg, s
 		m_bondSpacing = src_arg.GetUINT(size_arg);
 		m_flags |= has_bondSpacing;
 		break;
+	case kCDXProp_BondSpacingType:
+        m_bondSpacingType = CDXBondSpacingType(src_arg.GetUINT(size_arg));
+        m_flags2 |= has_bondSpacingType;
+        break;
 	case kCDXProp_BondSpacingAbs:
 		m_bondSpacingAbs = src_arg.GetUINT(size_arg);
 		m_flags |= has_bondSpacingAbs;
@@ -585,6 +589,10 @@ void CDXDocument::XMLStoreAttribute(CDXTag attribTag_arg, const std::string &att
 		m_bondSpacing = (int)(10. * atof(attribValue_arg.c_str()));
 		m_flags |= has_bondSpacing;
 		break;
+	case kCDXProp_BondSpacingType:
+        m_bondSpacingType = CDXBondSpacingType(atoi(attribValue_arg.c_str()));
+        m_flags2 |= has_bondSpacingType;
+        break;
 	case kCDXProp_BondSpacingAbs:
 		m_bondSpacingAbs = CDXCoordinatefromPoints(atof(attribValue_arg.c_str()));
 		m_flags |= has_bondSpacingAbs;
@@ -1028,6 +1036,9 @@ void CDXDocument::WriteAttributesTo(CDXDataSink &sink_arg) const
 		sink_arg.PutAttribute( kCDXProp_BondSpacing, m_bondSpacing );
 	}
 	
+    if (Known(has_bondSpacingType))
+        sink_arg.PutAttribute(kCDXProp_BondSpacingType, (INT8)m_bondSpacingType);
+
 	if (Known(has_bondSpacingAbs))
 	{
 		sink_arg.PutAttribute( kCDXProp_BondSpacingAbs, m_bondSpacingAbs );
@@ -1371,6 +1382,9 @@ void CDXDocument::XMLWriteAttributes(XMLDataSink &sink_arg) const
 		CDXMLPutAttribute(sink_arg, kCDXProp_BondSpacing, m_bondSpacing / 10.0 );
 	}
 	
+    if (Known(has_bondSpacingType))
+        CDXMLPutAttribute(sink_arg, kCDXProp_BondSpacingType, (INT8)m_bondSpacingType);
+
 	if (Known(has_bondSpacingAbs))
 	{
 		CDXMLPutAttribute(sink_arg, kCDXProp_BondSpacingAbs, CDXCoordinateToString(m_bondSpacingAbs) );

@@ -13,11 +13,21 @@ constexpr double kBondLength = 14.4;
 // A portable style snapshot, in physical points (bondSpacing is a fraction).
 struct StyleSettings {
     QString name;
-    double bondLength = 14.4, lineWidth = 0.6, boldWidth = 2, wedgeWidth = 4.5, hashSpacing = 2.2;
-    double bondSpacing = 0.18, labelRadius = 5.5, labelMargin = 1;
+    double bondLength = 14.4, lineWidth = 0.6, boldWidth = 2, wedgeWidth = 3, hashSpacing = 2.5;
+    double bondSpacing = 0.18, labelRadius = 0, labelMargin = 1.6;
     QString font = "Arial";
     int weight = 400;
     double fontSize = 10;
+
+    double chainAngle = 120, snapAngle = 30, bondSpacingAbsolute = 0;
+    bool italic = false;
+    QString captionFont;
+    int captionWeight = 400;
+    double captionSize = 0;  // zero: inherit the atom-label size
+    bool captionItalic = false;
+    double scriptScale = 0.7, subscriptOffset = 0.35, superscriptOffset = 0.7;
+    bool chargesOnAtom = false, rGroupSuperscript = false, hideImplicitHydrogens = false;
+    QString carbonLabels;  // empty: keep the document choice; otherwise none, terminal or all
     bool operator==(const StyleSettings&) const = default;
 };
 
