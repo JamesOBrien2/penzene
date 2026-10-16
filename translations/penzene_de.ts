@@ -573,6 +573,177 @@
     </message>
 </context>
 <context>
+    <name>Jcamp</name>
+    <message>
+        <source>Invalid numeric value in the spectrum.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid spectrum size (maximum 10 million samples).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid encoded value in the spectrum.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Encoded spectrum value is too large.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unsupported spectrum data table.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The spectrum must identify its nucleus as 1H or 13C.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Missing NTUPLES axis or real intensity variable.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Incomplete NTUPLES variable declaration.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NTUPLES sample counts disagree.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Incremental data needs FIRSTX and LASTX.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Spectrum scale factors must be nonzero.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The spectrum X axis must use ppm or Hz.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A spectrum in Hz needs a positive observe frequency in MHz.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Incremental data needs a valid sample count and X range.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The spectrum contains too many samples.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid scaled spectrum value.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>An XY data pair is incomplete.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>XY pairs must contain absolute values.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>An incremental data line needs an X checkpoint and intensities.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Spectrum X checkpoints disagree with the sample sequence.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Spectrum difference checkpoint is corrupt.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid compressed repeat count.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Compressed spectrum exceeds its declared size.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A difference needs a preceding absolute intensity.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Difference-coded data is missing its final checkpoint.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The spectrum sample count does not match its data.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid chemical shift reference.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Chemical shift reference is outside the spectrum.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Chemical shifts are outside the supported ppm range.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The spectrum has no numeric intensities.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The spectrum file is too large.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Malformed spectrum header.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A spectrum block is missing END.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Spectrum END has no matching TITLE.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Only one-dimensional NMR spectra can be overlaid.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A block contains more than one real spectrum.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The NMR block has no real data table.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Spectrum headers need a TITLE block.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unexpected text outside a spectrum block.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The spectrum file is incomplete (missing END).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No processed 1H or 13C NMR spectrum was found. FIDs must be processed before import.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Not enough memory to import the spectrum.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>MainWindow</name>
     <message>
         <source>Page 1</source>
@@ -770,6 +941,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Experimental %1: %2 samples, normalized intensity</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Draw or select a structure with predicted shifts.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -830,6 +1005,14 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Import Experimental…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove Overlay</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Copy SI Line</source>
         <translation type="unfinished"></translation>
     </message>
@@ -847,6 +1030,38 @@
     </message>
     <message>
         <source>&lt;b&gt;EI ions to look for&lt;/b&gt; (from the groups drawn; no intensities)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Experimental %1: %2 (normalized)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source> — choose the matching nucleus to show it</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Import Experimental NMR Spectrum</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>JCAMP-DX spectra (*.jdx *.dx *.jcamp);;All files (*)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not read the spectrum file (maximum 200 MB).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%1: %2 · %3</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Choose Spectrum</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Spectrum:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
