@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Penzene theme, version 1",
+  "type": "object",
+  "required": [
+    "format",
+    "version",
+    "name",
+    "dark",
+    "colors"
+  ],
+  "properties": {
+    "format": {
+      "const": "penzene-theme"
+    },
+    "version": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "dark": {
+      "type": "boolean"
+    },
+    "colors": {
+      "type": "object",
+      "required": [
+        "paper",
+        "ink",
+        "error",
+        "accent",
+        "hotspot",
+        "window",
+        "surface",
+        "text",
+        "border",
+        "secondary",
+        "accentBackground"
+      ],
+      "properties": {
+        "paper": {
+          "$ref": "#/$defs/color"
+        },
+        "ink": {
+          "$ref": "#/$defs/color"
+        },
+        "error": {
+          "$ref": "#/$defs/color"
+        },
+        "accent": {
+          "$ref": "#/$defs/color"
+        },
+        "hotspot": {
+          "$ref": "#/$defs/color"
+        },
+        "window": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "surface": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "text": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "border": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secondary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "accentBackground": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/color"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "color": {
+      "type": "string",
+      "pattern": "^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "name": {
+            "const": "System"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "colors": {
+            "properties": {
+              "window": {
+                "$ref": "#/$defs/color"
+              },
+              "surface": {
+                "$ref": "#/$defs/color"
+              },
+              "text": {
+                "$ref": "#/$defs/color"
+              },
+              "border": {
+                "$ref": "#/$defs/color"
+              },
+              "secondary": {
+                "$ref": "#/$defs/color"
+              },
+              "accentBackground": {
+                "$ref": "#/$defs/color"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

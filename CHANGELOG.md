@@ -19,6 +19,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Text has its own button on the tool rail, with the same `t` shortcut (#622).
 - View → Stoichiometry calculates reactant and reagent quantities from a limiting reagent, mmol scale, equivalents and optional densities; Copy as Text keeps the table for a lab notebook (#486).
 - The NMR panel imports processed ¹H and ¹³C JCAMP-DX spectra as a normalized experimental trace beneath the prediction (#553).
+- View → Theme imports and exports versioned JSON theme files; imported themes remain available after restarting (#475).
 
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 
