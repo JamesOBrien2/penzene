@@ -89,9 +89,14 @@ static QString atomSymbol(const Atom& a) {
     return QString::fromStdString(chem::symbol(a.z));
 }
 
+// A label other than the atom's own element: an abbreviation or free text. An element's own
+// symbol ("C" shown at a chain end) is drawn as that element, with its charge placed clear of
+// its bonds (#656).
+static bool abbreviated(const Atom& a) { return !a.label.isEmpty() && a.label != QString::fromStdString(chem::symbol(a.z)); }
+
 // An isotope's mass number, written before the symbol (¹³C); none for D and T, which have letters.
 static QString massNumber(const Atom& a) {
-    return a.isotope && a.label.isEmpty() && !(a.z == 1 && (a.isotope == 2 || a.isotope == 3)) ? QString::number(a.isotope) : QString();
+    return a.isotope && !abbreviated(a) && !(a.z == 1 && (a.isotope == 2 || a.isotope == 3)) ? QString::number(a.isotope) : QString();
 }
 
 // Where the mass number sits, relative to the atom (as drawLabel puts it), with a point to spare.
@@ -209,7 +214,7 @@ static QPointF chargeAt(QPointF pos, QPointF dir, double clear, const QString& c
 static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HSide side, const DrawingStyle& st) {
     const bool hLeft = side == HSide::Left;
     const auto& a = doc.atoms[i];
-    if (!a.label.isEmpty()) return drawAbbreviation(p, a, hLeft, st);
+    if (abbreviated(a)) return drawAbbreviation(p, a, hLeft, st);
     QFont f = labelFont(st), sub = labelFont(st, 0.7);
     QFontMetricsF fm(f), sm(sub);
     const QString sym = atomSymbol(a);
@@ -257,7 +262,7 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     auto trim = [&](int atom, QPointF toward) {
         const Atom& a = doc.atoms[atom];
         double clear = st.labelRadius;
-        if (a.label.isEmpty()) {
+        if (!abbreviated(a)) {
             QFontMetricsF fm(labelFont(st));
             const QString sym = atomSymbol(a);
             const QRectF box = fm.tightBoundingRect(sym).translated(-fm.horizontalAdvance(sym) / 2, fm.capHeight() / 2);
@@ -1058,7 +1063,7 @@ QRectF documentBounds(const Document& doc) {
     for (const auto& b : doc.bonds) ++degree[b.a], ++degree[b.b];
     for (size_t i = 0; i < doc.atoms.size(); ++i) {  // room for labels, which can run either way
         const Atom& a = doc.atoms[i];
-        const qsizetype chars = a.label.isEmpty() && a.isotope ? 3 + massNumber(a).size() : a.label.size();  // H₃¹³C
+        const qsizetype chars = !abbreviated(a) && a.isotope ? 3 + massNumber(a).size() : a.label.size();  // H₃¹³C
         double w = fs * std::max(1.5, 0.7 * chars);
         // A labelled atom with bonds on both sides may stack its H above or below.
         double h = fs * (degree[i] >= 2 && hasLabel(doc, int(i), degree) ? 2.2 : 1);
