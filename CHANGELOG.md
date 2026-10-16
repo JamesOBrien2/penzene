@@ -23,6 +23,8 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Edit → Find Substructure (Ctrl/Cmd+F) selects every SMILES or SMARTS match on the current page, including groups inside abbreviations (#485).
 - The Templates library adds 24 heterocycles, macrocycles, ligands and reagents, including cyclen, bipyridine, dppe, DMAP and CDI (#474).
 
+- Drag the Erase tool across atoms, bonds, arrows and text to preview their removal, then release to erase them in one undo step; Escape cancels (#487).
+
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 
 - View → Mark Valence Errors can turn off red error colouring on screen and in exports; structure checks are unchanged (#620).
