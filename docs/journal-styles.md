@@ -11,8 +11,7 @@ editable. All dimensions below are physical points at 100% export scale;
 | JDP | IBM Plex Sans Light 10 / normal 10 | 14.17 | 0.879 | 1.814 | 2.721 | 1.162 | 1.814 | 18% | 120° / 30° |
 | RSC | Helvetica 7 / 7, normal | 12.2 | 0.5 | 1.6 | 1.6 | 1.25 | 1.8 | 20% | 120° / 15° |
 | Nature | Helvetica 6 / 6, normal | 10.8 | 0.595276 | 1.559055 | 2.338583 | 1.190551 | 1.700787 | 18% | 120° / 30° |
-| Angewandte | Arial 12 / 12, normal | 17 | 0.75 | 2.601563 | 3.902344 | 2 | 2.601563 | 18% | 120° / 30° |
-| Angewandte (8 pt final) | Arial 8 / 8, normal | 11.333333 | 0.5 | 1.734375 | 2.601563 | 1.333333 | 1.734375 | 18% | 120° / 30° |
+| Angewandte | Arial 8 / 8, normal | 11.333333 | 0.5 | 1.734375 | 2.601563 | 1.333333 | 1.734375 | 18% | 120° / 30° |
 | SYNLETT/SYNTHESIS | Arial 6 / 6, normal | 10.119685 | 0.566929 | 1.388976 | 2.083465 | 0.907087 | 1.757480 | 18% | 120° / 30° |
 
 The renderer keeps fractional font sizes. Bond spacing can be relative to the
@@ -44,11 +43,11 @@ Checked against the following sources on 16 October 2026:
 - **Angewandte:** the [current graphics guidelines](https://onlinelibrary.wiley.com/page/journal/15213773/homepage/graphics-guidelines)
   link to the [official ChemDraw template](https://onlinelibrary.wiley.com/pb-assets/assets/vch/angew-cds-1553091522227.zip).
   Its `angew.cds` contains bond 17 pt, line 0.75 pt, bold/hash 2.6015625 pt,
-  margin 2 pt, spacing 18%, chain 120° and normal Arial 12 pt. **Angewandte**
-  reproduces those original settings. The guide recommends approximately 7–8 pt
-  at publication size: **Angewandte (8 pt final)** scales every physical template
-  measurement by 8/12. Use that preset at 100%, or size the original template
-  appropriately in the manuscript; do not reduce both.
+  margin 2 pt, spacing 18%, chain 120° and normal Arial 12 pt. The current
+  guide recommends approximately 7–8 pt at publication size. Penzene's single
+  **Angewandte** preset scales every physical template measurement by 8/12,
+  giving 8 pt labels/captions at 100%. Do not reduce it again. The linked source
+  retains the original template for reference; it is not a second built-in preset.
 - **SYNLETT/SYNTHESIS:** [SYNLETT's 2026 instructions](https://cdn.sanity.io/files/8egl0zzn/production/b1e2fddfba11be24d9129ef9b03b41179c1d6db9.pdf)
   and [SYNTHESIS's 2026 instructions](https://cdn.sanity.io/files/8egl0zzn/production/ca4bc9c5ca1a310515b6495a7e3fc760a3a5a04d.pdf),
   page 1, specify final-size bond 0.357 cm, line 0.020 cm, bold 0.049 cm,
@@ -78,7 +77,7 @@ review of the finished figure:
 | Nature: reaction, equilibrium, resonance, retrosynthesis and electron-flow arrows used for their stated meaning | Choose the appropriate arrow tool and anchor electron flow to the intended bond/atom. |
 | Nature: bold only for compound numbers/descriptors; italics follow chemical conventions | Use compound labels and the Format toolbar for appropriate text. Keep ordinary labels/captions normal. |
 | Nature: exceptionally large structures may need shorter bonds while retaining line widths, and labels no smaller than 5 pt | Duplicate and change **Bond length** and **Label size** independently. Ordinary export scaling changes every measurement, so it is not the same operation. |
-| Angewandte: final text approximately 7–8 pt and figure width suitable for the manuscript | Use the final-size preset or size the template deliberately; check the individual journal's 84/178 mm column layout and accepted formats. |
+| Angewandte: final text approximately 7–8 pt and figure width suitable for the manuscript | Use the final-size preset at 100%; check the individual journal's 84/178 mm column layout and accepted formats. |
 | SYNLETT/SYNTHESIS: 83/173 mm single/double column figures; captions in manuscript text, not inside the graphic | Choose the appropriate page/layout, export at final scale and place the figure caption in the manuscript. Reaction conditions and compound labels can remain in the drawing. |
 | Source-specific file formats, resolution, colour and figure dimensions | Use the current journal instructions and [export guide](figures.md). These depend on the submitted figure type; a drawing preset cannot choose them universally. |
 
