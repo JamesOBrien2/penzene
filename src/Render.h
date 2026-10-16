@@ -111,7 +111,7 @@ QFont labelFont(const DrawingStyle& s, double scale = 1);
 DrawingStyle captionStyle(DrawingStyle style);
 constexpr double kHeadLength = 6;  // an arrowhead of size 1, in drawing units
 constexpr int kTabSpaces = 8;  // text tab stops, in spaces: the canvas and the text dialog agree
-QPainterPath textPath(const Text& t, const DrawingStyle& s = drawingStyles()[0]);
+QPainterPath textPath(const Text& t, const DrawingStyle& s = drawingStyles()[0], bool caption = true);
 // How one line of text is set, character by character: formula counts subscripted, charges
 // superscripted, and a ^ that marks a charge hidden (see Render.cpp).
 enum class Script : char { Base, Sub, Super, Hidden };

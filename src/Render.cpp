@@ -183,7 +183,7 @@ static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const D
     QFontMetricsF fm(labelFont(st));
     const QString s = fromRight ? reversedLabel(a.label) : a.label;
     const double base = a.pos.y() + fm.capHeight() / 2;
-    QPainterPath path = textPath({{0, base}, s}, st);
+    QPainterPath path = textPath({{0, base}, s}, st, false);
     const double x = fromRight ? a.pos.x() + fm.horizontalAdvance(s.back()) / 2 - path.boundingRect().right()
                                : a.pos.x() - fm.horizontalAdvance(s.front()) / 2;
     p.fillPath(path.translated(x, 0), p.pen().color());
@@ -763,8 +763,8 @@ std::vector<Script> scripts(const QString& s, bool rGroupSuperscript) {
 
 // Text as outlines, formula-style subscripts and charges, one line per '\n'. Laid out
 // in runs (not per letter) so kerning and spaces match ordinary text.
-QPainterPath textPath(const Text& t, const DrawingStyle& st) {
-    const DrawingStyle caption = captionStyle(st);
+QPainterPath textPath(const Text& t, const DrawingStyle& st, bool isCaption) {
+    const DrawingStyle caption = isCaption ? captionStyle(st) : st;
     QFont f = labelFont(caption, t.scale), small = labelFont(caption, st.scriptScale * t.scale);
     for (QFont* font : {&f, &small}) {
         if (!t.font.isEmpty()) font->setFamily(t.font);

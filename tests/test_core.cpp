@@ -3199,3 +3199,15 @@ TEST_CASE("styles carry an optional charge-circle choice without locking documen
     json["circledCharges"] = "false";
     CHECK_FALSE(styleFromJson(json));
 }
+
+TEST_CASE("caption typography does not change abbreviated atom labels") {
+    Document doc = *chem::fromSmiles("CO");
+    REQUIRE(edit::applyLabel(doc, 1, "OMe", true));
+    auto settings = styleSettings(drawingStyle("RSC"));
+    doc.styleSettings = settings;
+    const auto before = renderImage(doc);
+    doc.styleSettings->captionFont = "Times New Roman";
+    doc.styleSettings->captionSize = 25;
+    doc.styleSettings->captionWeight = 700;
+    CHECK(renderImage(doc) == before);
+}
