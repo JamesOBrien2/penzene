@@ -943,6 +943,11 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             p.drawPath(path);
         }
         if (!b.label.isEmpty()) drawText(p, b.label, QPointF(box.right() + 1.5, box.bottom() + 1), labelFont(st, 0.7));
+        if (!b.superscript.isEmpty()) {  // its top level with the bracket's; a typed - is a minus
+            const QFont sup = labelFont(st, 0.7);
+            drawText(p, QString(b.superscript).replace('-', QChar(0x2212)),
+                     QPointF(box.right() + 1.5, box.top() + QFontMetricsF(sup).capHeight()), sup);
+        }
     }
     for (size_t i = 0; i < doc.atoms.size(); ++i) {
         const Atom& a = doc.atoms[i];

@@ -161,7 +161,8 @@
       "properties": {
         "atoms": {"type": "array", "items": {"$ref": "#/$defs/index"}, "minItems": 1},
         "round": {"type": "boolean", "description": "Round brackets; absent or false: square."},
-        "label": {"type": "string", "description": "Subscript, e.g. n for a repeat unit."}
+        "label": {"type": "string", "description": "Subscript, e.g. n for a repeat unit."},
+        "superscript": {"type": "string", "description": "Text at the top right: ‡ for a transition state, or a charge such as •+ or 3-."}
       }
     }
   }

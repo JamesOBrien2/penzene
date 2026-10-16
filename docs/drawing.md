@@ -109,8 +109,8 @@ lane labels like any text.
   clicking any part selects it all, and Arrange Scheme, Align and Flip move it as one. Ctrl/Cmd+click
   picks a single part inside a group. **Ungroup** (Shift+Ctrl/Cmd+G) splits it again. A selection
   shows one box per molecule (one per group); drag from anywhere inside a box to move it.
-- **Structure → Brackets** puts square or round brackets, with a subscript such as *n*, around the
-  selected atoms.
+- **Structure → Brackets** puts square or round brackets around the selected atoms, with a subscript
+  such as *n* and a superscript at the top right: ‡ for a transition state, or a charge such as •+ or 3−.
 - **Structure → Variable Attachment** draws a bond across the edge of the selected atoms (a ring's,
   say) for a substituent on any one of them. Formula and mass count it once; MOL (V3000) and
   ChemDraw files keep the positions.

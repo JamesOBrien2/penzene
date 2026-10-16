@@ -113,6 +113,7 @@ QByteArray Document::toJson() const {
         QJsonObject o{{"atoms", ids}};
         if (!b.square) o["round"] = true;
         if (!b.label.isEmpty()) o["label"] = b.label;
+        if (!b.superscript.isEmpty()) o["superscript"] = b.superscript;
         bs2.append(o);
     }
     if (!bs2.isEmpty()) root["brackets"] = bs2;
@@ -283,7 +284,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
     }
     for (const auto& v : root["brackets"].toArray()) {
         auto o = v.toObject();
-        Bracket b{{}, !o["round"].toBool(), o["label"].toString()};
+        Bracket b{{}, !o["round"].toBool(), o["label"].toString(), o["superscript"].toString()};
         for (const auto& i : o["atoms"].toArray()) b.atoms.push_back(i.toInt(-1));
         if (b.atoms.empty() || std::any_of(b.atoms.begin(), b.atoms.end(), [n](int i) { return i < 0 || i >= n; }))
             return std::nullopt;
