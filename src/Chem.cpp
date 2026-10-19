@@ -17,6 +17,7 @@
 #include <GraphMol/Descriptors/MolSurf.h>
 #include <algorithm>
 #include <map>
+#include <limits>
 #include <numeric>
 #include <set>
 #include <type_traits>
@@ -388,8 +389,9 @@ static void coordinate(RWMol& mol) {
     }
 }
 
-static std::unique_ptr<RWMol> drawingMol(const Document& in, bool expand = true) {
-    const Document doc = projectionsAsWedges(expand ? expanded(in) : in);
+static std::unique_ptr<RWMol> drawingMol(const Document& in, bool expand = true, std::vector<int>* owner = nullptr) {
+    const Document doc = projectionsAsWedges(expand ? expanded(in, owner) : in);
+    if (!expand && owner) owner->resize(in.atoms.size()), std::iota(owner->begin(), owner->end(), 0);
     auto mol = std::make_unique<RWMol>();
     auto* conf = new RDKit::Conformer(doc.atoms.size());
     for (size_t i = 0; i < doc.atoms.size(); ++i) {
@@ -2325,6 +2327,30 @@ std::string toSmarts(const Document& doc) {
     auto mol = toRDKit(doc);
     perceive(*mol, false);
     return RDKit::MolToSmarts(*mol);
+}
+
+std::optional<std::vector<std::vector<int>>> substructureMatches(const Document& doc, const std::string& pattern) {
+    try {
+        std::unique_ptr<RWMol> query(RDKit::SmartsToMol(pattern));
+        if (!query || !query->getNumAtoms()) return std::nullopt;
+        std::vector<int> owner;
+        auto mol = drawingMol(doc, true, &owner);
+        perceive(*mol);
+        RDKit::SubstructMatchParameters params;
+        params.useChirality = true;
+        params.maxMatches = std::numeric_limits<unsigned>::max();  // select every match, not RDKit's default first 1000
+        std::vector<std::vector<int>> out;
+        for (const auto& match : RDKit::SubstructMatch(*mol, *query, params)) {
+            std::vector<int> atoms;
+            for (auto [queryAtom, atom] : match) atoms.push_back(owner[atom]);
+            std::sort(atoms.begin(), atoms.end());
+            atoms.erase(std::unique(atoms.begin(), atoms.end()), atoms.end());
+            out.push_back(std::move(atoms));
+        }
+        return out;
+    } catch (...) {
+        return std::nullopt;
+    }
 }
 
 std::string toSmiles(const Document& doc) {

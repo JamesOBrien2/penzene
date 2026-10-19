@@ -120,6 +120,7 @@ private:
     void importTheme();
     void exportTheme();
     void refreshThemeMenu();
+    void findSubstructure();
     void remember(const QString& path);  // most recent first, at most 10
 
     QUndoStack* undo_;  // the page on the canvas's history
