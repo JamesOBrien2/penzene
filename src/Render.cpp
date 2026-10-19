@@ -41,6 +41,23 @@ const std::vector<DrawingStyle>& builtInDrawingStyles() {
              0.20, 0, "Helvetica", QFont::Normal, 7 * kRsc, 1.25 * kRsc}
         };
         out.back().snapAngle = 15;
+        // Final-size publisher settings; sources and editorial conventions are in docs/journal-styles.md.
+        StyleSettings nature{"Nature", 10.8, 0.021 * 72 / 2.54, 0.055 * 72 / 2.54, 1.5 * 0.055 * 72 / 2.54,
+                             0.06 * 72 / 2.54, 0.18, 0, 0.042 * 72 / 2.54, "Helvetica", 400, 6};
+        nature.captionFont = "Helvetica";
+        nature.captionSize = 6;
+        nature.chargesOnAtom = nature.rGroupSuperscript = true;
+        nature.carbonLabels = "none";
+        nature.circledCharges = nature.aromaticCircles = false;
+        out.push_back(modelStyle(nature));
+        StyleSettings angew{"Angewandte", 17, 0.75, 2.6015625, 1.5 * 2.6015625, 2.6015625, 0.18, 0, 2, "Arial", 400, 12};
+        // The publisher asks for 7–8 pt at final size; scale its linked 12 pt template once.
+        for (auto member : {&StyleSettings::bondLength, &StyleSettings::lineWidth, &StyleSettings::boldWidth,
+                            &StyleSettings::wedgeWidth, &StyleSettings::hashSpacing, &StyleSettings::labelMargin, &StyleSettings::fontSize})
+            angew.*member *= 8.0 / 12;
+        out.push_back(modelStyle(angew));
+        out.push_back(modelStyle({"SYNLETT/SYNTHESIS", 0.357 * 72 / 2.54, 0.02 * 72 / 2.54, 0.049 * 72 / 2.54, 1.5 * 0.049 * 72 / 2.54,
+                                 0.062 * 72 / 2.54, 0.18, 0, 0.032 * 72 / 2.54, "Arial", 400, 6}));
         return out;
     }();
     return styles;

@@ -30,6 +30,7 @@ StyleSettings styleSettings(const DrawingStyle& s) {
     result.hideImplicitHydrogens = s.hideImplicitHydrogens;
     result.carbonLabels = s.carbonLabels;
     result.circledCharges = s.circledCharges;
+    result.aromaticCircles = s.aromaticCircles;
     return result;
 }
 
@@ -53,6 +54,7 @@ DrawingStyle modelStyle(const StyleSettings& s) {
     result.hideImplicitHydrogens = s.hideImplicitHydrogens;
     result.carbonLabels = s.carbonLabels;
     result.circledCharges = s.circledCharges;
+    result.aromaticCircles = s.aromaticCircles;
     return result;
 }
 
@@ -69,6 +71,7 @@ QJsonObject styleToJson(const StyleSettings& s) {
             {"chargesOnAtom", s.chargesOnAtom}, {"rGroupSuperscript", s.rGroupSuperscript},
             {"hideImplicitHydrogens", s.hideImplicitHydrogens}, {"carbonLabels", s.carbonLabels}};
     if (s.circledCharges) result["circledCharges"] = *s.circledCharges;
+    if (s.aromaticCircles) result["aromaticCircles"] = *s.aromaticCircles;
     return result;
 }
 
@@ -124,6 +127,10 @@ std::optional<StyleSettings> styleFromJson(const QJsonObject& o) {
     }
     if (s.captionFont.size() > 200 || s.captionFont != s.captionFont.trimmed() ||
         (!s.carbonLabels.isEmpty() && s.carbonLabels != "none" && s.carbonLabels != "terminal" && s.carbonLabels != "all")) return std::nullopt;
+    if (o.contains("aromaticCircles")) {
+        if (!o["aromaticCircles"].isBool()) return std::nullopt;
+        s.aromaticCircles = o["aromaticCircles"].toBool();
+    }
     if (o.contains("circledCharges")) {
         if (!o["circledCharges"].isBool()) return std::nullopt;
         s.circledCharges = o["circledCharges"].toBool();
@@ -196,6 +203,7 @@ bool applyDrawingStyle(Document& doc, const QString& name) {
         doc.styleSettings.reset();
         doc.labelRatio = 0;
         if (s.circledCharges) doc.circledCharges = *s.circledCharges;
+        if (s.aromaticCircles) { doc.aromaticCircles = *s.aromaticCircles; doc.aromaticCircleOverrides.clear(); }
         if (!s.carbonLabels.isEmpty()) doc.carbonLabels = s.carbonLabels == "all" ? Document::CarbonLabels::All :
             s.carbonLabels == "terminal" ? Document::CarbonLabels::Terminal : Document::CarbonLabels::None;
         return true;
@@ -206,6 +214,7 @@ bool applyDrawingStyle(Document& doc, const QString& name) {
         doc.styleSettings = s;
         doc.labelRatio = 0;
         if (s.circledCharges) doc.circledCharges = *s.circledCharges;
+        if (s.aromaticCircles) { doc.aromaticCircles = *s.aromaticCircles; doc.aromaticCircleOverrides.clear(); }
         if (!s.carbonLabels.isEmpty()) doc.carbonLabels = s.carbonLabels == "all" ? Document::CarbonLabels::All :
             s.carbonLabels == "terminal" ? Document::CarbonLabels::Terminal : Document::CarbonLabels::None;
         return true;

@@ -20,6 +20,7 @@
         "style": {"$ref": "#/$defs/page/properties/style"},
         "styleSettings": {"$ref": "#/$defs/styleSettings"},
         "circledCharges": {"type": "boolean"},
+        "aromaticCircles": {"type": "boolean"},
         "carbonLabels": {"$ref": "#/$defs/page/properties/carbonLabels"},
         "labelRatio": {"$ref": "#/$defs/page/properties/labelRatio"},
         "showStereo": {"$ref": "#/$defs/page/properties/showStereo"},
