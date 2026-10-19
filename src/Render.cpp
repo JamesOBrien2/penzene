@@ -282,10 +282,12 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         const Atom& a = doc.atoms[atom];
         double clear = st.labelRadius;
         if (a.label.isEmpty()) {
-            QFontMetricsF fm(labelFont(st));
+            const QFont font = labelFont(st);
+            QFontMetricsF fm(font);
             const QString sym = atomSymbol(a);
-            const QRectF box = fm.tightBoundingRect(sym).translated(-fm.horizontalAdvance(sym) / 2, fm.capHeight() / 2);
-            clear = std::max(clear, st.labelMargin + exitAlong(box, toward));
+            QPainterPath symbol;
+            symbol.addText({-fm.horizontalAdvance(sym) / 2, fm.capHeight() / 2}, font, sym);
+            clear = std::max(clear, st.labelMargin + exitAlong(symbol.boundingRect(), toward));
         }
         if (!massNumber(a).isEmpty()) clear = std::max(clear, st.labelMargin + exitAlong(massBox(a, st), toward));
         return clear;
