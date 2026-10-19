@@ -49,6 +49,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - An atom shown with its own element (a terminal C, an O) keeps its charge and isotope in SMILES, formula and mass: cyanide drawn as C≡N is no longer HCN (#654).
 - The predicted NMR spectrum and its SI line count the atoms inside an abbreviation such as tBu, as if it were drawn out (#611).
 - Opening an SDF or SMILES library with records Penzene can't read names them instead of leaving them out silently; Python's `read` warns (#584).
+- Atoms on partial bonds count them as half bonds when filling hydrogens, so a drawn transition state keeps its reactants' formula instead of gaining an H on each atom whose bond is breaking (#655).
 - Lettered compound numbers shared across pages (2a, 2b) keep one number when a step is inserted, undone or redone (#583).
 
 ## 1.9.0 (2026-09-29)
