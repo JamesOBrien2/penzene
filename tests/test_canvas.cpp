@@ -187,6 +187,87 @@ TEST_CASE("erasing an atom drops neighbours left without bonds, as erasing a bon
     CHECK(f.doc().bonds.size() == 1);
 }
 
+TEST_CASE("drag erase sweeps skipped points, previews changes and makes one undo step (#487)") {
+    Fixture f;
+    Document d;
+    d.atoms = {{{0, 0}}, {{30, 0}}, {{200, 0}, 8}, {{0, 40}, 7}};
+    d.bonds = {{0, 1}};
+    d.arrows = {{{60, -12}, {60, 12}, ArrowKind::Line}, {{40, 20}, {80, 20}}, {{180, -12}, {180, 12}, ArrowKind::Line}};
+    d.arrows[1].bend = 20;
+    d.texts = {{{90, 4}, "heat"}, {{180, 50}, "keep"}};
+    d.page = "A4";
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Erase);
+    const QString preview = qEnvironmentVariable("PENZENE_ERASE_PREVIEW");
+    QApplication::processEvents();
+    if (!preview.isEmpty()) REQUIRE(f.canvas.grab().save(preview + "/before.png"));
+    QTest::mousePress(f.canvas.viewport(), Qt::LeftButton, {}, f.at({-20, 0}));
+    QMouseEvent move(QEvent::MouseMove, f.at({150, 0}), f.canvas.viewport()->mapToGlobal(f.at({150, 0})),
+                     Qt::NoButton, Qt::LeftButton, {});
+    QApplication::sendEvent(f.canvas.viewport(), &move);
+    CHECK(f.doc() == d);
+    CHECK(f.undo.count() == 0);
+    QApplication::processEvents();
+    if (!preview.isEmpty()) REQUIRE(f.canvas.grab().save(preview + "/pending.png"));
+    QTest::mouseRelease(f.canvas.viewport(), Qt::LeftButton, {}, f.at({150, 0}));
+    CHECK(f.doc().atoms.size() == 2);
+    CHECK(f.doc().bonds.empty());
+    REQUIRE(f.doc().arrows.size() == 1);
+    CHECK(f.doc().arrows[0] == d.arrows[2]);
+    REQUIRE(f.doc().texts.size() == 1);
+    CHECK(f.doc().texts[0].text == "keep");
+    CHECK(f.doc().page == "A4");
+    CHECK(f.undo.count() == 1);
+    QApplication::processEvents();
+    if (!preview.isEmpty()) REQUIRE(f.canvas.grab().save(preview + "/after.png"));
+    const Document erased = f.doc();
+    f.undo.undo();
+    CHECK(f.doc() == d);
+    f.undo.redo();
+    CHECK(f.doc() == erased);
+}
+
+TEST_CASE("drag erase handles bond-only strokes, loopbacks and cancellation (#487)") {
+    Fixture f;
+    Document d;
+    d.atoms = {{{-30, 0}}, {{30, 0}}, {{-30, 30}}, {{30, 30}}};
+    d.bonds = {{0, 1}, {0, 2}, {1, 3}};
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setTool(Canvas::Tool::Erase);
+    f.drag({0, -15}, {0, 15});
+    CHECK(f.doc().atoms.size() == 4);
+    CHECK(f.doc().bonds.size() == 2);
+    CHECK(f.undo.count() == 1);
+    f.undo.undo();
+    CHECK(f.doc() == d);
+    QTest::mousePress(f.canvas.viewport(), Qt::LeftButton, {}, f.at({0, -15}));
+    for (QPointF p : {QPointF{0, 15}, QPointF{0, -15}}) {
+        QMouseEvent move(QEvent::MouseMove, f.at(p), f.canvas.viewport()->mapToGlobal(f.at(p)), Qt::NoButton, Qt::LeftButton, {});
+        QApplication::sendEvent(f.canvas.viewport(), &move);
+    }
+    QTest::mouseRelease(f.canvas.viewport(), Qt::LeftButton, {}, f.at({0, -15}));
+    CHECK(f.doc().bonds.size() == 2);  // returning to the press position is still a drag
+    f.undo.undo();
+    QTest::mousePress(f.canvas.viewport(), Qt::LeftButton, {}, f.at({0, -15}));
+    QTest::keyClick(f.canvas.viewport(), Qt::Key_Escape);
+    QTest::mouseRelease(f.canvas.viewport(), Qt::LeftButton, {}, f.at({0, 15}));
+    CHECK(f.doc() == d);
+    QTest::mousePress(f.canvas.viewport(), Qt::LeftButton, {}, f.at({0, -15}));
+    Document replacement = d;
+    replacement.addAtom({80, 80}, 8);
+    f.canvas.setDocumentSilently(replacement);
+    QTest::mouseRelease(f.canvas.viewport(), Qt::LeftButton, {}, f.at({0, 15}));
+    CHECK(f.doc() == replacement);
+    const int steps = f.undo.count();
+    f.drag({100, -15}, {100, 15});
+    CHECK(f.undo.count() == steps);
+    Document box;
+    box.arrows = {{{-40, -40}, {40, 40}, ArrowKind::Box}};
+    f.canvas.setDocumentSilently(box);
+    f.drag({-10, 0}, {10, 0});  // crossing an unfilled box's interior does not cross its outline
+    CHECK(f.doc() == box);
+}
+
 TEST_CASE("select and delete, charges") {
     Fixture f;
     f.canvas.setTool(Canvas::Tool::Bond);

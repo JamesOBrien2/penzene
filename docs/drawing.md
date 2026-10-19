@@ -99,6 +99,10 @@ nitrogen and oxygen atoms. The status bar reports the match count; colour, delet
 commands act on the selected atoms and the bonds joining them. Matches inside abbreviations select
 their visible label. Cancelling or entering an invalid pattern keeps the selection unchanged.
 
+With the **Erase** tool, drag across atoms, bonds, arrows and text to mark them for deletion.
+Release to erase everything crossed in one undo step, or press Escape to cancel. A click still
+erases one object. Neighbours left without bonds are removed too, as with a click erase.
+
 - Drag to select, or Alt+drag from empty space to draw a loop round what you want; double-click selects a whole molecule. Drag a selection to move it, and drop an
   atom on another to merge them.
 - The arrow keys nudge a selection (Shift for 10 points). Ctrl+arrow duplicates it across the next
