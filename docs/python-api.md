@@ -42,13 +42,21 @@ A drawing: molecules, arrows and text, as the app holds it. (since 0.4)
 
 An empty drawing. (since 0.4)
 
-### `add_atom(self, label: str = 'C', x: float = 0.0, y: float = 0.0) -> int`
+### `add_atom(self, label: str = 'C', x: float = 0.0, y: float = 0.0, generic: bool = False) -> int`
 
-Add an atom: an element, an abbreviation (OMe, Boc…) or a SMILES fragment. Returns its index. (since 0.4)
+Add an atom: an element, an abbreviation (OMe, Boc…) or a SMILES fragment. Returns its index. With generic=True (since 2.0), any other text is a generic atom as the app takes a typed label (R, R1, X, Ar). (since 0.4)
 
 ### `add_bond(self, a: int, b: int, order: int = 1) -> None`
 
 Bond atoms a and b (order 1, 2 or 3). (since 0.4)
+
+### `add_bracket(self, atoms: collections.abc.Sequence[int], round: bool = False, label: str = '', superscript: str = '') -> int`
+
+Brackets around atoms, square or round, with a subscript label at the bottom right (n) and a superscript at the top right (‡, •+). Returns its index. (since 2.0)
+
+### `add_text(self, x: float, y: float, text: str) -> int`
+
+Add free text, (x, y) the left end of its first baseline; formulas get subscripts (H2O). Returns its index. (since 2.0)
 
 ### `Document.atoms`
 
@@ -102,9 +110,29 @@ Write .penz (full fidelity), .mol, or ChemDraw .cdxml or .cdx; images go through
 
 Make a bond single, double or triple (a wedge or hash goes with a single bond). (since 2.0)
 
-### `set_label(self, atom: int, label: str) -> None`
+### `set_bond_style(self, bond: int, style: str) -> None`
 
-Relabel an atom, as add_atom takes a label: an element ("C" undoes a label), an abbreviation or a SMILES fragment (drawn out from it, its new atoms added at the end). (since 2.0)
+Draw a bond as 'none' (plain), 'wedge', 'hash', 'bold', 'dashed', 'wavy', 'interaction' (dotted, not chemistry), 'partial' (forming or breaking in a transition state) or 'dative'. A wedge, hash or wavy bond must be single. (since 2.0)
+
+### `set_charge(self, atom: int, charge: int) -> None`
+
+Set an atom's formal charge, -8 to 8. (since 2.0)
+
+### `set_label(self, atom: int, label: str, generic: bool = False) -> None`
+
+Relabel an atom, as add_atom takes a label: an element ("C" undoes a label; show_symbol shows it), an abbreviation or a SMILES fragment (drawn out from it, its new atoms added at the end), or with generic=True any other text (R, X). (since 2.0)
+
+### `set_partial(self, atom: int, partial: int) -> None`
+
+Mark an atom δ+ (1) or δ− (-1), or neither (0); drawn only, not chemistry. (since 2.0)
+
+### `set_radicals(self, atom: int, radicals: int) -> None`
+
+Set an atom's radical electrons, 0 to 2 (each takes the place of an H). (since 2.0)
+
+### `show_symbol(self, atom: int, shown: bool = True) -> None`
+
+Draw an atom's element symbol even where skeletal style leaves it out (the C of R-N≡C), or (shown=False) hide it again. Its chemistry doesn't change. (since 2.0)
 
 ### `Document.style`
 
@@ -155,6 +183,18 @@ Formal charge (since 0.4)
 
 Mass number (13 for carbon-13, 2 for deuterium); 0 for natural abundance (since 1.3)
 
+### `Atom.label`
+
+The label drawn instead of the element (Boc, OMe, R, or its own symbol when shown); "" for none (since 2.0)
+
+### `Atom.partial`
+
+Partial charge mark: 1 for δ+, -1 for δ−, 0 for none (since 2.0)
+
+### `Atom.radicals`
+
+Radical electrons, 0 to 2 (since 2.0)
+
 ### `Atom.symbol`
 
 Element symbol, or the abbreviation (Boc, OMe…) if it has one (since 0.4)
@@ -183,4 +223,8 @@ Index of the second atom (since 0.4)
 ### `Bond.order`
 
 1, 2 or 3 (since 0.4)
+
+### `Bond.style`
+
+How it's drawn, as set_bond_style takes it: 'none', 'wedge', 'partial'… (since 2.0)
 

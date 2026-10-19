@@ -79,6 +79,16 @@ void save(const Document& doc, const std::string& path) {
 
 std::string symbol(const Atom& a) { return a.label.isEmpty() ? chem::symbol(a.z) : a.label.toStdString(); }
 
+Atom& atomAt(Document& d, int atom) {
+    if (atom < 0 || atom >= int(d.atoms.size())) throw nb::index_error("no such atom");
+    return d.atoms[atom];
+}
+
+void inRange(int value, int lo, int hi, const char* what) {
+    if (value < lo || value > hi)
+        throw nb::value_error((std::string(what) + " must be " + std::to_string(lo) + " to " + std::to_string(hi)).c_str());
+}
+
 }  // namespace
 
 NB_MODULE(_penzene, m) {
@@ -92,12 +102,18 @@ NB_MODULE(_penzene, m) {
         .def_prop_ro("y", [](const Atom& a) { return a.pos.y(); }, "Points, y down (since 0.4)")
         .def_ro("charge", &Atom::charge, "Formal charge (since 0.4)")
         .def_ro("isotope", &Atom::isotope, "Mass number (13 for carbon-13, 2 for deuterium); 0 for natural abundance (since 1.3)")
+        .def_prop_ro("label", [](const Atom& a) { return a.label.toStdString(); },
+                     "The label drawn instead of the element (Boc, OMe, R, or its own symbol when shown); \"\" for none (since 2.0)")
+        .def_ro("radicals", &Atom::radicals, "Radical electrons, 0 to 2 (since 2.0)")
+        .def_ro("partial", &Atom::partial, "Partial charge mark: 1 for δ+, -1 for δ−, 0 for none (since 2.0)")
         .def("__repr__", [](const Atom& a) { return "<Atom " + symbol(a) + ">"; });
 
     nb::class_<Bond>(m, "Bond", "A bond of a Document (read-only). (since 0.4)")
         .def_ro("a", &Bond::a, "Index of the first atom (a wedge starts here) (since 0.4)")
         .def_ro("b", &Bond::b, "Index of the second atom (since 0.4)")
         .def_ro("order", &Bond::order, "1, 2 or 3 (since 0.4)")
+        .def_prop_ro("style", [](const Bond& b) { return std::string(kBondStereoNames[int(b.stereo)]); },
+                     "How it's drawn, as set_bond_style takes it: 'none', 'wedge', 'partial'… (since 2.0)")
         .def("__repr__", [](const Bond& b) {
             return "<Bond " + std::to_string(b.a) + "-" + std::to_string(b.b) + " order " + std::to_string(b.order) + ">";
         });
@@ -120,16 +136,18 @@ NB_MODULE(_penzene, m) {
             "Drawing style name, from drawing_styles(); includes saved user styles (since 0.4)")
         .def(
             "add_atom",
-            [](Document& d, const std::string& label, double x, double y) {
+            [](Document& d, const std::string& label, double x, double y, bool generic) {
                 int i = d.addAtom({x, y});
-                if (!edit::applyLabel(d, i, qs(label))) {
+                if (!edit::applyLabel(d, i, qs(label), generic)) {
                     d.atoms.pop_back();
                     throw nb::value_error(("not an element, abbreviation or SMILES: " + label).c_str());
                 }
                 return i;
             },
-            "label"_a = "C", "x"_a = 0.0, "y"_a = 0.0,
-            "Add an atom: an element, an abbreviation (OMe, Boc…) or a SMILES fragment. Returns its index. (since 0.4)")
+            "label"_a = "C", "x"_a = 0.0, "y"_a = 0.0, "generic"_a = false,
+            "Add an atom: an element, an abbreviation (OMe, Boc…) or a SMILES fragment. Returns its index. "
+            "With generic=True (since 2.0), any other text is a generic atom as the app takes a typed label "
+            "(R, R1, X, Ar). (since 0.4)")
         .def(
             "add_bond",
             [](Document& d, int a, int b, int order) {
@@ -141,16 +159,17 @@ NB_MODULE(_penzene, m) {
             "a"_a, "b"_a, "order"_a = 1, "Bond atoms a and b (order 1, 2 or 3). (since 0.4)")
         .def(
             "set_label",
-            [](Document& d, int atom, const std::string& label) {
+            [](Document& d, int atom, const std::string& label, bool generic) {
                 if (atom < 0 || atom >= int(d.atoms.size())) throw nb::index_error("no such atom");
                 Document next = d;
-                if (!edit::applyLabel(next, atom, qs(label)))
+                if (!edit::applyLabel(next, atom, qs(label), generic))
                     throw nb::value_error(("not an element, abbreviation or SMILES: " + label).c_str());
                 d = next;
             },
-            "atom"_a, "label"_a,
-            "Relabel an atom, as add_atom takes a label: an element (\"C\" undoes a label), an abbreviation or a "
-            "SMILES fragment (drawn out from it, its new atoms added at the end). (since 2.0)")
+            "atom"_a, "label"_a, "generic"_a = false,
+            "Relabel an atom, as add_atom takes a label: an element (\"C\" undoes a label; show_symbol shows it), an "
+            "abbreviation or a SMILES fragment (drawn out from it, its new atoms added at the end), or with "
+            "generic=True any other text (R, X). (since 2.0)")
         .def(
             "set_bond_order",
             [](Document& d, int bond, int order) {
@@ -161,6 +180,71 @@ NB_MODULE(_penzene, m) {
                 if (order != 1) b.stereo = BondStereo::None;  // a wedge or hash is a single bond's
             },
             "bond"_a, "order"_a, "Make a bond single, double or triple (a wedge or hash goes with a single bond). (since 2.0)")
+        .def(
+            "set_charge", [](Document& d, int atom, int charge) { inRange(charge, -8, 8, "charge"), atomAt(d, atom).charge = charge; },
+            "atom"_a, "charge"_a, "Set an atom's formal charge, -8 to 8. (since 2.0)")
+        .def(
+            "set_radicals", [](Document& d, int atom, int n) { inRange(n, 0, 2, "radicals"), atomAt(d, atom).radicals = n; },
+            "atom"_a, "radicals"_a, "Set an atom's radical electrons, 0 to 2 (each takes the place of an H). (since 2.0)")
+        .def(
+            "set_partial", [](Document& d, int atom, int partial) { inRange(partial, -1, 1, "partial"), atomAt(d, atom).partial = partial; },
+            "atom"_a, "partial"_a, "Mark an atom δ+ (1) or δ− (-1), or neither (0); drawn only, not chemistry. (since 2.0)")
+        .def(
+            "show_symbol",
+            [](Document& d, int atom, bool shown) {
+                Atom& a = atomAt(d, atom);
+                const QString own = QString::fromStdString(chem::symbol(a.z));
+                if (a.z == 0 || (!a.label.isEmpty() && a.label != own))
+                    throw nb::value_error("show_symbol is for an element; this atom has a label of its own");
+                a.label = shown ? own : QString();
+            },
+            "atom"_a, "shown"_a = true,
+            "Draw an atom's element symbol even where skeletal style leaves it out (the C of R-N≡C), or "
+            "(shown=False) hide it again. Its chemistry doesn't change. (since 2.0)")
+        .def(
+            "set_bond_style",
+            [](Document& d, int bond, const std::string& style) {
+                if (bond < 0 || bond >= int(d.bonds.size())) throw nb::index_error("no such bond");
+                const auto* name = std::find_if(std::begin(kBondStereoNames), std::end(kBondStereoNames),
+                                                [&](const char* n) { return style == n; });
+                if (name == std::end(kBondStereoNames)) {
+                    std::string names;
+                    for (const char* n : kBondStereoNames) names += std::string(names.empty() ? "'" : ", '") + n + "'";
+                    throw nb::value_error(("unknown bond style: " + style + " (use " + names + ")").c_str());
+                }
+                const auto s = BondStereo(name - std::begin(kBondStereoNames));
+                Bond& b = d.bonds[bond];
+                if ((s == BondStereo::Wedge || s == BondStereo::Hash || s == BondStereo::Wavy) && b.order != 1)
+                    throw nb::value_error(("a " + style + " bond is single").c_str());
+                b.stereo = s;
+            },
+            "bond"_a, "style"_a,
+            "Draw a bond as 'none' (plain), 'wedge', 'hash', 'bold', 'dashed', 'wavy', 'interaction' "
+            "(dotted, not chemistry), 'partial' (forming or breaking in a transition state) or 'dative'. "
+            "A wedge, hash or wavy bond must be single. (since 2.0)")
+        .def(
+            "add_bracket",
+            [](Document& d, std::vector<int> atoms, bool round, const std::string& label, const std::string& superscript) {
+                if (atoms.empty()) throw nb::value_error("a bracket needs atoms");
+                for (int i : atoms) atomAt(d, i);
+                std::sort(atoms.begin(), atoms.end());
+                atoms.erase(std::unique(atoms.begin(), atoms.end()), atoms.end());
+                d.brackets.push_back({atoms, !round, qs(label), qs(superscript)});
+                return int(d.brackets.size()) - 1;
+            },
+            "atoms"_a, "round"_a = false, "label"_a = "", "superscript"_a = "",
+            "Brackets around atoms, square or round, with a subscript label at the bottom right (n) and a "
+            "superscript at the top right (‡, •+). Returns its index. (since 2.0)")
+        .def(
+            "add_text",
+            [](Document& d, double x, double y, const std::string& text) {
+                if (text.empty()) throw nb::value_error("no text");
+                d.texts.push_back({{x, y}, qs(text)});
+                return int(d.texts.size()) - 1;
+            },
+            "x"_a, "y"_a, "text"_a,
+            "Add free text, (x, y) the left end of its first baseline; formulas get subscripts (H2O). "
+            "Returns its index. (since 2.0)")
         .def(
             "remove_atoms",
             [](Document& d, std::vector<int> atoms) {
