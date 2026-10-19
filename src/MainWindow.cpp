@@ -2836,6 +2836,14 @@ void MainWindow::buildMenus() {
         if (!(next == canvas_->document())) canvas_->commit(next, what);
     };
     auto* carbons = format->addMenu(tr("&Carbon Labels"));
+    auto* circledCharges = format->addAction(tr("Circled Charges"));
+    circledCharges->setCheckable(true);
+    connect(circledCharges, &QAction::triggered, this, [this, setDisplay](bool on) {
+        setDisplay([on](Document& d) { d.circledCharges = on; }, tr("Circled charges"));
+    });
+    auto syncCharges = [this, circledCharges] { circledCharges->setChecked(canvas_->document().circledCharges); };
+    connect(canvas_, &Canvas::documentChanged, this, syncCharges);
+    syncCharges();
     auto* carbonGroup = new QActionGroup(carbons);
     using CL = Document::CarbonLabels;
     for (auto [text, mode] : {std::pair{tr("&None (skeletal)"), CL::None}, {tr("&Terminal CH₃"), CL::Terminal},

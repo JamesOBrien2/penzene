@@ -27,6 +27,7 @@ struct StyleSettings {
     bool captionItalic = false;
     double scriptScale = 0.7, subscriptOffset = 0.35, superscriptOffset = 0.7;
     bool chargesOnAtom = false, rGroupSuperscript = false, hideImplicitHydrogens = false;
+    std::optional<bool> circledCharges;  // unset: keep the document choice
     QString carbonLabels;  // empty: keep the document choice; otherwise none, terminal or all
     bool operator==(const StyleSettings&) const = default;
 };
@@ -170,6 +171,7 @@ struct Document {
     bool showAtomNumbers = false;  // draw each atom's index (from 1)
     bool showShifts = false;  // draw predicted 13C and 1H NMR shifts (#403)
     bool aromaticCircles = false;  // default for every aromatic ring
+    bool circledCharges = false;
     QString page;         // a pageSizes() name: laid out at final size; "" = no page
     QPointF pageOrigin;   // the page's top-left corner
     std::vector<std::vector<int>> aromaticCircleOverrides;  // sorted ring atom IDs with the opposite display

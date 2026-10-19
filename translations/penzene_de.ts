@@ -1129,6 +1129,14 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Circled Charges</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Circled charges</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Mark &amp;Valence Errors</source>
         <translation>&amp;Valenzfehler markieren</translation>
     </message>
@@ -2550,6 +2558,18 @@ moves off, so you can keep typing.&lt;/p&gt;
     </message>
     <message>
         <source>Carbon labels:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Plain signs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Circled signs</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Charges:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
