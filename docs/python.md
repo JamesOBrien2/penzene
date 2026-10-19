@@ -33,6 +33,8 @@ Penzene brings its own copy of Qt. Loading it into a process that already has Py
 
 Every function and property: [Python API reference](python-api.md). A worked example with sample
 files: [Batch rendering from Python](tutorials/python-batch.md).
+For inline display, independent edits and reopening exported documents, try
+[Penzene documents in Jupyter](tutorials/jupyter.md) and its downloadable notebook.
 
 ## R-group libraries
 

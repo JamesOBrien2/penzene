@@ -17,6 +17,7 @@ results should match the ones shown here.
 | [Journal-ready export](journal-export.md) | checked physical sizes, fonts, vector output and 600 dpi figures |
 | [Batch rendering from the command line](cli-batch.md) | a folder of images from MOL files, a SMILES library and SMILES strings |
 | [Batch rendering from Python](python-batch.md) | one figure per row of a CSV, and drawings inline in Jupyter |
+| [Penzene documents in Jupyter](jupyter.md) | an executable notebook with inline drawings, independent edits and file round trips |
 
 ```{toctree}
 :hidden:
@@ -33,4 +34,5 @@ office-latex
 journal-export
 cli-batch
 python-batch
+jupyter
 ```
