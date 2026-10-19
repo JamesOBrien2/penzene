@@ -32,6 +32,7 @@
 #include <QFrame>
 #include <QStackedWidget>
 #include <QElapsedTimer>
+#include <QEventLoop>
 #include <QMenuBar>
 #include <QAccessible>
 #include <QTest>
@@ -2614,6 +2615,72 @@ TEST_CASE("the colour swatch opens CPK colours; the pick paints atoms and bonds 
     CHECK(canvas->document().bonds[0].color == blue);
 }
 
+TEST_CASE("Text has its own rail button and keeps its hotkey (#622)") {
+    App app;
+    // Cocoa treats Catch's test filter as a file to open; consume launch events before the window listens.
+    QApplication::processEvents();
+    MainWindow w;
+    w.resize(1000, 700);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    QHash<QString, QToolButton*> rail;
+    for (auto* b : w.findChildren<QToolButton*>("railButton")) rail[b->text()] = b;
+    REQUIRE(rail.contains("Text"));
+    auto* text = rail["Text"];
+    REQUIRE(text->isVisible());
+    CHECK(text->accessibleName() == "Text");
+    CHECK(text->toolTip().endsWith("— t"));
+    CHECK(text->focusPolicy() == Qt::StrongFocus);
+    CHECK(text->menu() == nullptr);
+    for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
+        for (auto* b : f->findChildren<QToolButton*>()) CHECK(b->defaultAction() != text->defaultAction());
+    const QString preview = qEnvironmentVariable("PENZENE_TEXT_PREVIEW_DIR");
+    canvas->setDocumentSilently(*chem::fromSmiles("CCO"));
+    canvas->fitToDocument();
+    canvas->zoomBy(0.5);
+    QApplication::processEvents();
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/resting.png"));
+    auto drawText = [&](QPointF pos, const QString& value) {
+        QTimer::singleShot(0, [value] {
+            if (auto* d = qobject_cast<QInputDialog*>(QApplication::activeModalWidget()))
+                d->setTextValue(value), d->accept();
+        });
+        QTest::mouseClick(canvas->viewport(), Qt::LeftButton, {}, canvas->mapFromScene(pos));
+    };
+    text->click();
+    CHECK(text->isChecked());
+    for (auto* b : rail) if (b != text) CHECK_FALSE(b->isChecked());
+    for (auto* f : w.findChildren<QFrame*>("toolFlyout")) CHECK_FALSE(f->isVisible());
+    drawText({50, 30}, "H2O");
+    REQUIRE(canvas->document().texts.size() == 1);
+    CHECK(canvas->document().texts[0].text == "H2O");
+    QApplication::processEvents();
+    if (!preview.isEmpty()) {
+        REQUIRE(w.grab().save(preview + "/text-added.png"));
+        REQUIRE(writeWhole(preview + "/sample.penz", canvas->document().toJson()));
+        if (qEnvironmentVariableIsSet("PENZENE_TEXT_PREVIEW_LIVE")) {
+            w.findChild<QUndoGroup*>()->activeStack()->setClean();
+            QEventLoop loop;
+            QObject::connect(qApp, &QApplication::lastWindowClosed, &loop, &QEventLoop::quit);
+            loop.exec();
+        }
+    }
+    rail["Shapes"]->click();
+    CHECK(rail["Shapes"]->isChecked());
+    CHECK_FALSE(text->isChecked());
+    for (auto* f : w.findChildren<QFrame*>("toolFlyout")) f->hide();
+    canvas->setHotspot(-1);
+    QTest::keyClick(canvas->viewport(), Qt::Key_T);
+    CHECK(text->isChecked());
+    CHECK_FALSE(rail["Shapes"]->isChecked());
+    drawText({50, 55}, "heat");
+    REQUIRE(canvas->document().texts.size() == 2);
+    CHECK(canvas->document().texts[1].text == "heat");
+    rail["Bonds"]->click();
+    CHECK(rail["Bonds"]->isChecked());
+    CHECK_FALSE(text->isChecked());
+}
+
 TEST_CASE("White and teal theme; tools on a rail whose groups open beside it (#273, #220)") {
     CHECK(theme("Light").paper == QColor("#FFFFFF"));
     CHECK(theme("Light").window == QColor("#F3F5F6"));
@@ -2628,7 +2695,8 @@ TEST_CASE("White and teal theme; tools on a rail whose groups open beside it (#2
     CHECK_FALSE(w.findChild<QToolBar*>("modeBar"));  // no Draw / Chemistry / Figure switch
     QHash<QString, QToolButton*> rail;
     for (auto* b : w.findChildren<QToolButton*>("railButton")) rail[b->text()] = b;
-    CHECK(rail.keys().size() == 6);
+    CHECK(rail.keys().size() == 7);
+    REQUIRE(rail.contains("Text"));
     for (const char* g : {"Select", "Bonds", "Rings", "Atoms", "Arrows", "Shapes"}) REQUIRE(rail.contains(g));
     CHECK(rail["Bonds"]->isChecked());  // the single bond, chosen at start
     auto flyout = [&](const QString& g) {
@@ -2972,6 +3040,13 @@ TEST_CASE("every tool button does its job pressed through accessibility, as scre
         QFrame* fly = nullptr;
         for (auto* f : w.findChildren<QFrame*>("toolFlyout"))
             if (f->findChild<QLabel*>("flyoutTitle")->text() == rail->text().toUpper()) fly = f;
+        if (rail->text() == "Text") {
+            CHECK_FALSE(fly);
+            press(rail);
+            CHECK(rail->isChecked());
+            CHECK(w.statusBar()->currentMessage() == rail->toolTip());
+            continue;
+        }
         REQUIRE(fly);
         fly->hide();
         press(rail);
