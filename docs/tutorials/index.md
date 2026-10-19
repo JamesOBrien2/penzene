@@ -5,6 +5,7 @@ results should match the ones shown here.
 
 | Tutorial | You'll make |
 |---|---|
+| [Your first molecule in five minutes](first-molecule.md) | ethanol drawn from scratch, saved and exported |
 | [Caffeine from the keyboard](keyboard.md) | a structure drawn with hotkeys: one click, then twelve keys |
 | [A reaction scheme](reaction-scheme.md) | an aspirin synthesis with reagents and conditions, exported as SVG and PDF |
 | [A dataset of structures](dataset.md) | a grid of drugs and a descriptor table, from a `.smi` file |
@@ -16,6 +17,7 @@ results should match the ones shown here.
 ```{toctree}
 :hidden:
 
+first-molecule
 keyboard
 reaction-scheme
 dataset
