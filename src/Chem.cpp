@@ -148,6 +148,12 @@ bool attach(Document& doc, int at, const std::string& what) {
 
 bool expandLabel(Document& doc, int at) {
     const Atom was = doc.atoms[at];
+    // The atom's own element ("C" shown at a chain end): only a display choice, so charge and
+    // isotope stay (#654).
+    if (was.z > 0 && QString::fromStdString(symbol(was.z)) == was.label) {
+        doc.atoms[at].label.clear();
+        return true;
+    }
     const auto head = abbreviationHead(was.label);
     if (!attach(doc, at, was.label.toStdString())) return false;
     if (head) doc.atoms[at].charge += was.charge - head->charge;  // a charged group: N3- (#370, #589)

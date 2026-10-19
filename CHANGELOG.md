@@ -46,6 +46,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Ferrocene and other η-bound rings report formula and mass without their drawing centroids; Clean keeps each centroid at its ring centre (#619).
 
 - A MOL query atom list marked NOT ("NOT [N,O]") stays an exclusion, shown as "not N, O", instead of turning into its opposite (#610).
+- An atom shown with its own element (a terminal C, an O) keeps its charge and isotope in SMILES, formula and mass: cyanide drawn as C≡N is no longer HCN (#654).
 - The predicted NMR spectrum and its SI line count the atoms inside an abbreviation such as tBu, as if it were drawn out (#611).
 - Opening an SDF or SMILES library with records Penzene can't read names them instead of leaving them out silently; Python's `read` warns (#584).
 - Lettered compound numbers shared across pages (2a, 2b) keep one number when a step is inserted, undone or redone (#583).
