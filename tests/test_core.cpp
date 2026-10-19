@@ -3626,3 +3626,33 @@ TEST_CASE("Nature applies its complete supported label conventions and keeps the
     CHECK(styleFromJson(styleToJson(settings)) == settings);
     CHECK(Document::fromJson(doc.toJson()) == doc);
 }
+
+TEST_CASE("a bracket's superscript is saved and drawn at its top right (#658)") {
+    auto doc = Document::fromJson(R"({"format":"penzene","version":1,"atoms":[{"x":0,"y":0,"z":7},{"x":14.4,"y":0,"z":6}],
+        "bonds":[{"a":0,"b":1,"order":3}],"brackets":[{"atoms":[0,1],"label":"n","superscript":"‡"}]})");
+    REQUIRE(doc);
+    REQUIRE(doc->brackets.size() == 1);
+    CHECK(doc->brackets[0].superscript == "‡");
+    CHECK(*Document::fromJson(doc->toJson()) == *doc);
+    const double k = 10;
+    auto render = [&](const Document& d) {
+        QImage img(600, 600, QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter p(&img);
+        p.translate(300, 300);
+        p.scale(k, k);
+        p.translate(-7.2, 0);
+        paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+        return img;
+    };
+    Document plain = *doc;
+    plain.brackets[0].superscript.clear();
+    const QImage with = render(*doc), without = render(plain);
+    QRect sup;
+    for (int y = 0; y < 600; ++y)
+        for (int x = 0; x < 600; ++x)
+            if (qGray(with.pixel(x, y)) < 128 && qGray(without.pixel(x, y)) >= 128) sup |= QRect(x, y, 1, 1);
+    REQUIRE(sup.isValid());
+    CHECK(sup.left() > 300 + 0.55 * kBondLength * k);  // right of the closing bracket
+    CHECK(sup.bottom() < 300);                          // in the upper half, where the subscript isn't
+}

@@ -1360,6 +1360,18 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>e.g. ‡, •+, 3−</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Subscript (may be empty):</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Superscript (may be empty):</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&amp;Variable Attachment</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1901,10 +1913,6 @@
     </message>
     <message>
         <source>Brackets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Subscript (e.g. n; may be empty):</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

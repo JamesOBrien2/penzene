@@ -144,11 +144,13 @@ struct Text {
 
 // A shaded ring interior (ChemDraw ring fill); atoms in ring order.
 // Brackets around some atoms (a repeat unit, a complex), sized to them as they
-// move; `label` is the subscript at the bottom right, e.g. "n".
+// move; `label` is the subscript at the bottom right, e.g. "n", and `superscript` the text at the
+// top right: ‡ for a transition state, a charge such as •+ or 3− (#658).
 struct Bracket {
     std::vector<int> atoms;
     bool square = true;
     QString label;
+    QString superscript;
     bool operator==(const Bracket&) const = default;
 };
 

@@ -48,8 +48,9 @@ public:
     std::optional<QPointF> rotateHandle() const;
     // Out of the page, about the page's x then y axis; stereo is kept (Shift+Alt+drag or arrows).
     void rotate3D(double aboutX, double aboutY);
-    // Brackets around the selected atoms (square or round, with a subscript such as "n"); none removes theirs.
-    void bracketSelection(bool square, const QString& label);
+    // Brackets around the selected atoms (square or round, with a subscript such as "n" and a
+    // superscript such as ‡ or a charge); none removes theirs.
+    void bracketSelection(bool square, const QString& label, const QString& superscript = {});
     void removeBrackets();
     void variableAttachment();  // a bond from the selected atoms to a new carbon, on any one of them
     void arrangeScheme();  // the selection (or everything) as a tidy reaction scheme
