@@ -961,18 +961,23 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         p.drawEllipse(c, 0.62 * apothem, 0.62 * apothem);
     }
 
+    std::vector<bool> bracketed(doc.atoms.size());
+    for (const Bracket& b : doc.brackets)
+        for (int i : b.atoms) bracketed[i] = true;
+    std::vector<QRectF> drawn(doc.atoms.size());
     if (style.labels) style.labels->assign(doc.atoms.size(), {});
     for (size_t i = 0; i < doc.atoms.size(); ++i) {
         const auto& a = doc.atoms[i];
         p.setPen(QPen(style.markValenceErrors && info[i].valenceError ? style.error : ink(a.color), lineWidth));
         drawAtomLabel(p, doc, int(i), info[i].hydrogens, hSide(int(i)), labeled[i], st);
-        if (style.labels && (labeled[i] || a.charge)) {
+        if ((style.labels || bracketed[i]) && (labeled[i] || a.charge)) {
             QPicture label;
             QPainter q(&label);
             q.setPen(p.pen());
             drawAtomLabel(q, doc, int(i), info[i].hydrogens, hSide(int(i)), labeled[i], st);
             q.end();
-            (*style.labels)[i] = label.boundingRect();
+            drawn[i] = label.boundingRect();
+            if (style.labels) (*style.labels)[i] = drawn[i];
         }
         if (info[i].valenceError && !labeled[i]) p.drawEllipse(a.pos, 3, 3);
     }
@@ -1039,9 +1044,13 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         p.setPen(Qt::NoPen);
         p.setBrush(ink(a.color));
         size_t k = 0;
-        for (int n = 0; n < a.radicals; ++n, ++k) p.drawEllipse(a.pos + dirs[k] * r, dot, dot);
+        const auto mark = [&](QPointF c) {
+            p.drawEllipse(c, dot, dot);
+            drawn[i] |= QRectF(c - QPointF(dot, dot), QSizeF(2 * dot, 2 * dot));
+        };
+        for (int n = 0; n < a.radicals; ++n, ++k) mark(a.pos + dirs[k] * r);
         for (int n = 0; n < a.lonePairs; ++n, ++k)
-            for (double side : {-1.0, 1.0}) p.drawEllipse(a.pos + dirs[k] * r + perp(dirs[k]) * side * 1.6, dot, dot);
+            for (double side : {-1.0, 1.0}) mark(a.pos + dirs[k] * r + perp(dirs[k]) * side * 1.6);
         p.setBrush(Qt::NoBrush);
         if (a.partial) {
             const QFont f = labelFont(st, st.scriptScale);
@@ -1050,13 +1059,17 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             const QPointF at = a.pos + dirs[k] * (r + 2.5);
             p.setPen(QPen(ink(a.color), lineWidth));
             drawText(p, s, at - QPointF(fm.horizontalAdvance(s) / 2, -fm.capHeight() / 2), f);
+            drawn[i] |= QRectF(at.x() - fm.horizontalAdvance(s) / 2, at.y() - fm.capHeight() / 2 - (fm.ascent() - fm.capHeight()),
+                               fm.horizontalAdvance(s), fm.ascent() + fm.descent());
         }
     }
     // Brackets: a pair of [ ] or ( ) just outside their atoms, the label at the bottom right.
     for (const Bracket& b : doc.brackets) {
         QPolygonF pts;
         for (int i : b.atoms) pts << doc.atoms[i].pos;
-        const QRectF box = pts.boundingRect().adjusted(-0.55 * kBondLength, -0.6 * kBondLength, 0.55 * kBondLength, 0.6 * kBondLength);
+        QRectF box = pts.boundingRect().adjusted(-0.55 * kBondLength, -0.6 * kBondLength, 0.55 * kBondLength, 0.6 * kBondLength);
+        for (int i : b.atoms)
+            if (!drawn[i].isNull()) box |= drawn[i].adjusted(-1.5, -1.5, 1.5, 1.5);
         const double lip = 0.2 * kBondLength;
         p.setPen(QPen(style.ink, lineWidth));
         p.setBrush(Qt::NoBrush);
