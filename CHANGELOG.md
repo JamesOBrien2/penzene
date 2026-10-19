@@ -26,6 +26,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Drag the Erase tool across atoms, bonds, arrows and text to preview their removal, then release to erase them in one undo step; Escape cancels (#487).
 - View → Stoichiometry calculates reactant and reagent quantities from a limiting reagent, mmol scale, equivalents and optional densities; Copy as Text keeps the table for a lab notebook (#486).
 - The NMR panel imports processed ¹H and ¹³C JCAMP-DX spectra as a normalized experimental trace beneath the prediction (#553).
+- The Templates library adds 24 heterocycles, macrocycles, ligands and reagents, including cyclen, bipyridine, dppe, DMAP and CDI (#474).
 
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 
