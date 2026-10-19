@@ -1,6 +1,7 @@
 #include "Canvas.h"
 #include "Chem.h"
 #include "MainWindow.h"
+#include "Styles.h"
 #ifdef Q_OS_WIN
 #include "OleServer.h"
 #endif
@@ -45,7 +46,7 @@ int render(const QStringList& args) {
     p.addOption({{"o", "out"}, "Directory for the rendered files.", "dir"});
     p.addOption({"format", "svg, png or pdf (default svg) when writing to --out.", "ext", "svg"});
     // Not --style: QApplication claims that for widget styles.
-    p.addOption({"drawing-style", "ACS 1996 (default), JDP or RSC.", "name"});
+    p.addOption({"drawing-style", "Built-in or saved user drawing style name.", "name"});
     p.addOption({"clean", "Lay out each structure afresh with RDKit."});
     p.addOption({"peptide", "Read inputs that aren't files as peptide sequences (GFLS or Gly-Phe-Leu-Ser)."});
     p.addPositionalArgument("inputs", "SMILES, .smi, .sdf, .inchi, .mol, .penz or .cdxml");
@@ -101,7 +102,7 @@ int render(const QStringList& args) {
                 path = QDir(p.value("out")).filePath(stem + "." + format);
             }
             if (doc && p.isSet("clean")) doc = chem::clean2D(*doc);
-            if (doc && p.isSet("drawing-style")) doc->style = drawingStyle(p.value("drawing-style")).name;
+            if (doc && p.isSet("drawing-style")) applyDrawingStyle(*doc, p.value("drawing-style"));
             if (!doc || !exportDocument(*doc, path)) {
                 if (doc)  // readable: the output is what failed (a missing folder, an extension that isn't svg, png or pdf)
                     std::fprintf(stderr, "penzene: could not write %s\n", qPrintable(path));

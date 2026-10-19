@@ -1,5 +1,6 @@
 #include "Edit.h"
 #include "Chem.h"
+#include "Render.h"
 #include "Geometry.h"
 
 #include <QHash>
@@ -21,16 +22,16 @@ namespace edit {
 QPointF freeDirection(const Document& doc, int atom, int newOrder) {
     auto nbs = doc.neighbors(atom);
     QPointF p = doc.atoms[atom].pos;
-    if (nbs.empty()) return dirAt(-30);
+    if (nbs.empty()) return dirAt(-(180 - documentStyle(doc).chainAngle) / 2);
     if (nbs.size() == 1) {
         QPointF back = unit(doc.atoms[nbs[0]].pos - p);
         int have = doc.bonds[doc.bondBetween(atom, nbs[0])].order;
         if (have == 3 || newOrder == 3 || (have == 2 && newOrder == 2)) return -back;
         double base = qRadiansToDegrees(std::atan2(back.y(), back.x()));
-        // Zig-zag: of the two 120° options, take the one farther from everything else.
+        // Of the style's two chain directions, take the one farther from everything else.
         QPointF best;
         double bestScore = -1;
-        for (double off : {120.0, -120.0}) {
+        for (double off : {documentStyle(doc).chainAngle, -documentStyle(doc).chainAngle}) {
             QPointF cand = p + dirAt(base + off) * kBondLength;
             double score = 1e9;
             for (size_t j = 0; j < doc.atoms.size(); ++j)
@@ -42,10 +43,10 @@ QPointF freeDirection(const Document& doc, int atom, int newOrder) {
     return doc.awayDirection(atom);
 }
 
-QPointF snapped(QPointF from, QPointF to) {
+QPointF snapped(QPointF from, QPointF to, double increment) {
     QPointF v = to - from;
     double deg = qRadiansToDegrees(std::atan2(v.y(), v.x()));
-    return dirAt(std::round(deg / 30) * 30);
+    return dirAt(std::round(deg / increment) * increment);
 }
 
 int atomNear(const Document& doc, QPointF p, double r, int skip) {

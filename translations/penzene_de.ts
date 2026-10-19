@@ -1094,7 +1094,6 @@
     </message>
     <message>
         <source>Text</source>
-
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1123,6 +1122,10 @@
     </message>
     <message>
         <source>Ctrl+Shift+G</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Edit Styles…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2327,6 +2330,334 @@ moves off, so you can keep typing.&lt;/p&gt;
     </message>
     <message>
         <source>under the nmrshiftdb2 Database License (%1).</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Drawing Styles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Styles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Drawing styles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Style name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Name:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Style settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bonds</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Labels</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Captions</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Layout</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Relative (%)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Absolute (pt)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Double-bond spacing:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bond length:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Line width:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bold width:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wedge width:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hash spacing:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Double-bond gap:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Label margin:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Label size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Minimum label clearance:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Chain angle:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Caption size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Script size / label size:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Subscript drop / cap height:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Superscript rise / cap height:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Fixed angle increment:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source> pt</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>°</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Same as labels</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Minimum distance from an atom centre to a bond end. Set to zero to use only the label margin.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Label font:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Thin</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Extra light</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Light</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Normal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Medium</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Demi bold</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bold</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Extra bold</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Black</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Label weight:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Italic atom labels</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Caption font:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Caption weight:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Italic captions</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Place charges on the atom, before H</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Superscript R-group numbers (R¹, R²)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hide implicit hydrogens on labels</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Keep document choice</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Skeletal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Terminal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>All carbons</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Carbon labels:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Preview</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Preview scale</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Fit</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Live drawing style preview</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>100% uses one screen pixel per print point. Fit scales the preview only.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Duplicate</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Save</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Import…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Export…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enter a name and valid measurements.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>This font is unavailable; a substitute is used.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Custom style</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Built-in style · duplicate to edit</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%1 (document)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source> copy</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not save the style. Check its name, measurements and folder permissions; names must be unique.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Delete style</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Delete %1? Existing drawings keep their style.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not delete the style.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Import drawing style</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Drawing styles (*.json)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not read the style file.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Invalid style or duplicate name. Import requires a unique user style name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Export drawing style</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not write the style file.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

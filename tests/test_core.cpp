@@ -2,6 +2,7 @@
 #include "Geometry.h"
 #include "Edit.h"
 #include "Render.h"
+#include "Styles.h"
 
 #include <GraphMol/SmilesParse/SmilesParse.h>
 #include <GraphMol/Depictor/RDDepictor.h>
@@ -40,6 +41,83 @@ TEST_CASE("SMILES gives 2D coordinates") {
 
 TEST_CASE("bad SMILES is rejected") {
     CHECK_FALSE(chem::fromSmiles("C1CC"));
+}
+
+TEST_CASE("drawing style definitions preserve presets and reject invalid data (#625)") {
+    for (const auto& preset : builtInDrawingStyles()) {
+        const auto s = styleSettings(preset);
+        const auto back = styleFromJson(styleToJson(s));
+        REQUIRE(back);
+        CHECK(*back == s);
+        Document original = *chem::fromSmiles("C[C@H](N)C(=O)O");
+        original.style = preset.name;
+        Document portable = original;
+        portable.styleSettings = s;
+        CHECK(renderImage(original) == renderImage(portable));
+        CHECK(documentStyle(portable).lineWidth == Catch::Approx(preset.lineWidth));
+        CHECK(exportScale(portable) == Catch::Approx(preset.bondLength / kBondLength));
+        CHECK(Document::fromJson(portable.toJson()) == portable);
+    }
+    const auto good = styleToJson(styleSettings(drawingStyle("RSC")));
+    for (const auto& key : {"format", "version", "name", "font", "weight", "fontSize", "bondLength", "lineWidth",
+                           "boldWidth", "wedgeWidth", "hashSpacing", "bondSpacing", "labelRadius", "labelMargin"}) {
+        auto missing = good;
+        missing.remove(key);
+        CHECK_FALSE(styleFromJson(missing));
+    }
+    for (const auto& pair : {std::pair{"bondLength", QJsonValue(0)}, {"lineWidth", QJsonValue(-1)},
+          {"fontSize", QJsonValue(0)}, {"weight", QJsonValue(400.5)}, {"name", QJsonValue("  ")},
+          {"bondSpacing", QJsonValue(2)}, {"version", QJsonValue(2)}, {"hashSpacing", QJsonValue("2")}}) {
+        auto bad = good;
+        bad[pair.first] = pair.second;
+        CHECK_FALSE(styleFromJson(bad));
+    }
+}
+
+TEST_CASE("custom styles are snapshots shared by files, pages and exports (#625)") {
+    auto s = styleSettings(drawingStyle("RSC"));
+    s.name = "Penzene style regression";
+    deleteDrawingStyle(s.name);
+    struct Cleanup { QString name; ~Cleanup() { deleteDrawingStyle(name); } } cleanup{s.name};
+    REQUIRE(saveDrawingStyle(s));
+    CHECK_FALSE(saveDrawingStyle(s));
+    auto duplicate = s;
+    duplicate.name = s.name.toUpper();
+    CHECK_FALSE(saveDrawingStyle(duplicate));
+    duplicate.name = "ACS 1996";
+    CHECK_FALSE(saveDrawingStyle(duplicate));
+    CHECK_FALSE(deleteDrawingStyle("RSC"));
+    Document d = *chem::fromSmiles("[NH3]->[Pt+2](<-[NH3])(Cl)Cl");
+    d.labelRatio = 2;
+    REQUIRE(applyDrawingStyle(d, s.name));
+    CHECK(d.labelRatio == 0);
+    CHECK(d.styleSettings == s);
+    const auto png = renderImage(d);
+    const auto sheets = sheetsToJson({{"A", d}, {"B", d}});
+    const auto before = d.toJson();
+    auto changed = s;
+    changed.bondLength = 24;
+    REQUIRE(saveDrawingStyle(changed, s.name));
+    CHECK(renderImage(d) == png);
+    Document newlyApplied = d;
+    REQUIRE(applyDrawingStyle(newlyApplied, s.name));
+    CHECK(exportScale(newlyApplied) == Catch::Approx(24 / kBondLength));
+    REQUIRE(deleteDrawingStyle(s.name));
+    CHECK_FALSE(applyDrawingStyle(newlyApplied, s.name));
+    REQUIRE(Document::fromJson(before));
+    CHECK(renderImage(*Document::fromJson(before)) == png);
+    const std::vector<Sheet> expected{{"A", d}, {"B", d}};
+    CHECK(sheetsFromJson(sheets) == expected);
+    CHECK(sheetsFromJson(sheetsToJsonV1({{"A", d}, {"B", d}}))[1].doc == d);
+    CHECK(Document::fromEmbedded(renderSvg(d)) == d);
+    CHECK(Document::fromEmbedded(renderPng(d)) == d);
+    CHECK(Document::fromEmbedded(renderPdf(d)) == d);
+    CHECK(chem::toCdxml(d).contains("BondLength=\"12.2\""));
+    auto broken = QJsonDocument::fromJson(before).object();
+    auto settings = broken["styleSettings"].toObject();
+    settings["fontSize"] = -1;
+    broken["styleSettings"] = settings;
+    CHECK_FALSE(Document::fromJson(QJsonDocument(broken).toJson()));
 }
 
 TEST_CASE("deleting a bond removes only endpoints left isolated") {
@@ -431,7 +509,7 @@ TEST_CASE("a ChemDraw file's label size relative to its bonds is kept (#203)") {
     REQUIRE(small);
     CHECK(small->labelRatio == Catch::Approx(0.2));
     CHECK(documentStyle(*small).fontSize == Catch::Approx(0.2 * kBondLength));  // 6 pt labels on 30 pt bonds
-    CHECK(documentStyle(*small).labelRadius < drawingStyle("").labelRadius);
+    CHECK(QFontMetricsF(labelFont(documentStyle(*small))).capHeight() < QFontMetricsF(labelFont(drawingStyle(""))).capHeight());
     CHECK(chem::fromChemDraw(cdxml(R"(BondLength="30")"))->labelRatio == 0);  // no LabelSize: the style's own
     // Kept through .penz and CDXML.
     CHECK(Document::fromJson(small->toJson())->labelRatio == Catch::Approx(0.2));
@@ -2876,4 +2954,172 @@ TEST_CASE("old filled shapes retain their line colour (#621)") {
     CHECK(old->texts[0].scale == 1);
     CHECK(renderSvg(*old).contains("#ff0000"));
     CHECK(Document::fromJson(old->toJson()) == old);
+}
+
+TEST_CASE("portable styles retain advanced typography, layout and legacy defaults") {
+    auto settings = styleSettings(drawingStyles().front());
+    settings.name = "Advanced style regression";
+    settings.chainAngle = 100;
+    settings.snapAngle = 15;
+    settings.bondSpacingAbsolute = 1.25;
+    settings.italic = true;
+    settings.captionFont = "Helvetica";
+    settings.captionSize = 6.5;
+    settings.captionWeight = 600;
+    settings.captionItalic = true;
+    settings.scriptScale = 0.8;
+    settings.subscriptOffset = 0.25;
+    settings.superscriptOffset = 0.6;
+    settings.chargesOnAtom = true;
+    settings.rGroupSuperscript = true;
+    settings.hideImplicitHydrogens = true;
+    settings.carbonLabels = "terminal";
+    CHECK(styleFromJson(styleToJson(settings)) == settings);
+    const auto physical = styleSettings(modelStyle(settings));
+    CHECK(physical == settings);
+    Document doc = *chem::fromSmiles("CCO");
+    doc.styleSettings = settings;
+    REQUIRE(Document::fromJson(doc.toJson()));
+    CHECK(Document::fromJson(doc.toJson())->styleSettings == settings);
+    auto legacy = styleToJson(styleSettings(drawingStyles().front()));
+    for (const auto& key : {"chainAngle", "snapAngle", "bondSpacingAbsolute", "italic", "captionFont", "captionSize", "captionWeight",
+                           "captionItalic", "scriptScale", "subscriptOffset", "superscriptOffset", "chargesOnAtom",
+                           "rGroupSuperscript", "hideImplicitHydrogens", "carbonLabels"}) legacy.remove(key);
+    REQUIRE(styleFromJson(legacy));
+    CHECK(styleFromJson(legacy)->chainAngle == 120);
+    CHECK(styleFromJson(legacy)->captionSize == 0);
+    CHECK_FALSE(styleFromJson(legacy)->hideImplicitHydrogens);
+    for (const auto& key : {"chainAngle", "bondSpacingAbsolute", "captionSize", "scriptScale", "italic", "captionWeight", "captionFont", "carbonLabels"}) {
+        auto bad = styleToJson(settings);
+        bad[key] = QJsonArray{};
+        CHECK_FALSE(styleFromJson(bad));
+    }
+    const QPointF back = unit(doc.atoms[0].pos - doc.atoms[1].pos);
+    Document ethane = *chem::fromSmiles("CC");
+    ethane.styleSettings = settings;
+    const QPointF direction = edit::freeDirection(ethane, 1);
+    CHECK(QPointF::dotProduct(direction, unit(ethane.atoms[0].pos - ethane.atoms[1].pos)) == Catch::Approx(std::cos(qDegreesToRadians(100.0))));
+    CHECK(scripts("R1", true)[1] == Script::Super);
+    CHECK(scripts("H2O", true)[1] == Script::Sub);
+}
+
+TEST_CASE("fractional label sizes and independent caption sizes survive physical scaling") {
+    auto style = drawingStyle("RSC");
+    style.fontSize = 8.1;
+    const auto small = labelFont(style);
+    style.fontSize = 8.9;
+    const auto large = labelFont(style);
+    CHECK(large.pointSizeF() * QFontMetricsF(large).fontDpi() / 72 == Catch::Approx(8.9));
+    QPainterPath a, b;
+    a.addText(0, 0, small, "NH");
+    b.addText(0, 0, large, "NH");
+    CHECK(b.boundingRect().height() > a.boundingRect().height() * 1.05);
+    style.captionSize = 6.5;
+    style.captionFont = "Arial";
+    style.captionWeight = 700;
+    style.captionItalic = true;
+    const auto caption = captionStyle(style);
+    CHECK(caption.fontSize == 6.5);
+    CHECK(caption.font == "Arial");
+    CHECK(labelFont(caption).bold());
+    CHECK(labelFont(caption).italic());
+}
+
+TEST_CASE("publisher point dimensions are used without guessed wedge or hash multipliers") {
+    const auto acs = styleSettings(drawingStyle("ACS 1996"));
+    CHECK(acs.wedgeWidth == 3);
+    CHECK(acs.hashSpacing == 2.5);
+    CHECK(acs.labelMargin == 1.6);
+    CHECK(acs.labelRadius == 0);
+    const auto rsc = styleSettings(drawingStyle("RSC"));
+    CHECK(rsc.lineWidth == Catch::Approx(0.5));
+    CHECK(rsc.boldWidth == Catch::Approx(1.6));
+    CHECK(rsc.wedgeWidth == Catch::Approx(1.6));
+    CHECK(rsc.hashSpacing == Catch::Approx(1.8));
+    CHECK(rsc.fontSize == Catch::Approx(7));
+    CHECK(rsc.snapAngle == 15);
+    const QPointF snapped = edit::snapped({0, 0}, dirAt(17), rsc.snapAngle);
+    CHECK(snapped.x() == Catch::Approx(dirAt(15).x()));
+    CHECK(snapped.y() == Catch::Approx(dirAt(15).y()));
+}
+
+TEST_CASE("ChemDraw carries physical style dimensions and separate caption typography") {
+    Document doc = *chem::fromSmiles("CCO");
+    auto style = styleSettings(drawingStyle("RSC"));
+    style.captionFont = "Arial";
+    style.captionSize = 6.5;
+    style.captionWeight = 700;
+    style.captionItalic = true;
+    style.bondSpacingAbsolute = 1.25;
+    style.chainAngle = 110;
+    doc.styleSettings = style;
+    doc.texts.push_back({{0, 40}, "H2O"});
+    std::vector<QByteArray> files{chem::toCdxml(doc)};
+if (const auto cdx = chem::toCdx(doc); !cdx.isEmpty()) files.push_back(chem::cdxToCdxml(cdx));
+    for (const auto& xml : files) {
+        QXmlStreamReader reader(xml);
+        REQUIRE(reader.readNextStartElement());
+        const auto attrs = reader.attributes();
+        CHECK(attrs.value("MarginWidth").toDouble() == Catch::Approx(1.25));
+        CHECK(attrs.value("ChainAngle").toDouble() == Catch::Approx(110));
+        CHECK(attrs.value("CaptionSize").toDouble() == Catch::Approx(6.5));
+        CHECK(attrs.value("CaptionFace").toInt() == 3);
+        CHECK(attrs.value("BondSpacingAbs").toDouble() == Catch::Approx(1.25));
+        CHECK(attrs.value("BondSpacingType").toInt() == 1);
+        const auto back = chem::fromChemDraw(xml);
+        REQUIRE(back);
+        CHECK(styleSettings(documentStyle(*back)).labelMargin == Catch::Approx(1.25));
+        CHECK(styleSettings(documentStyle(*back)).bondSpacingAbsolute == Catch::Approx(1.25));
+        CHECK(styleSettings(documentStyle(*back)).chainAngle == Catch::Approx(110));
+        CHECK(captionStyle(documentStyle(*back)).font == "Arial");
+        CHECK(captionStyle(documentStyle(*back)).fontSize * exportScale(*back) == Catch::Approx(6.5));
+        REQUIRE(back->texts.size() == 1);
+        CHECK(back->texts[0].scale == Catch::Approx(1));
+    }
+}
+
+TEST_CASE("absolute double spacing and hash spacing reach the actual rendered strokes") {
+    Document doc;
+    doc.atoms = {{{0, 0}}, {{2 * kBondLength, 0}}};
+    doc.bonds = {{0, 1}};
+    auto style = styleSettings(drawingStyle("ACS 1996"));
+    style.bondSpacingAbsolute = 2;
+    doc.styleSettings = style;
+    auto ink = [&](QPointF point) {
+        const QImage image = renderImage(doc, {720, Qt::white});
+        const QPoint pixel = ((point - documentBounds(doc).topLeft()) * exportScale(doc) * 10).toPoint();
+        return image.pixelColor(pixel).lightness() < 160;
+    };
+    doc.bonds[0].order = 2;
+    CHECK(ink({kBondLength, 1}));
+    CHECK_FALSE(ink({kBondLength, 2.6}));
+    doc.styleSettings->bondSpacingAbsolute = 0;
+    CHECK_FALSE(ink({kBondLength, 1}));
+    CHECK(ink({kBondLength, 0.18 * kBondLength}));
+    doc.bonds[0].order = 1;
+    doc.bonds[0].stereo = BondStereo::Hash;
+    const auto image = renderImage(doc, {720, Qt::white});
+    const auto bounds = documentBounds(doc);
+    const int row = qRound(-bounds.top() * 10);
+    std::vector<double> centres;
+    int first = -1;
+    for (int x = 0; x < image.width(); ++x) {
+        if (image.pixelColor(x, row).lightness() < 160) { if (first < 0) first = x; }
+        else if (first >= 0) { centres.push_back((first + x - 1) / 20.0); first = -1; }
+    }
+    REQUIRE(centres.size() > 5);
+    for (size_t i = 2; i < centres.size(); ++i)
+        CHECK(centres[i] - centres[i - 1] == Catch::Approx(style.hashSpacing).margin(0.1));
+}
+
+TEST_CASE("caption typography does not change abbreviated atom labels") {
+    Document doc = *chem::fromSmiles("CO");
+    REQUIRE(edit::applyLabel(doc, 1, "OMe", true));
+    auto settings = styleSettings(drawingStyle("RSC"));
+    doc.styleSettings = settings;
+    const auto before = renderImage(doc);
+    doc.styleSettings->captionFont = "Times New Roman";
+    doc.styleSettings->captionSize = 25;
+    doc.styleSettings->captionWeight = 700;
+    CHECK(renderImage(doc) == before);
 }

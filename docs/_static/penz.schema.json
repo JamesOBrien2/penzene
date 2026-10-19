@@ -18,6 +18,7 @@
         "version": {"const": 2},
         "pages": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/page", "required": ["atoms", "bonds"]}},
         "style": {"$ref": "#/$defs/page/properties/style"},
+        "styleSettings": {"$ref": "#/$defs/styleSettings"},
         "carbonLabels": {"$ref": "#/$defs/page/properties/carbonLabels"},
         "labelRatio": {"$ref": "#/$defs/page/properties/labelRatio"},
         "showStereo": {"$ref": "#/$defs/page/properties/showStereo"},
@@ -39,6 +40,7 @@
       "type": "object",
       "description": "One page's drawing and settings.",
       "properties": {
+        "styleSettings": {"$ref": "#/$defs/styleSettings"},
         "atoms": {"type": "array", "items": {"$ref": "#/$defs/atom"}},
         "bonds": {"type": "array", "items": {"$ref": "#/$defs/bond"}},
         "arrows": {"type": "array", "items": {"$ref": "#/$defs/arrow"}},
@@ -66,6 +68,41 @@
           "required": ["name"],
           "properties": {"name": {"type": "string"}, "x": {"type": "number"}, "y": {"type": "number"}}
         }
+      }
+    },
+    "styleSettings": {
+      "type": "object",
+      "description": "Portable drawing style snapshot. Lengths are physical points; bondSpacing is a fraction of bondLength.",
+      "required": ["format", "version", "name", "bondLength", "lineWidth", "boldWidth", "wedgeWidth", "hashSpacing", "bondSpacing", "labelRadius", "labelMargin", "font", "weight", "fontSize"],
+      "properties": {
+        "format": {"const": "penzene-drawing-style"}, "version": {"const": 1},
+        "name": {"type": "string", "minLength": 1, "maxLength": 100},
+        "bondLength": {"type": "number", "minimum": 0.1, "maximum": 1000},
+        "lineWidth": {"type": "number", "minimum": 0.001, "maximum": 100},
+        "boldWidth": {"type": "number", "minimum": 0.001, "maximum": 100},
+        "wedgeWidth": {"type": "number", "minimum": 0.001, "maximum": 100},
+        "hashSpacing": {"type": "number", "minimum": 0.001, "maximum": 100},
+        "bondSpacing": {"type": "number", "minimum": 0, "maximum": 1},
+        "labelRadius": {"type": "number", "minimum": 0, "maximum": 1000},
+        "labelMargin": {"type": "number", "minimum": 0, "maximum": 100},
+        "font": {"type": "string", "minLength": 1, "maxLength": 200},
+        "weight": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "fontSize": {"type": "number", "minimum": 1, "maximum": 200},
+        "chainAngle": {"type": "number", "minimum": 1, "maximum": 179},
+        "snapAngle": {"type": "number", "minimum": 1, "maximum": 90},
+        "bondSpacingAbsolute": {"type": "number", "minimum": 0, "maximum": 1000},
+        "captionSize": {"type": "number", "minimum": 0, "maximum": 200},
+        "scriptScale": {"type": "number", "minimum": 0.05, "maximum": 2},
+        "subscriptOffset": {"type": "number", "minimum": -2, "maximum": 2},
+        "superscriptOffset": {"type": "number", "minimum": -2, "maximum": 2},
+        "italic": {"type": "boolean"},
+        "captionItalic": {"type": "boolean"},
+        "chargesOnAtom": {"type": "boolean"},
+        "rGroupSuperscript": {"type": "boolean"},
+        "hideImplicitHydrogens": {"type": "boolean"},
+        "captionFont": {"type": "string", "maxLength": 200},
+        "captionWeight": {"type": "integer", "minimum": 1, "maximum": 1000},
+        "carbonLabels": {"enum": ["", "none", "terminal", "all"]}
       }
     },
     "index": {"type": "integer", "minimum": 0, "description": "An index into atoms."},

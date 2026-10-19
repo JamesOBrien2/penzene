@@ -294,6 +294,7 @@ public:
         has_rxnAutonumberConditions = 0x00200000,
         has_rxnAutonumberFormat = 0x00400000,
 		has_showSequenceUnlinkedBranches = 0x00800000,
+        has_bondSpacingType = 0x01000000,
         
 	};
 

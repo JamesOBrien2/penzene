@@ -843,12 +843,13 @@ std::vector<QPointF> Canvas::dragPath() const {
     int target = atomNear(doc_, curPos_, kMergeRadius, pressAtom_);
     if (drag_ == Drag::Bond) {
         if (target >= 0) return {start, doc_.atoms[target].pos};
-        const QPointF dir = shift_ ? unit(curPos_ - start) : snapped(start, curPos_);  // Shift: any angle
+        const QPointF dir = shift_ ? unit(curPos_ - start) : snapped(start, curPos_, documentStyle(doc_).snapAngle);  // Shift: any angle
         return {start, start + dir * kBondLength};
     }
-    // Chain: zig-zag at ±30° around the drag direction.
-    QPointF dir = snapped(start, curPos_), side = perp(dir);
-    double step = kBondLength * std::cos(M_PI / 6), rise = kBondLength * std::sin(M_PI / 6);
+    // Chain angles follow the drawing style; ring and sp geometry stay chemical.
+    QPointF dir = snapped(start, curPos_, documentStyle(doc_).snapAngle), side = perp(dir);
+    const double angle = qDegreesToRadians((180 - documentStyle(doc_).chainAngle) / 2);
+    double step = kBondLength * std::cos(angle), rise = kBondLength * std::sin(angle);
     int n = std::max(1, int(std::round(QPointF::dotProduct(curPos_ - start, dir) / step)));
     double sign = cross(dir, curPos_ - start) >= 0 ? 1 : -1;
     std::vector<QPointF> pts{start};
@@ -1338,6 +1339,8 @@ QRectF bounds(const Document& doc, const Piece& p) {
     for (int i : p.arrows) part.arrows.push_back(doc.arrows[i]);
     for (int i : p.texts) part.texts.push_back(doc.texts[i]);
     part.style = doc.style;
+    part.styleSettings = doc.styleSettings;
+    part.labelRatio = doc.labelRatio;
     return documentBounds(part);
 }
 
@@ -1780,7 +1783,7 @@ void Canvas::duplicateSelection(QPointF dir) {
 
 Text Canvas::textFormat() const {
     Text t = textFormat_;
-    if (textSize_ > 0) t.scale = textSize_ / (documentStyle(doc_).fontSize * exportScale(doc_));
+    if (textSize_ > 0) t.scale = textSize_ / (captionStyle(documentStyle(doc_)).fontSize * exportScale(doc_));
     return t;
 }
 
