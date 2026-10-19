@@ -10,6 +10,7 @@
 #include <QPolygonF>
 #include <QSet>
 #include <optional>
+#include <functional>
 #include <vector>
 
 class QPainter;
@@ -77,7 +78,10 @@ public:
     void fitToDocument();
     void fitToSelection();  // everything when nothing is selected
 
-    void setTool(Tool t) { tool_ = t; }
+    void setTool(Tool t) { tool_ = t; emit formattingChanged(); }
+    Tool tool() const { return tool_; }
+    ArrowKind arrowKind() const { return arrowKind_; }
+    bool hasSelection() const { return !selectedAtoms_.isEmpty() || !selectedArrows_.isEmpty() || !selectedTexts_.isEmpty(); }
     void setElement(int z) { element_ = z; }
     // The Bond tool's order and style (None, Interaction or Partial).
     void setBondOrder(int order, BondStereo style = BondStereo::None) { bondOrder_ = order, bondStyle_ = style; }
@@ -85,14 +89,22 @@ public:
     void setArrow(ArrowKind kind, bool curved, bool dashed = false, OrbitalLook look = OrbitalLook::Outline,
                   bool crossed = false) {
         arrowKind_ = kind, arrowCurved_ = curved, arrowDashed_ = dashed, arrowLook_ = look, arrowCrossed_ = crossed;
+        emit formattingChanged();
     }
     void setTheme(const Theme& t) { theme_ = t, refresh(); }
     void setMarkValenceErrors(bool mark) { markValenceErrors_ = mark, refresh(); }
     void setGuides(bool grid, bool rulers) { grid_ = grid, rulers_ = rulers, viewport()->update(); }  // View menu
-    void setFillColor(QColor c) { fillColor_ = c; }
+    void setFillColor(QColor c) { fillColor_ = c; shapeFilled_ = c.isValid(); emit formattingChanged(); }
     QColor fillColor() const { return fillColor_; }
-    void setColour(QColor c) { colour_ = c; }
+    void setColour(QColor c) { colour_ = c; emit formattingChanged(); }
     QColor colour() const { return colour_; }
+    bool shapeFilled() const { return shapeFilled_; }
+    void fillSelection();
+    Text textFormat() const;
+    void setTextFont(const QString& font);
+    void setTextSize(double points);
+    void setTextBold(bool bold);
+    void setTextItalic(bool italic);
     void colourSelection();  // the current colour on the selected atoms, bonds, arrows and text
     void setArrowHead(double size);  // on the selected arrows, relative to the usual
     // The lone selected curved arrow bowed more (factor > 1) or less; a negative factor flips its side.
@@ -106,6 +118,7 @@ public:
     void ungroupSelection();  // the groups the selection touches split up  // a bold number under each selected molecule (or every one) that has none (#504)
 
 signals:
+    void formattingChanged();
     void documentChanged();
     void selectionChanged();
     void hotspotAtomChanged(int atom);  // under the pointer or the keys; -1 for none
@@ -160,7 +173,12 @@ private:
     bool arrowCurved_ = false, arrowDashed_ = false, arrowCrossed_ = false;
     OrbitalLook arrowLook_ = OrbitalLook::Outline;
     QColor fillColor_ = QColor(207, 227, 255);
-    QColor colour_ = QColor(0xFF, 0x0D, 0x0D);  // CPK oxygen
+    QColor colour_;  // Automatic
+    bool shapeFilled_ = false;
+    Text textFormat_;
+    double textSize_ = 0;  // 0: drawing style; otherwise real points
+    void formatTexts(const std::function<void(Text&)>& change);
+    void styleNewObjects(Document& next) const;
 
     QSet<int> selectedAtoms_, selectedArrows_, selectedTexts_;
     int hoverAtom_ = -1, hoverBond_ = -1;

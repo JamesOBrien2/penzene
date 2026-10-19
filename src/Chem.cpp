@@ -1106,6 +1106,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
     // (its first two entries are the page background and default ink).
     // Black is the ink (it follows the theme), so it comes back as no colour.
     std::vector<QColor> table;
+    QHash<int, QString> fonts;
     QHash<int, QPointF> nodePos;
     std::vector<std::pair<int, QStringList>> variable;  // node id, its Attachments
     auto ink = [&](const QXmlStreamAttributes& at) {
@@ -1145,6 +1146,12 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         const auto at = r.attributes();
         auto pushArrow = [&](Arrow a) {
             a.color = ink(at);
+            if (a.filled && at.hasAttribute("bgcolor")) {
+                const int i = at.value("bgcolor").toInt() - 2;
+                a.fill = i >= 0 && i < int(table.size()) ? table[i] : QColor();
+                if (at.value("bgcolor") == u"0") a.fill = Qt::black;
+                if (at.value("bgcolor") == u"1") a.fill = Qt::white;
+            }
             doc.arrows.push_back(a);
             arrowZ.push_back(at.hasAttribute("Z") ? at.value("Z").toDouble() : std::numeric_limits<double>::quiet_NaN());
         };
@@ -1154,6 +1161,7 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
         if (tag == "color")
             table.push_back(QColor(qRound(at.value("r").toDouble() * 255), qRound(at.value("g").toDouble() * 255),
                                    qRound(at.value("b").toDouble() * 255)));  // 8-bit, as the colours are chosen
+        if (tag == "font") fonts[at.value("id").toInt()] = at.value("name").toString();
         if (tag == "CDXML") {
             const double bond = at.hasAttribute("BondLength") ? std::max(1.0, at.value("BondLength").toDouble()) : 30;
             scale = kBondLength / bond;
@@ -1198,6 +1206,13 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             labelText = parentLabel;
         }
         if (tag == "s") superscript = at.value("face").toInt() & 64;
+        if (tag == "s" && text) {
+            // shortcut: one font/face per text object; add rich runs if per-word formatting is needed.
+            const QString family = fonts.value(at.value("font").toInt());
+            if (!family.isEmpty() && family != documentStyle(doc).font) text->font = family;
+            text->bold = at.value("face").toInt() & 1;
+            text->italic = at.value("face").toInt() & 2;
+        }
         if (tag == "s" && text && !text->color.isValid()) text->color = ink(at);
         if (tag == "s" && (text || labelText >= 0) && at.hasAttribute("size")) {
             const double rel = at.value("size").toDouble() * scale / documentStyle(doc).fontSize;
@@ -1840,7 +1855,12 @@ QByteArray toCdxml(const Document& doc) {
     for (const Atom& a : doc.atoms) if (a.color.isValid()) colorNo(a.color);
     for (const Bond& b : doc.bonds) if (b.color.isValid()) colorNo(b.color);
     for (const Text& tx : doc.texts) if (tx.color.isValid()) colorNo(tx.color);
-    for (const Arrow& a : doc.arrows) if (a.color.isValid()) colorNo(a.color);
+    for (const Arrow& a : doc.arrows) {
+        if (a.color.isValid()) colorNo(a.color);
+        if (a.fill.isValid()) colorNo(a.fill);
+    }
+    QStringList fonts{st.font};
+    for (const Text& t : doc.texts) if (!t.font.isEmpty() && !fonts.contains(t.font)) fonts << t.font;
     w.writeStartElement("CDXML");
     w.writeAttribute("BondLength", QString::number(st.bondLength));
     w.writeAttribute("LabelSize", QString::number(st.fontSize * physicalScale));
@@ -1862,10 +1882,12 @@ QByteArray toCdxml(const Document& doc) {
     }
     // ChemDraw draws a style run in its colour only when the run names a font.
     w.writeStartElement("fonttable");
-    w.writeEmptyElement("font");
-    w.writeAttribute("id", "3");
-    w.writeAttribute("charset", "iso-8859-1");
-    w.writeAttribute("name", st.font);
+    for (int i = 0; i < fonts.size(); ++i) {
+        w.writeEmptyElement("font");
+        w.writeAttribute("id", QString::number(i + 3));
+        w.writeAttribute("charset", "iso-8859-1");
+        w.writeAttribute("name", fonts[i]);
+    }
     w.writeEndElement();
     w.writeStartElement("page");
     w.writeAttribute("id", QString::number(id++));
@@ -1906,6 +1928,7 @@ QByteArray toCdxml(const Document& doc) {
                 if (!type.isEmpty()) w.writeAttribute("RectangleType", type.join(' '));
             }
             if (a.dashed) w.writeAttribute("LineType", "Dashed");
+            if (a.filled && a.fill.isValid()) w.writeAttribute("bgcolor", QString::number(colorNo(a.fill)));
             paint(a.color);
             w.writeEndElement();
             return;
@@ -2103,10 +2126,11 @@ QByteArray toCdxml(const Document& doc) {
         // One run per script, as ChemDraw styles them: subscript face 32, superscript 64.
         auto run = [&](Script s, const QString& chars) {
             w.writeStartElement("s");
-            w.writeAttribute("font", "3");
+            w.writeAttribute("font", QString::number(t.font.isEmpty() ? 3 : fonts.indexOf(t.font) + 3));
             w.writeAttribute("size", QString::number(st.fontSize * t.scale * physicalScale));
             paint(t.color);
-            if (s != Script::Base || t.compound) w.writeAttribute("face", QString::number((t.compound ? 1 : 0) | (s == Script::Sub ? 32 : s == Script::Super ? 64 : 0)));
+            const int face = ((t.compound || t.bold) ? 1 : 0) | (t.italic ? 2 : 0) | (s == Script::Sub ? 32 : s == Script::Super ? 64 : 0);
+            if (face) w.writeAttribute("face", QString::number(face));
             w.writeCharacters(chars);
             w.writeEndElement();
         };

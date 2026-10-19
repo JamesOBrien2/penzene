@@ -117,6 +117,14 @@ lane labels like any text.
 
 ## Arrows, text, shapes and colour
 
+The **Format toolbar** above the canvas sets the selection’s colour, shape or ring fill,
+and text font, size in points, bold and italic. Mixed selections show **Mixed**. Each
+change is one undo step. With nothing selected, choose the tool and set the format
+for the next object drawn. Font controls apply to text; Fill applies to boxes, ellipses
+and rings. **None** removes a fill. The Colour brush shares the toolbar’s colour;
+**Automatic** restores the drawing’s ink. Separate shape fills and text formatting
+are saved in `.penz` and in ChemDraw files.
+
 - Arrows: reaction, no reaction (crossed), equilibrium, resonance, retrosynthesis, and curved (electron pair) and fishhook
   (single electron) arrows. Click a curved arrow again to flip its curve. While you draw a curved arrow, the atom
   or bond under each end lights up and the end settles on it; the arrow then moves with it when the structure is

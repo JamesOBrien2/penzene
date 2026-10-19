@@ -79,6 +79,7 @@ QByteArray Document::toJson() const {
         if (a.crossed) o["crossed"] = true;
         if (a.head != 1) o["head"] = a.head;
         if (a.filled) o["filled"] = true;
+        if (a.fill.isValid()) o["fill"] = a.fill.name();
         if (a.plate) o["plate"] = true;
         if (a.group >= 0) o["group"] = a.group;
         for (auto [key, at] : {std::pair{"fromAt", a.fromAt}, std::pair{"toAt", a.toAt}})
@@ -88,6 +89,9 @@ QByteArray Document::toJson() const {
     for (const auto& t : texts) {
         QJsonObject o{{"x", t.pos.x()}, {"y", t.pos.y()}, {"text", t.text}};
         if (t.scale != 1) o["scale"] = t.scale;
+        if (!t.font.isEmpty()) o["font"] = t.font;
+        if (t.bold) o["bold"] = true;
+        if (t.italic) o["italic"] = true;
         if (t.color.isValid()) o["color"] = t.color.name();
         if (t.compound) o["compound"] = true;
         if (t.series) o["series"] = t.series;
@@ -248,6 +252,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         a.crossed = o["crossed"].toBool();
         if (const double head = o["head"].toDouble(1); std::isfinite(head)) a.head = std::clamp(head, 0.25, 4.0);
         a.filled = o["filled"].toBool();
+        a.fill = QColor(o["fill"].toString());
         a.plate = o["plate"].toBool() && a.kind == ArrowKind::Box;
         a.group = std::max(-1, o["group"].toInt(-1));
         for (auto [key, at] : {std::pair{"fromAt", &a.fromAt}, std::pair{"toAt", &a.toAt}}) {
@@ -262,6 +267,9 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         auto o = v.toObject();
         Text t{{o["x"].toDouble(), o["y"].toDouble()}, o["text"].toString(), o["scale"].toDouble(1),
                QColor(o["color"].toString())};
+        t.font = o["font"].toString();
+        t.bold = o["bold"].toBool();
+        t.italic = o["italic"].toBool();
         if (!(t.scale > 0)) t.scale = 1;  // files saved before #316 could hold 0
         t.compound = o["compound"].toBool();
         t.series = std::max(0, o["series"].toInt());
