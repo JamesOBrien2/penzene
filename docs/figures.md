@@ -54,6 +54,17 @@ journal column) and a margin.
 :title: Light and dark
 The canvas can follow the system's light or dark mode or use a theme (**View → Theme**). Exports
 are always black on clear or white.
+
+**Import Theme…** and **Export Theme…** in that menu share themes as JSON files. Imported themes
+are saved in the app data `themes` folder and appear in the menu and Preferences after restarting.
+Importing a different saved theme with the same name asks before replacing it. Built-in presets
+cannot be replaced; change the JSON's `name` to save an edited preset as a new theme. Exporting
+System captures its current Light or Dark colours.
+
+The [version 1 schema](_static/theme.schema.json) defines the file; the
+[example theme](_static/theme-example.json) can be imported directly. Colours use `#RRGGBB` or
+`#AARRGGBB`, including the canvas, interface and border colours. Unsupported versions and invalid
+colours are refused, leaving the current theme unchanged.
 ```
 
 ::::

@@ -6,6 +6,11 @@
 #include <QBuffer>
 #include <QFile>
 #include <QFileInfo>
+#include <QCryptographicHash>
+#include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QStandardPaths>
 #include <QImage>
 #include <QPaintEngine>
 #include <QPainter>
@@ -1346,7 +1351,7 @@ bool writeWhole(const QString& path, const QByteArray& data) {
     return f.open(QIODevice::WriteOnly) && f.write(data) == data.size() && f.commit();
 }
 
-const std::vector<Theme>& themes() {
+static const std::vector<Theme>& builtInThemes() {
     auto cat = [](const char* name, bool dark, const char* base, const char* mantle, const char* surface,
                   const char* text, const char* red, const char* blue, const char* green) {
         return Theme{name, dark, QColor(base), QColor(text), QColor(red), QColor(blue), QColor(green),
@@ -1369,17 +1374,88 @@ const std::vector<Theme>& themes() {
     return t;
 }
 
-const Theme& theme(const QString& name) {
+static QString themeFolder() {
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/themes";
+}
+
+bool Theme::isBuiltIn() const {
+    return std::any_of(builtInThemes().begin(), builtInThemes().end(), [&](const Theme& t) { return name == t.name; });
+}
+
+std::vector<Theme> themes() {
+    auto all = builtInThemes();
+    const QDir dir(themeFolder());
+    for (const QString& name : dir.entryList({"*.json"}, QDir::Files, QDir::Name)) {
+        QFile file(dir.filePath(name));
+        if (!file.open(QIODevice::ReadOnly)) continue;
+        if (auto t = Theme::fromJson(file.readAll()); t &&
+            std::none_of(all.begin(), all.end(), [&](const Theme& other) { return t->name == other.name; }))
+            all.push_back(std::move(*t));
+    }
+    return all;
+}
+
+Theme theme(const QString& name) {
     for (const auto& t : themes())
         if (t.name == name) return t;
-    return themes()[0];
+    return builtInThemes()[0];
 }
 
 Chrome chrome(const Theme& t) {
+    if (t.chromeColors.border.isValid()) return t.chromeColors;
     if (t.name == "Light") return {QColor("#DDE1E4"), QColor("#5E6770"), QColor("#E1F5EE")};
     if (t.name == "Dark") return {QColor("#353A40"), QColor("#A3AAB2"), QColor("#0B3B30")};
     // The Catppuccin themes keep their own colours.
     return {t.surface.lighter(125), t.text, t.dark ? t.surface.lighter(145) : t.surface.darker(110)};
+}
+
+QByteArray Theme::toJson() const {
+    QJsonObject colors;
+    const Chrome c = chrome(*this);
+    for (auto [key, value] : {std::pair{"paper", paper}, {"ink", ink}, {"error", error}, {"accent", accent},
+                              {"hotspot", hotspot}, {"window", window}, {"surface", surface}, {"text", text},
+                              {"border", c.border}, {"secondary", c.secondary}, {"accentBackground", c.accentBg}})
+        colors[key] = value.isValid() ? QJsonValue(value.name(QColor::HexArgb)) : QJsonValue(QJsonValue::Null);
+    return QJsonDocument(QJsonObject{{"format", "penzene-theme"}, {"version", 1}, {"name", name},
+                                    {"dark", dark}, {"colors", colors}}).toJson();
+}
+
+std::optional<Theme> Theme::fromJson(const QByteArray& data) {
+    const QJsonObject o = QJsonDocument::fromJson(data).object();
+    if (o["format"] != "penzene-theme" || o["version"].toDouble() != 1 || !o["dark"].isBool() ||
+        !o["name"].isString() || o["name"].toString().trimmed().isEmpty() || !o["colors"].isObject()) return std::nullopt;
+    Theme t;
+    t.name = o["name"].toString().trimmed();
+    t.dark = o["dark"].toBool();
+    const QJsonObject colors = o["colors"].toObject();
+    const bool system = t.name == "System";
+    static const QRegularExpression hex("^#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$");
+    for (auto [key, value] : {std::pair{"paper", &t.paper}, {"ink", &t.ink}, {"error", &t.error}, {"accent", &t.accent},
+                              {"hotspot", &t.hotspot}, {"window", &t.window}, {"surface", &t.surface}, {"text", &t.text},
+                              {"border", &t.chromeColors.border}, {"secondary", &t.chromeColors.secondary},
+                              {"accentBackground", &t.chromeColors.accentBg}}) {
+        const QJsonValue color = colors[key];
+        if (system && color.isNull() && QString(key) != "paper" && QString(key) != "ink" &&
+            QString(key) != "error" && QString(key) != "accent" && QString(key) != "hotspot") {
+            *value = QColor();
+            continue;
+        }
+        if (!color.isString() || !hex.match(color.toString()).hasMatch()) return std::nullopt;
+        *value = QColor(color.toString());
+        if (!value->isValid()) return std::nullopt;
+    }
+    return t;
+}
+
+bool saveUserTheme(const Theme& t) {
+    const QByteArray data = t.toJson();
+    if (!Theme::fromJson(data)) return false;
+    for (const auto& builtIn : builtInThemes())
+        if (t.name == builtIn.name) return data == builtIn.toJson();  // presets stay read-only
+    const QDir dir(themeFolder());
+    if (!QDir().mkpath(dir.path())) return false;
+    const QString file = QString::fromLatin1(QCryptographicHash::hash(t.name.toUtf8(), QCryptographicHash::Sha256).toHex()) + ".json";
+    return writeWhole(dir.filePath(file), data);
 }
 
 #ifdef Q_OS_WIN

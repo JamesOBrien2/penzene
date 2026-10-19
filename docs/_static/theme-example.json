@@ -1,0 +1,19 @@
+{
+  "format": "penzene-theme",
+  "version": 1,
+  "name": "Shared Light",
+  "dark": false,
+  "colors": {
+    "paper": "#ffffffff",
+    "ink": "#ff1d2125",
+    "error": "#ffdc2828",
+    "accent": "#ff0f6e56",
+    "hotspot": "#ff0f6e56",
+    "window": "#fff3f5f6",
+    "surface": "#ffffffff",
+    "text": "#ff1d2125",
+    "border": "#ffdde1e4",
+    "secondary": "#ff5e6770",
+    "accentBackground": "#ffe1f5ee"
+  }
+}

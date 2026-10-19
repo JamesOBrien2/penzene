@@ -1101,6 +1101,42 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Import Theme…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Export Theme…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Import Theme</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Theme files (*.json)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not read a valid version 1 Penzene theme.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Built-in themes cannot be replaced; use a different name.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Replace the saved theme &quot;%1&quot;?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Export Theme</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not write the theme file.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>SMAR&amp;TS</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1506,6 +1542,10 @@
     </message>
     <message>
         <source>Text (click to add or edit; H2O is set as H₂O) — t</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not save the theme.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
