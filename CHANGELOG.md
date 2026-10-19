@@ -17,6 +17,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 - The Format toolbar sets colours, separate shape fills and text fonts, sizes, bold and italic, on selections or the next object drawn (#621).
 - Text has its own button on the tool rail, with the same `t` shortcut (#622).
+- A tutorial covers figures in Word, PowerPoint and LaTeX, with vector examples and the Windows drawing-object workflow (#607).
 
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 
