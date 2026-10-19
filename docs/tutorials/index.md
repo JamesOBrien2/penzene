@@ -7,6 +7,7 @@ results should match the ones shown here.
 |---|---|
 | [Your first molecule in five minutes](first-molecule.md) | ethanol drawn from scratch, saved and exported |
 | [Caffeine from the keyboard](keyboard.md) | a structure drawn with hotkeys: one click, then twelve keys |
+| [Coming from another editor](coming-from-another-editor.md) | a CDXML drawing edited with familiar hotkeys and saved for another editor |
 | [A reaction scheme](reaction-scheme.md) | an aspirin synthesis with reagents and conditions, exported as SVG and PDF |
 | [A dataset of structures](dataset.md) | a grid of drugs and a descriptor table, from a `.smi` file |
 | [A publication figure](publication-figure.md) | a coloured structure in a journal style, at print size |
@@ -19,6 +20,7 @@ results should match the ones shown here.
 
 first-molecule
 keyboard
+coming-from-another-editor
 reaction-scheme
 dataset
 publication-figure
