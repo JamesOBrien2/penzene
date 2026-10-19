@@ -43,6 +43,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Metal ligands keep their hydrogens and valence, including typed ammine and aqua labels; dative arrows and ligand abbreviations round-trip through chemistry formats (#616).
 
 - Bonds keep clear of wide element labels such as Pt and Fe, on screen and in exports (#617).
+- A carbon shown with its own label (C) is drawn like any element: its charge keeps clear of its bonds instead of sitting on a triple bond (⁻C≡N), and it shows its hydrogens (#656).
 - Ferrocene and other η-bound rings report formula and mass without their drawing centroids; Clean keeps each centroid at its ring centre (#619).
 
 - A MOL query atom list marked NOT ("NOT [N,O]") stays an exclusion, shown as "not N, O", instead of turning into its opposite (#610).
