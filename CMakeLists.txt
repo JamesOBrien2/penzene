@@ -31,7 +31,7 @@ endif()
 
 # The engine: document, chemistry, editing and rendering. QtGui only, no
 # widgets, so it can back a command line or Python module as well as the app.
-add_library(penzene_core STATIC src/Document.cpp src/Chem.cpp src/Edit.cpp src/Render.cpp src/Styles.cpp src/ChemDrawIO.cpp)
+add_library(penzene_core STATIC src/Document.cpp src/Chem.cpp src/Edit.cpp src/Render.cpp src/Styles.cpp src/ChemDrawIO.cpp src/Jcamp.cpp)
 target_include_directories(penzene_core PUBLIC src)
 target_compile_definitions(penzene_core PUBLIC PENZENE_VERSION="${PROJECT_VERSION}")
 # Revvity's ChemDraw file library (BSD-3, third_party/chemdraw): binary CDX in and out on
