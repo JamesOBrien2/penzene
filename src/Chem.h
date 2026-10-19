@@ -176,6 +176,7 @@ struct Shift {
     int hydrogens = 0;  // on the atom, drawn or implicit
     int symmetry = -1;  // equal for atoms the molecule can't tell apart
     int coupled = 0;    // H on neighbouring carbons outside the atom's own set: n in the n + 1 rule (#552)
+    bool singleCouplingSet = false;  // all splitting H belong to one symmetry class
 };
 std::vector<Shift> predictShifts(const Document& doc);  // one per drawn atom with a prediction, in atom order
 // A predicted 13C or 1H spectrum as sticks, one per set of equivalent atoms, highest ppm first; count is the
@@ -186,7 +187,13 @@ struct NmrStick {
     std::vector<int> atoms;
     bool weak = false;  // fewer than three spheres matched
     int coupled = 0;    // 1H: first order, the stick is a multiplet of coupled + 1 lines
-    QString multiplicity() const { return coupled < 4 ? QString("sdtq"[coupled]) : "m"; }
+    bool singleCouplingSet = false;
+    QString multiplicity() const {
+        if (coupled >= 0 && coupled < 4) return QString("sdtq"[coupled]);
+        if (singleCouplingSet && coupled >= 4 && coupled <= 6)
+            return QStringList{"quint", "sext", "sept"}[coupled - 4];
+        return "m";
+    }
 };
 std::vector<NmrStick> nmrSticks(const Document& doc, bool proton, const std::vector<int>& only = {});
 // The sticks as a supporting-information line to fill in, e.g. "1H NMR (predicted) δ 3.69 (q, 2H), 1.22 (t, 3H)."
