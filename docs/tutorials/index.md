@@ -14,6 +14,7 @@ results should match the ones shown here.
 | [Supporting information and descriptor tables](supporting-information.md) | copied properties, dataset CSVs and a clearly labelled predicted NMR line |
 | [A publication figure](publication-figure.md) | a coloured structure in a journal style, at print size |
 | [Figures in Word, PowerPoint and LaTeX](office-latex.md) | a vector picture, an editable Windows drawing object and a LaTeX figure |
+| [Journal-ready export](journal-export.md) | checked physical sizes, fonts, vector output and 600 dpi figures |
 | [Batch rendering from the command line](cli-batch.md) | a folder of images from MOL files, a SMILES library and SMILES strings |
 | [Batch rendering from Python](python-batch.md) | one figure per row of a CSV, and drawings inline in Jupyter |
 
@@ -29,6 +30,7 @@ dataset
 supporting-information
 publication-figure
 office-latex
+journal-export
 cli-batch
 python-batch
 ```

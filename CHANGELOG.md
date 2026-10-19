@@ -31,6 +31,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - A tutorial for users moving from another editor covers hotspot shortcuts, drawing styles and CDXML editing (#603).
 - A Newman and Fischer tutorial explains editing projections and reading Fischer stereochemistry as SMILES; the anti-butane Newman template now places its methyl groups opposite one another (#604).
 - A supporting-information tutorial covers calculated properties, descriptor CSVs and predicted NMR SI lines, with reproducible sample outputs (#605).
+- A journal-export tutorial covers physical sizes, fonts, DPI and final figure checks, with vector and 600 dpi examples (#606).
 
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 
