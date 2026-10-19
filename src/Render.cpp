@@ -170,30 +170,34 @@ struct ChargeShape {
 
 static double chargeRadius(const DrawingStyle& st) { return 0.6 * QFontMetricsF(labelFont(st)).capHeight(); }
 
+static bool circleCharge(const QString& text, bool enabled) { return enabled && text.size() == 1; }
+
+static int labelCharge(const Atom& a) {
+    if (a.label.isEmpty()) return a.charge;
+    const auto head = chem::abbreviationHead(a.label);
+    return a.charge - (head ? head->charge : 0);
+}
+
 static ChargeShape chargeShape(const QString& text, const DrawingStyle& st, bool circled) {
     const QFont font = labelFont(st, st.scriptScale);
     ChargeShape shape;
-    if (!circled) { shape.glyph.addText({}, font, text); return shape; }
-    const QString magnitude = text.left(text.size() - 1);
-    shape.glyph.addText({}, font, magnitude);
-    QPainterPath sign;
-    sign.addText({}, font, text.right(1));
+    shape.glyph.addText({}, font, text);
+    if (!circleCharge(text, circled)) return shape;
     const double radius = chargeRadius(st);
-    const double center = magnitude.isEmpty() ? radius : shape.glyph.boundingRect().right() + 0.8 + radius;
-    const QPointF at(center, -QFontMetricsF(font).capHeight() / 2);
-    shape.glyph.addPath(sign.translated(at - sign.boundingRect().center()));
+    const QPointF at(radius, -QFontMetricsF(font).capHeight() / 2);
+    shape.glyph.translate(at - shape.glyph.boundingRect().center());
     shape.circle = QRectF(at - QPointF(radius, radius), QSizeF(2 * radius, 2 * radius));
     return shape;
 }
 
 static void drawCharge(QPainter& p, const QString& text, QPointF at, const DrawingStyle& st, bool circled, QRectF* bounds = nullptr) {
     const auto shape = chargeShape(text, st, circled);
-    if (bounds) {
+    if (bounds && !shape.circle.isEmpty()) {
         const double pad = p.pen().widthF() / 2;
         *bounds = shape.bounds().translated(at).adjusted(-pad, -pad, pad, pad);
     }
     p.fillPath(shape.glyph.translated(at), p.pen().color());
-    if (circled) p.drawEllipse(shape.circle.translated(at));
+    if (!shape.circle.isEmpty()) p.drawEllipse(shape.circle.translated(at));
 }
 
 static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const DrawingStyle& st, bool circled, QRectF* chargeBounds = nullptr) {
@@ -205,8 +209,7 @@ static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const D
                                : a.pos.x() - fm.horizontalAdvance(s.front()) / 2;
     p.fillPath(path.translated(x, 0), p.pen().color());
     // A charge beyond the group's own, as typed (N3-, #370), raised after the label like an element's.
-    const auto head = chem::abbreviationHead(a.label);
-    if (const int extra = a.charge - (head ? head->charge : 0)) {
+    if (const int extra = labelCharge(a)) {
         QString c = QString(extra > 0 ? "+" : "−");
         if (std::abs(extra) > 1) c.prepend(QString::number(std::abs(extra)));
         drawCharge(p, c, {x + path.boundingRect().right(), base - fm.capHeight() * st.superscriptOffset}, st, circled, chargeBounds);
@@ -269,7 +272,7 @@ static std::optional<QPointF> chargeDirection(const Document& doc, int i, int hy
 
 // Where a charge `c` in font `sub` is drawn from, its glyph centred just past `clear` along `dir`.
 static QPointF chargeAt(QPointF pos, QPointF dir, double clear, const QString& c, const DrawingStyle& st, bool circled) {
-    if (circled) {
+    if (circleCharge(c, circled)) {
         const QRectF box = chargeShape(c, st, true).bounds();
         const QRectF centered = box.translated(-box.center());
         return pos + dir * (clear + exitAlong(centered, dir) + 0.8) - box.center();
@@ -334,7 +337,7 @@ static void drawAtomLabel(QPainter& p, const Document& doc, int i, int hydrogens
     QString c = a.charge > 0 ? "+" : "−";
     if (std::abs(a.charge) > 1) c.prepend(QString::number(std::abs(a.charge)));
     const auto d = chargeDirection(doc, i, 0, HSide::Right);
-    const QPointF at = (d || doc.circledCharges) ? chargeAt(a.pos, d.value_or(unit(QPointF(1, -1))), 2.5, c, st, doc.circledCharges)
+    const QPointF at = (d || circleCharge(c, doc.circledCharges)) ? chargeAt(a.pos, d.value_or(unit(QPointF(1, -1))), 2.5, c, st, doc.circledCharges)
                                                : a.pos + QPointF(2, -3);
     drawCharge(p, c, at, st, doc.circledCharges, chargeBounds);
 }
@@ -358,7 +361,7 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
             clear = std::max(clear, st.labelMargin + exitAlong(box, toward));
         }
         if (!massNumber(a).isEmpty()) clear = std::max(clear, st.labelMargin + exitAlong(massBox(a, st), toward));
-        if (!chargeBoxes.empty() && a.charge) {
+        if (!chargeBoxes.empty() && !chargeBoxes[atom].isEmpty()) {
             const double edge = exitAlong(chargeBoxes[atom].translated(-a.pos), toward);
             if (edge > 0) clear = std::max(clear, st.labelMargin + edge);
         }
@@ -852,7 +855,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
     if (doc.circledCharges) {
         chargeBoxes.resize(doc.atoms.size());
         for (size_t i = 0; i < doc.atoms.size(); ++i) {
-            if (!doc.atoms[i].charge) continue;
+            if (std::abs(labelCharge(doc.atoms[i])) != 1) continue;
             QPicture label;
             QPainter q(&label);
             q.setPen(QPen(Qt::black, lineWidth));
@@ -1181,7 +1184,7 @@ QRectF documentBounds(const Document& doc) {
         double w = fs * std::max(1.5, 0.7 * chars);
         // A labelled atom with bonds on both sides may stack its H above or below.
         double h = fs * (degree[i] >= 2 && hasLabel(doc, int(i), degree) ? 2.2 : 1);
-        if (doc.circledCharges && a.charge) w += chargeRadius(st), h += chargeRadius(st);
+        if (doc.circledCharges && std::abs(labelCharge(a)) == 1) w += chargeRadius(st), h += chargeRadius(st);
         grow(QRectF(a.pos, a.pos).adjusted(-w, -h, w, h));
     }
     for (const auto& a : doc.arrows) grow(arrowPath(a).boundingRect().adjusted(-4, -4, 4, 4));
