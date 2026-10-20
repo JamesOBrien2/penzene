@@ -199,6 +199,10 @@ void editDrawingStyles(QWidget* parent, const Document& document) {
                             {QObject::tr("Terminal"), "terminal"}, {QObject::tr("All carbons"), "all"}})
         carbons->addItem(pair.first, pair.second);
     layout->addRow(QObject::tr("Carbon labels:"), carbons);
+    auto* circles = new QComboBox;
+    circles->setObjectName("styleCircledCharges");
+    circles->addItems({QObject::tr("Keep document choice"), QObject::tr("Plain signs"), QObject::tr("Circled signs")});
+    layout->addRow(QObject::tr("Charges:"), circles);
 
     auto* fontNotice = new QLabel;
     fontNotice->setWordWrap(true);
@@ -252,6 +256,7 @@ void editDrawingStyles(QWidget* parent, const Document& document) {
     Document sample = chem::fromSmiles("[NH3]->[Pt+2](<-[NH3])(Cl)Cl").value_or(Document());
     sample.append(chem::fromSmiles("C[C@H](O)[C@@H](N)C(=O)O").value_or(Document()), {0, 55});
     sample.texts.push_back({{0, 100}, "R1 · conditions"});
+    sample.circledCharges = document.circledCharges;
     auto draft = [&] {
         if (!editing) return source;
         StyleSettings s = source;
@@ -270,6 +275,7 @@ void editDrawingStyles(QWidget* parent, const Document& document) {
         s.rGroupSuperscript = rGroupSuperscript->isChecked();
         s.hideImplicitHydrogens = hideHydrogens->isChecked();
         s.carbonLabels = carbons->currentData().toString();
+        s.circledCharges = circles->currentIndex() == 0 ? std::nullopt : std::optional<bool>(circles->currentIndex() == 2);
         return s;
     };
     auto redraw = [&] {
@@ -282,6 +288,7 @@ void editDrawingStyles(QWidget* parent, const Document& document) {
         }
         sample.style = s.name;
         sample.styleSettings = s;
+        sample.circledCharges = s.circledCharges.value_or(document.circledCharges);
         sample.carbonLabels = s.carbonLabels == "all" ? Document::CarbonLabels::All :
             s.carbonLabels == "terminal" ? Document::CarbonLabels::Terminal : Document::CarbonLabels::None;
         preview->document = sample;
@@ -308,6 +315,7 @@ void editDrawingStyles(QWidget* parent, const Document& document) {
         rGroupSuperscript->setChecked(s.rGroupSuperscript);
         hideHydrogens->setChecked(s.hideImplicitHydrogens);
         carbons->setCurrentIndex(std::max(0, carbons->findData(s.carbonLabels)));
+        circles->setCurrentIndex(!s.circledCharges ? 0 : *s.circledCharges ? 2 : 1);
         font->setCurrentText(s.font);
         if (weight->findData(s.weight) < 0) weight->addItem(QString::number(s.weight), s.weight);
         weight->setCurrentIndex(weight->findData(s.weight));
@@ -316,7 +324,7 @@ void editDrawingStyles(QWidget* parent, const Document& document) {
         font->setEnabled(editable);
         weight->setEnabled(editable);
         for (QWidget* widget : std::initializer_list<QWidget*>{gapMode, italic, captionFont, captionWeight, captionItalic,
-                                chargesOnAtom, rGroupSuperscript, hideHydrogens, carbons}) widget->setEnabled(editable);
+                                chargesOnAtom, rGroupSuperscript, hideHydrogens, carbons, circles}) widget->setEnabled(editable);
         name->setReadOnly(!editable || !original.isEmpty());  // Duplicate supplies a new name; saved names stay stable.
         save->setEnabled(editable);
         save->setDefault(editable);
@@ -406,6 +414,7 @@ void editDrawingStyles(QWidget* parent, const Document& document) {
     QObject::connect(captionFont, &QComboBox::editTextChanged, &dialog, redraw);
     QObject::connect(captionWeight, &QComboBox::currentIndexChanged, &dialog, redraw);
     QObject::connect(carbons, &QComboBox::currentIndexChanged, &dialog, redraw);
+    QObject::connect(circles, &QComboBox::currentIndexChanged, &dialog, redraw);
     QObject::connect(gapMode, &QComboBox::currentIndexChanged, &dialog, [&](int index) {
         if (loading) return;
         QSignalBlocker quiet(numbers[5]);

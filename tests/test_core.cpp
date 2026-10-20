@@ -16,6 +16,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPainter>
+#include <QPicture>
 #include <QTemporaryDir>
 #include <QXmlStreamReader>
 #include <set>
@@ -118,6 +119,70 @@ TEST_CASE("custom styles are snapshots shared by files, pages and exports (#625)
     settings["fontSize"] = -1;
     broken["styleSettings"] = settings;
     CHECK_FALSE(Document::fromJson(QJsonDocument(broken).toJson()));
+}
+
+TEST_CASE("circled charges cover signs, magnitudes, bare carbons and portable styles (#623)") {
+    for (const std::string smiles : {"[Na+]", "[Cl-]", "[Pt+2]", "C[CH2+]", "[N+](C)(C)(C)C", "[O-][N+](=O)c1ccccc1"}) {
+        INFO(smiles);
+        Document d = *chem::fromSmiles(smiles);
+        REQUIRE(chem::properties(d));
+        const auto formula = chem::properties(d)->formula;
+        const auto chemistry = chem::toSmiles(d);
+        const QRectF plain = outputBounds(d);
+        const auto image = renderImage(d);
+        d.circledCharges = true;
+        CHECK(chem::properties(d)->formula == formula);
+        CHECK(chem::toSmiles(d) == chemistry);
+        CHECK(renderImage(d) != image);
+        CHECK(outputBounds(d).width() >= plain.width());
+        if (d.atoms.size() == 1) CHECK(outputBounds(d).width() > plain.width());
+        CHECK(renderSvg(d).contains("<circle"));
+        CHECK(Document::fromJson(d.toJson()) == d);
+        CHECK(Document::fromEmbedded(renderPng(d)) == d);
+        const auto pages = sheetsFromJson(sheetsToJson({{"A", d}, {"B", d}}));
+        REQUIRE(pages.size() == 2);
+        CHECK(pages[1].doc.circledCharges);
+        QPicture picture;
+        QPainter p(&picture);
+        std::vector<QRectF> labels;
+        RenderStyle style;
+        style.labels = &labels;
+        paintDocument(p, d, style);
+        p.end();
+        REQUIRE(labels.size() == d.atoms.size());
+        for (size_t i = 0; i < d.atoms.size(); ++i)
+            if (d.atoms[i].charge) CHECK_FALSE(labels[i].isEmpty());
+        CHECK(outputBounds(d).contains(QRectF(picture.boundingRect())));
+        auto settings = styleSettings(drawingStyle("RSC"));
+        settings.name = "Circled custom style";
+        settings.fontSize = 12;
+        d.style = settings.name;
+        d.styleSettings = settings;
+        CHECK(renderSvg(d).contains("<circle"));
+        CHECK(Document::fromEmbedded(renderSvg(d)) == d);
+    }
+    Document group;
+    const int atom = group.addAtom({}, 8);
+    REQUIRE(edit::applyLabel(group, atom, "OMe"));
+    group.atoms[atom].charge = 1;
+    group.circledCharges = true;
+    CHECK(renderSvg(group).contains("<circle"));
+    CHECK_FALSE(Document::fromJson(R"({"format":"penzene","version":1,"atoms":[],"bonds":[]})")->circledCharges);
+}
+
+TEST_CASE("circled charges preserve visible bonds around a crowded metal centre (#623)") {
+    for (const auto& preset : builtInDrawingStyles()) {
+        INFO(preset.name.toStdString());
+        Document d = *chem::fromSmiles("[NH3]->[Pt+](<-[NH3])(Cl)Cl");
+        REQUIRE(applyDrawingStyle(d, preset.name));
+        // Font metrics can trim a crowded bond; adding a circle must preserve the normal rendering.
+        const auto visible = renderSvg(d).count("<polyline");
+        REQUIRE(visible > 0);
+        d.circledCharges = true;
+        const auto circled = renderSvg(d);
+        REQUIRE(circled.contains("<circle"));
+        CHECK(circled.count("<polyline") == visible);
+    }
 }
 
 TEST_CASE("deleting a bond removes only endpoints left isolated") {
@@ -3110,6 +3175,29 @@ TEST_CASE("absolute double spacing and hash spacing reach the actual rendered st
     REQUIRE(centres.size() > 5);
     for (size_t i = 2; i < centres.size(); ++i)
         CHECK(centres[i] - centres[i - 1] == Catch::Approx(style.hashSpacing).margin(0.1));
+}
+
+TEST_CASE("styles carry an optional charge-circle choice without locking document overrides") {
+    auto style = styleSettings(drawingStyle("RSC"));
+    style.name = "Charge style regression";
+    style.circledCharges = false;
+    deleteDrawingStyle(style.name);
+    struct Cleanup { QString name; ~Cleanup() { deleteDrawingStyle(name); } } cleanup{style.name};
+    REQUIRE(saveDrawingStyle(style));
+    Document doc = *chem::fromSmiles("C[NH3+]");
+    doc.circledCharges = true;
+    REQUIRE(applyDrawingStyle(doc, style.name));
+    CHECK_FALSE(doc.circledCharges);
+    CHECK(doc.styleSettings->circledCharges == false);
+    CHECK(Document::fromJson(doc.toJson()) == doc);
+    doc.circledCharges = true;
+    CHECK(Document::fromJson(doc.toJson())->circledCharges);
+    auto json = styleToJson(style);
+    json.remove("circledCharges");
+    REQUIRE(styleFromJson(json));
+    CHECK_FALSE(styleFromJson(json)->circledCharges.has_value());
+    json["circledCharges"] = "false";
+    CHECK_FALSE(styleFromJson(json));
 }
 
 TEST_CASE("caption typography does not change abbreviated atom labels") {

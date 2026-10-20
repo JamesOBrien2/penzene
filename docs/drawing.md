@@ -120,13 +120,18 @@ lane labels like any text.
 
 ### Saved drawing styles
 
+**Format → Circled Charges** surrounds each displayed charge sign with a circle,
+including charges on skeletal carbons. Charge magnitudes remain beside the sign.
+This is a saved, undoable document setting; it changes the drawing, not chemistry.
+The default is off. Canvas, print and graphics exports use the same appearance.
+
 **Format → Drawing Style → Edit Styles…** opens the style editor. Built-in styles
 are read-only: **Duplicate** one, give it a unique name, adjust its measurements
 in points, and **Save**. Bonds, Labels, Captions and Layout group the controls.
 Set line, bold and wedge widths, hash spacing, relative or absolute multiple-bond
 spacing, label margins and minimum clearance independently. Captions can use a
 different font, size, weight and italic setting from atom labels. Chain angle,
-fixed angle increment, script size/position, hydrogen visibility, charge position,
+fixed angle increment, script size/position, hydrogen visibility, charge position/circles,
 R-group numbering and carbon labels are also adjustable.
 
 The preview shows a metal complex, stereochemistry and a caption. **100%** and

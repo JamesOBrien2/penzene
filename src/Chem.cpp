@@ -561,6 +561,7 @@ static std::vector<QRectF> layoutLabels(const RWMol& mol, const Document* drawin
     RWMol copy(mol);
     Document doc = fromRDKit(copy, kScale);
     if (drawing) doc.style = drawing->style, doc.labelRatio = drawing->labelRatio, doc.styleSettings = drawing->styleSettings;
+    if (drawing) doc.circledCharges = drawing->circledCharges;
     QPicture picture;
     QPainter painter(&picture);
     std::vector<QRectF> labels(doc.atoms.size());
@@ -1609,6 +1610,7 @@ std::vector<Document> molecules(const Document& doc) {
         m.style = doc.style;
         m.styleSettings = doc.styleSettings;
         m.labelRatio = doc.labelRatio;
+        m.circledCharges = doc.circledCharges;
         m.atoms = doc.atoms;
         m.bonds = doc.bonds;
         std::vector<int> drop;

@@ -2687,6 +2687,40 @@ TEST_CASE("custom style editor saves a portable style and canvas undo restores i
     CHECK(canvas->document().styleSettings == after.styleSettings);
 }
 
+TEST_CASE("Circled Charges is an undoable document setting (#623)") {
+    App app;
+    QApplication::processEvents();
+    MainWindow w;
+    w.resize(1100, 750);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    Document d = *chem::fromSmiles("[NH3]->[Pt+2](<-[NH3])(Cl)Cl");
+    d.append(*chem::fromSmiles("C[CH2+]"), {65, 0});
+    d.append(*chem::fromSmiles("[Cl-]"), {100, 0});
+    canvas->setDocumentSilently(d);
+    canvas->fitToDocument();
+    QAction* charges = nullptr;
+    for (auto* a : w.findChildren<QAction*>()) if (a->text() == "Circled Charges") charges = a;
+    REQUIRE(charges);
+    CHECK_FALSE(charges->isChecked());
+    const QString preview = qEnvironmentVariable("PENZENE_CHARGES_PREVIEW");
+    QApplication::processEvents();
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/charges-off.png"));
+    charges->trigger();
+    CHECK(canvas->document().circledCharges);
+    QApplication::processEvents();
+    if (!preview.isEmpty()) {
+        REQUIRE(w.grab().save(preview + "/charges-on.png"));
+        REQUIRE(writeWhole(preview + "/charges.penz", canvas->document().toJson()));
+    }
+    w.findChild<QUndoGroup*>()->undo();
+    CHECK_FALSE(charges->isChecked());
+    CHECK(canvas->document() == d);
+    w.findChild<QUndoGroup*>()->redo();
+    CHECK(charges->isChecked());
+    CHECK(canvas->selectedSubset().circledCharges);
+}
+
 TEST_CASE("Text has its own rail button and keeps its hotkey (#622)") {
     App app;
     // Cocoa treats Catch's test filter as a file to open; consume launch events before the window listens.
