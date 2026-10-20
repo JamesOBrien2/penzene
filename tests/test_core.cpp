@@ -1706,6 +1706,35 @@ TEST_CASE("a charge sits clear of the bonds around its atom (#494)") {
     }
 }
 
+TEST_CASE("a shown carbon's charge keeps off its bond (#656)") {
+    // Cyanide with its carbon shown and the triple bond to its right: the charge is placed by the
+    // same rule as an element's, more than 50 degrees from the bond, not raised after the label.
+    auto doc = Document::fromJson(R"({"format":"penzene","version":1,"atoms":[
+        {"x":0,"y":0,"z":6,"label":"C","charge":-1},{"x":14.4,"y":0,"z":7}],"bonds":[{"a":0,"b":1,"order":3}]})");
+    REQUIRE(doc);
+    const double k = 20;
+    auto render = [&](const Document& d) {
+        QImage img(800, 800, QImage::Format_ARGB32);
+        img.fill(Qt::white);
+        QPainter p(&img);
+        p.translate(400, 400);
+        p.scale(k, k);
+        paintDocument(p, d, {Qt::black, Qt::black, 0.6});
+        return img;
+    };
+    Document bare = *doc;
+    bare.atoms[0].charge = 0, bare.atoms[0].hydrogens = 0;  // the same C, without its charge or an H
+    const QImage with = render(*doc), without = render(bare);
+    QPointF sum;
+    int n = 0;
+    for (int y = 0; y < 800; ++y)
+        for (int x = 0; x < 800; ++x)
+            if (qGray(with.pixel(x, y)) < 128 && qGray(without.pixel(x, y)) >= 128) sum += QPointF(x, y), ++n;
+    REQUIRE(n > 0);
+    const QPointF d = sum / n - QPointF(400, 400);  // from the carbon to the charge's centre
+    CHECK(std::abs(std::atan2(d.y(), d.x())) > qDegreesToRadians(50.0));
+}
+
 TEST_CASE("bonds leave a margin around wide element symbols in every drawing style (#617)") {
     for (const auto& st : drawingStyles())
         for (int z : {78, 26, 44, 17, 35, 42})
