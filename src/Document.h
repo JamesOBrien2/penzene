@@ -44,6 +44,8 @@ struct StyleSettings {
 // it takes none of the donor's hydrogens. A plain line to a metal is read as one too
 // where the donor has no bond to spare (PPh3, NMe3, pyridine; see chem::toRDKit).
 enum class BondStereo { None, Wedge, Hash, Bold, Dashed, Wavy, Interaction, Partial, Dative };
+// Their names in .penz files and Python's set_bond_style, in enum order.
+inline constexpr const char* kBondStereoNames[] = {"none", "wedge", "hash", "bold", "dashed", "wavy", "interaction", "partial", "dative"};
 enum class BondPosition { Auto, Left, Centre, Right };  // double bond's second line, seen from a to b
 // Enhanced stereo (MDL/ChemDraw): a stereocentre as drawn (abs), or one of a group
 // whose centres are all as drawn or all inverted, as a mixture (&n) or unknown which (orn).

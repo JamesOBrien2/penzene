@@ -1,5 +1,6 @@
 """The Python module: the #47 snippet as written, plus the rest of the API."""
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -113,6 +114,36 @@ try:
     raise AssertionError("an unknown label must raise")
 except ValueError:
     assert ed.atoms[0].symbol == "C"  # and leave the atom as it was
+
+# Mechanism marks from Python (#659): a three-centre TS for R-NC to R-CN, with no JSON editing.
+ts = pz.Document()
+r, n, c = ts.add_atom("R", generic=True), ts.add_atom("N", 16, -7.6), ts.add_atom("C", 16, 7.6)
+assert ts.atoms[r].label == "R"
+ts.add_bond(r, n), ts.add_bond(n, c, 3), ts.add_bond(r, c)
+ts.set_bond_style(0, "partial"), ts.set_bond_style(2, "partial")
+ts.set_partial(r, 1), ts.set_partial(c, -1)
+ts.show_symbol(c)
+assert ts.add_bracket([c, n, r, r], superscript="\u2021") == 0
+assert ts.add_text(0, 30, "TS1") == 0
+assert [b.style for b in ts.bonds] == ["partial", "none", "partial"]
+assert (ts.atoms[r].partial, ts.atoms[c].partial, ts.atoms[c].label, ts.atoms[n].label) == (1, -1, "C", "")
+saved = json.loads(ts.to_json())
+page = (saved.get("pages") or [saved])[0]
+assert page["brackets"] == [{"atoms": [0, 1, 2], "superscript": "\u2021"}] and page["texts"][0]["text"] == "TS1"
+ts.show_symbol(c, False)
+assert ts.atoms[c].label == ""
+ion = pz.from_smiles("C[CH2]")
+ion.set_charge(1, -1), ion.set_radicals(0, 1)
+assert (ion.atoms[1].charge, ion.atoms[0].radicals) == (-1, 1)
+for bad, kind in ((lambda: ts.set_bond_style(1, "wedge"), ValueError), (lambda: ts.set_bond_style(0, "squiggly"), ValueError),
+                  (lambda: ts.set_charge(9, 1), IndexError), (lambda: ts.set_radicals(0, 3), ValueError),
+                  (lambda: ts.show_symbol(r), ValueError), (lambda: ts.add_bracket([]), ValueError)):
+    try:
+        bad()
+    except kind:
+        pass
+    else:
+        raise AssertionError("should raise " + kind.__name__)
 
 # R-group libraries (#432): numbered wildcards are R sites, filled from fragments into an SDF.
 scaffold = pz.from_smiles("[1*]c1ccc([*:2])cc1")

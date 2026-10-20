@@ -12,7 +12,7 @@
 #include <cmath>
 #include <numbers>
 
-static const char* kStereo[] = {"none", "wedge", "hash", "bold", "dashed", "wavy", "interaction", "partial", "dative"};
+static const auto& kStereo = kBondStereoNames;
 static const char* kPosition[] = {"auto", "left", "centre", "right"};
 static const char* kArrow[] = {"reaction", "equilibrium", "resonance", "retro", "fishhook",
                                "line", "box", "roundedbox", "ellipse",
