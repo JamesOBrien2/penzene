@@ -45,6 +45,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Bonds keep clear of wide element labels such as Pt and Fe, on screen and in exports (#617).
 - A carbon shown with its own label (C) is drawn like any element: its charge keeps clear of its bonds instead of sitting on a triple bond (⁻C≡N), and it shows its hydrogens (#656).
 - Ferrocene and other η-bound rings report formula and mass without their drawing centroids; Clean keeps each centroid at its ring centre (#619).
+- Brackets take a superscript at the top right as well as their subscript: ‡ for a transition state, or a charge such as •+ (#658).
 
 - A MOL query atom list marked NOT ("NOT [N,O]") stays an exclusion, shown as "not N, O", instead of turning into its opposite (#610).
 - An atom shown with its own element (a terminal C, an O) keeps its charge and isotope in SMILES, formula and mass: cyanide drawn as C≡N is no longer HCN (#654).
