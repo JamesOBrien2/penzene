@@ -1,4 +1,5 @@
 #include "Render.h"
+#include "Styles.h"
 #include "Chem.h"
 #include "Geometry.h"
 
@@ -23,32 +24,38 @@
 #include <utility>
 #include <numeric>
 
-// Presets. Values come from the ChemDraw stationery (.cds) of the same name;
-// wedge width, hash spacing and label gap keep ACS's proportions to ours.
+// Publisher values are physical points, converted once to model coordinates below.
 // Model units per point for a style's native values (bond length / 14.4 undone).
 constexpr double kJdp = kBondLength / 14.17, kRsc = kBondLength / 12.2;
 
-const std::vector<DrawingStyle>& drawingStyles() {
-    // Wedge width and hash spacing keep ACS's proportion to the bold width and
-    // hash setting (4.5/2.0 and 2.2/2.5); label radius is half a glyph plus the margin.
-    static const std::vector<DrawingStyle> styles{
-        {"ACS 1996", 14.4, 0.6, 2.0, 4.5, 2.2, 0.18, 5.5, "Arial", QFont::Normal, 10},
-        // JDPReport.cds: bond 14.17 (0.5 cm), line 0.879, bold 1.814, hash 1.814, margin 1.162,
-        // IBM Plex Sans Light 10 pt.
-        {"JDP", 14.17, 0.879 * kJdp, 1.814 * kJdp, 4.5 * 1.814 / 2.0 * kJdp, 2.2 * 1.814 / 2.5 * kJdp, 0.18,
-         (3.9 + 1.162) * kJdp, "IBM Plex Sans", QFont::Light, 10 * kJdp},
-        // RSC (1 Column).cds (2 Column only differs in page size): bond 12.2, line 0.449, bold 1.602,
-        // hash 1.75, margin 1.25, spacing 20%, Helvetica 7 pt.
-        {"RSC", 12.2, 0.449 * kRsc, 1.602 * kRsc, 4.5 * 1.602 / 2.0 * kRsc, 2.2 * 1.75 / 2.5 * kRsc, 0.20,
-         (3.9 * 0.7 + 1.25) * kRsc, "Helvetica", QFont::Normal, 7 * kRsc},
-    };
+const std::vector<DrawingStyle>& builtInDrawingStyles() {
+    static const std::vector<DrawingStyle> styles = [] {
+        std::vector<DrawingStyle> out{
+            // ACS 1996 stationery and Revvity's published settings, in physical points.
+            {"ACS 1996", 14.4, 0.6, 2.0, 3.0, 2.5, 0.18, 0, "Arial", QFont::Normal, 10, 1.6},
+            // JDPReport.cds; convert its real-point dimensions to model coordinates once.
+            {"JDP", 14.17, 0.879 * kJdp, 1.814 * kJdp, 1.5 * 1.814 * kJdp, 1.814 * kJdp,
+             0.18, 0, "IBM Plex Sans", QFont::Light, 10 * kJdp, 1.162 * kJdp},
+            // Current RSC author instructions give these point values, including stereo width.
+            {"RSC", 12.2, 0.5 * kRsc, 1.6 * kRsc, 1.6 * kRsc, 1.8 * kRsc,
+             0.20, 0, "Helvetica", QFont::Normal, 7 * kRsc, 1.25 * kRsc}
+        };
+        out.back().snapAngle = 15;
+        return out;
+    }();
     return styles;
 }
 
-const DrawingStyle& drawingStyle(const QString& name) {
+std::vector<DrawingStyle> drawingStyles() {
+    auto out = builtInDrawingStyles();
+    for (const auto& s : userDrawingStyles()) out.push_back(modelStyle(s));
+    return out;
+}
+
+DrawingStyle drawingStyle(const QString& name) {
     for (const auto& s : drawingStyles())
         if (s.name == name) return s;
-    return drawingStyles()[0];
+    return builtInDrawingStyles()[0];
 }
 // Carbons are skeletal unless alone or the document asks for their labels.
 static bool hasLabel(const Document& doc, int i, const std::vector<int>& degree) {
@@ -61,7 +68,7 @@ static bool hasLabel(const Document& doc, int i, const std::vector<int>& degree)
 // ---------------------------------------------------------------- rendering
 
 DrawingStyle documentStyle(const Document& doc) {
-    DrawingStyle st = drawingStyle(doc.style);
+    DrawingStyle st = doc.styleSettings ? modelStyle(*doc.styleSettings) : drawingStyle(doc.style);
     if (doc.labelRatio > 0) {  // text and the bonds' clearance around labels scale together
         const double k = doc.labelRatio * kBondLength / st.fontSize;
         st.fontSize *= k, st.labelRadius *= k;
@@ -72,8 +79,18 @@ DrawingStyle documentStyle(const Document& doc) {
 QFont labelFont(const DrawingStyle& s, double scale) {
     QFont f(s.font);
     f.setWeight(s.weight);
-    f.setPixelSize(int(s.fontSize * scale));  // 1 px == 1 pt in our scene units
+    f.setItalic(s.italic);
+    // QFont's integer pixel size truncates publisher sizes after physical scaling.
+    f.setPointSizeF(s.fontSize * scale * 72.0 / QFontMetricsF(f).fontDpi());
     return f;
+}
+
+DrawingStyle captionStyle(DrawingStyle style) {
+    if (!style.captionFont.isEmpty()) style.font = style.captionFont;
+    if (style.captionSize > 0) style.fontSize = style.captionSize;
+    style.weight = QFont::Weight(style.captionWeight);
+    style.italic = style.captionItalic;
+    return style;
 }
 
 // Text as outlines, so it scales identically on screen, SVG, PDF and PNG.
@@ -96,9 +113,9 @@ static QString massNumber(const Atom& a) {
 
 // Where the mass number sits, relative to the atom (as drawLabel puts it), with a point to spare.
 static QRectF massBox(const Atom& a, const DrawingStyle& st) {
-    QFontMetricsF fm(labelFont(st)), sm(labelFont(st, 0.7));
+    QFontMetricsF fm(labelFont(st)), sm(labelFont(st, st.scriptScale));
     const double symbol = fm.horizontalAdvance(QString::fromStdString(chem::symbol(a.z))), cap = fm.capHeight();
-    const double right = -symbol / 2, baseline = cap / 2 - 0.7 * cap;
+    const double right = -symbol / 2, baseline = cap / 2 - st.superscriptOffset * cap;
     return QRectF(QPointF(right - sm.horizontalAdvance(massNumber(a)), baseline - sm.capHeight()), QPointF(right, baseline))
         .adjusted(-1, -1, 0.5, 0.5);
 }
@@ -132,7 +149,7 @@ static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const D
     QFontMetricsF fm(labelFont(st));
     const QString s = fromRight ? reversedLabel(a.label) : a.label;
     const double base = a.pos.y() + fm.capHeight() / 2;
-    QPainterPath path = textPath({{0, base}, s}, st);
+    QPainterPath path = textPath({{0, base}, s}, st, false);
     const double x = fromRight ? a.pos.x() + fm.horizontalAdvance(s.back()) / 2 - path.boundingRect().right()
                                : a.pos.x() - fm.horizontalAdvance(s.front()) / 2;
     p.fillPath(path.translated(x, 0), p.pen().color());
@@ -141,7 +158,7 @@ static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const D
     if (const int extra = a.charge - (head ? head->charge : 0)) {
         QString c = QString(extra > 0 ? "+" : "−");
         if (std::abs(extra) > 1) c.prepend(QString::number(std::abs(extra)));
-        drawText(p, c, {x + path.boundingRect().right(), base - fm.capHeight() * 0.7}, labelFont(st, 0.7));
+        drawText(p, c, {x + path.boundingRect().right(), base - fm.capHeight() * st.superscriptOffset}, labelFont(st, st.scriptScale));
     }
 }
 
@@ -210,7 +227,7 @@ static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HS
     const bool hLeft = side == HSide::Left;
     const auto& a = doc.atoms[i];
     if (!a.label.isEmpty()) return drawAbbreviation(p, a, hLeft, st);
-    QFont f = labelFont(st), sub = labelFont(st, 0.7);
+    QFont f = labelFont(st), sub = labelFont(st, st.scriptScale);
     QFontMetricsF fm(f), sm(sub);
     const QString sym = atomSymbol(a);
     const QString mass = massNumber(a);
@@ -219,29 +236,36 @@ static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HS
     double x = a.pos.x() - w / 2;
     drawText(p, sym, {x, base}, f);
     double left = x;
-    if (!mass.isEmpty()) left -= sm.horizontalAdvance(mass), drawText(p, mass, {left, base - fm.capHeight() * 0.7}, sub);
+    if (!mass.isEmpty()) left -= sm.horizontalAdvance(mass), drawText(p, mass, {left, base - fm.capHeight() * st.superscriptOffset}, sub);
 
     double right = x + w;
+    const bool chargeBeforeH = st.chargesOnAtom && a.charge && hydrogens > 0 && side == HSide::Right;
+    if (chargeBeforeH) {
+        QString charge = a.charge > 0 ? "+" : "−";
+        if (std::abs(a.charge) > 1) charge.prepend(QString::number(std::abs(a.charge)));
+        drawText(p, charge, {right, base - fm.capHeight() * st.superscriptOffset}, sub);
+        right += sm.horizontalAdvance(charge);
+    }
     if (hydrogens > 0) {
         QString n = hydrogens > 1 ? QString::number(hydrogens) : QString();
         double hw = fm.horizontalAdvance("H"), nw = sm.horizontalAdvance(n);
         if (side == HSide::Below || side == HSide::Above) {
             const double hx = a.pos.x() - (hw + nw) / 2, dy = fm.capHeight() * 1.35 * (side == HSide::Below ? 1 : -1);
             drawText(p, "H", {hx, base + dy}, f);
-            if (!n.isEmpty()) drawText(p, n, {hx + hw, base + dy + fm.capHeight() * 0.35}, sub);
+            if (!n.isEmpty()) drawText(p, n, {hx + hw, base + dy + fm.capHeight() * st.subscriptOffset}, sub);
         } else {
             double hx = hLeft ? left - hw - nw : right;
             drawText(p, "H", {hx, base}, f);
-            if (!n.isEmpty()) drawText(p, n, {hx + hw, base + fm.capHeight() * 0.35}, sub);
+            if (!n.isEmpty()) drawText(p, n, {hx + hw, base + fm.capHeight() * st.subscriptOffset}, sub);
             if (!hLeft) right += hw + nw;
         }
     }
-    if (a.charge) {
+    if (a.charge && !chargeBeforeH) {
         QString c = QString(a.charge > 0 ? "+" : "−");
         if (std::abs(a.charge) > 1) c.prepend(QString::number(std::abs(a.charge)));
         if (const auto d = chargeDirection(doc, i, hydrogens, side))
             drawText(p, c, chargeAt(a.pos, *d, exitAlong(QRectF(-w / 2, -fm.capHeight() / 2, w, fm.capHeight()), *d), c, sub), sub);
-        else drawText(p, c, {right, base - fm.capHeight() * 0.7}, sub);  // after any H
+        else drawText(p, c, {right, base - fm.capHeight() * st.superscriptOffset}, sub);  // after any H
     }
 }
 
@@ -250,7 +274,7 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
                      const std::vector<bool>& labeled, const BondsAt& at, const std::vector<QPointF>& gaps = {}) {
     QPointF pa = doc.atoms[b.a].pos, pb = doc.atoms[b.b].pos;
     QPointF d = unit(pb - pa), n = perp(d);
-    const double gap = st.bondSpacing * kBondLength;  // double-bond spacing
+    const double gap = st.bondSpacingAbsolute > 0 ? st.bondSpacingAbsolute : st.bondSpacing * len(pb - pa);  // relative to the untrimmed bond
     // Keep a point of margin beyond the symbol in the bond's direction, and at least the style's radius.
     // Abbreviations attach at one letter rather than their whole label's centre, so keep their usual clearance.
     // A bond crossing an isotope's raised mass number (¹³C) also stops beyond it; a level one passes beneath.
@@ -258,12 +282,14 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         const Atom& a = doc.atoms[atom];
         double clear = st.labelRadius;
         if (a.label.isEmpty()) {
-            QFontMetricsF fm(labelFont(st));
+            const QFont font = labelFont(st);
+            QFontMetricsF fm(font);
             const QString sym = atomSymbol(a);
-            const QRectF box = fm.tightBoundingRect(sym).translated(-fm.horizontalAdvance(sym) / 2, fm.capHeight() / 2);
-            clear = std::max(clear, 1 + exitAlong(box, toward));
+            QPainterPath symbol;
+            symbol.addText({-fm.horizontalAdvance(sym) / 2, fm.capHeight() / 2}, font, sym);
+            clear = std::max(clear, st.labelMargin + exitAlong(symbol.boundingRect(), toward));
         }
-        if (!massNumber(a).isEmpty()) clear = std::max(clear, 1 + exitAlong(massBox(a, st), toward));
+        if (!massNumber(a).isEmpty()) clear = std::max(clear, st.labelMargin + exitAlong(massBox(a, st), toward));
         return clear;
     };
     QPointF a = labeled[b.a] ? pa + d * trim(b.a, d) : pa;
@@ -313,9 +339,12 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
     }
     if (b.stereo == BondStereo::Hash) {
         double L = len(e - a);
-        int count = std::max(3, int(L / st.hashSpacing));
+        // shortcut: cap extreme imported bonds at 4096 intervals; normal hashes keep their physical spacing.
+        const double step = std::max(st.hashSpacing, L / 4096);
+        const int count = std::max(1, int(std::floor(L / step)));
+        const double inset = std::max(0.0, (L - count * step) / 2);
         for (int k = 0; k <= count; ++k) {
-            double t = double(k) / count;
+            const double t = std::clamp((inset + k * step) / L, 0.0, 1.0);
             p.drawLine(a + (corner[0] - a) * t, a + (corner[1] - a) * t);
         }
         return;
@@ -357,11 +386,11 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         QPen q = pen;
         if (b.stereo == BondStereo::Bold && main) q.setWidthF(st.boldWidth), q.setCapStyle(Qt::FlatCap);
         const bool dashed = b.stereo == BondStereo::Dashed || b.stereo == BondStereo::Partial;
-        if (dashed && (!main || b.order == 1)) q.setDashPattern({2.5, 2.5});
+        if (dashed && (!main || b.order == 1)) q.setDashPattern({st.hashSpacing / q.widthF(), st.hashSpacing / q.widthF()});
         p.setPen(q);
         // A bond drawn later (in front) crossing this one leaves a gap in it.
         std::vector<double> cuts;  // along x→y, 0..1
-        const double length = len(y - x), half = 0.18 * kBondLength;
+        const double length = len(y - x), half = st.labelMargin + (pen.widthF() + q.widthF()) / 2;
         for (QPointF g : gaps) cuts.push_back(QPointF::dotProduct(g - x, y - x) / (length * length));
         std::sort(cuts.begin(), cuts.end());
         double from = 0;
@@ -584,10 +613,10 @@ static void drawOrbital(QPainter& p, const Arrow& a, const QColor& color, double
     }
 }
 
-static void drawArrow(QPainter& p, const Arrow& a) {
+static void drawArrow(QPainter& p, const Arrow& a, const DrawingStyle& st) {
     if (a.dashed) {
         QPen dashes = p.pen();
-        dashes.setDashPattern({3, 2.5});
+        dashes.setDashPattern({st.hashSpacing / dashes.widthF(), st.hashSpacing / dashes.widthF()});
         p.setPen(dashes);
     }
     if (isShape(a.kind)) {
@@ -635,12 +664,20 @@ static void drawArrow(QPainter& p, const Arrow& a) {
 // bracket are counts (H2O); a + or - ending a formula is its charge (NH4+, OH-), with the
 // digits before it too for one element or a bracket (Cu2+, [Fe(CN)6]3-). ^ marks a charge
 // outright where it would be ambiguous (SO4^2-); the ^ isn't drawn.
-std::vector<Script> scripts(const QString& s) {
+std::vector<Script> scripts(const QString& s, bool rGroupSuperscript) {
     const int n = int(s.size());
     std::vector<Script> out(n, Script::Base);
     for (int i = 1; i < n; ++i)
         if (s[i].isDigit() && (s[i - 1].isLetter() || s[i - 1] == ')' || s[i - 1] == ']' || out[i - 1] == Script::Sub))
             out[i] = Script::Sub;
+    if (rGroupSuperscript) {
+        static const QRegularExpression groups("\\bR([0-9]+)\\b");
+        auto matches = groups.globalMatch(s);
+        while (matches.hasNext()) {
+            const auto match = matches.next();
+            std::fill(out.begin() + match.capturedStart(1), out.begin() + match.capturedEnd(1), Script::Super);
+        }
+    }
     auto sign = [&](int i) { return s[i] == '+' || s[i] == '-' || s[i] == QChar(0x2212); };
     for (int i = 0; i < n; ++i) {
         if (s[i] == '^') {
@@ -671,12 +708,13 @@ std::vector<Script> scripts(const QString& s) {
 
 // Text as outlines, formula-style subscripts and charges, one line per '\n'. Laid out
 // in runs (not per letter) so kerning and spaces match ordinary text.
-QPainterPath textPath(const Text& t, const DrawingStyle& st) {
-    QFont f = labelFont(st, t.scale), small = labelFont(st, 0.7 * t.scale);
+QPainterPath textPath(const Text& t, const DrawingStyle& st, bool isCaption) {
+    const DrawingStyle caption = isCaption ? captionStyle(st) : st;
+    QFont f = labelFont(caption, t.scale), small = labelFont(caption, st.scriptScale * t.scale);
     for (QFont* font : {&f, &small}) {
         if (!t.font.isEmpty()) font->setFamily(t.font);
-        font->setBold(t.bold || t.compound);
-        font->setItalic(t.italic);
+        if (t.bold || t.compound) font->setBold(true);
+        if (t.italic) font->setItalic(true);
     }
     QFontMetricsF fm(f), sm(small);
     const double tab = kTabSpaces * fm.horizontalAdvance(' ');
@@ -684,7 +722,7 @@ QPainterPath textPath(const Text& t, const DrawingStyle& st) {
     const auto lines = t.text.split('\n');
     for (int li = 0; li < lines.size(); ++li) {
         const QString& s = lines[li];
-        const auto sc = scripts(s);
+        const auto sc = scripts(s, st.rGroupSuperscript);
         double x = 0, y = t.pos.y() + li * fm.lineSpacing();
         for (int i = 0; i < s.size();) {
             if (s[i] == '\t') {
@@ -706,7 +744,7 @@ QPainterPath textPath(const Text& t, const DrawingStyle& st) {
             QString run = s.mid(i, j - i);
             if (sc[i] == Script::Super) run.replace('-', QChar(0x2212));  // a charge's minus, not a hyphen
             const bool base = sc[i] == Script::Base;
-            const double dy = sc[i] == Script::Sub ? fm.capHeight() * 0.35 : sc[i] == Script::Super ? -fm.capHeight() * 0.7 : 0;
+            const double dy = sc[i] == Script::Sub ? fm.capHeight() * st.subscriptOffset : sc[i] == Script::Super ? -fm.capHeight() * st.superscriptOffset : 0;
             path.addText(t.pos.x() + x, y + dy, base ? f : small, run);
             x += (base ? fm : sm).horizontalAdvance(run);
             i = j;
@@ -746,7 +784,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
                 continue;
             }
             p.setPen(QPen(ink(a.color), lineWidth, Qt::SolidLine, Qt::FlatCap, Qt::MiterJoin));
-            drawArrow(p, a);
+            drawArrow(p, a, st);
             if (a.crossed && !isShape(a.kind)) {  // ✕ over the middle of the shaft, solid even on a dashed arrow
                 const auto pts = arrowPoints(a);
                 const QPointF c = pts.size() == 2 ? (pts[0] + pts[1]) / 2 : pts[pts.size() / 2];
@@ -830,17 +868,17 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         const auto& a = doc.atoms[i];
         p.setPen(QPen(style.markValenceErrors && info[i].valenceError ? style.error : ink(a.color), lineWidth));
         if (labeled[i]) {
-            drawLabel(p, doc, int(i), info[i].hydrogens, hSide(int(i)), st);
+            drawLabel(p, doc, int(i), st.hideImplicitHydrogens ? 0 : info[i].hydrogens, hSide(int(i)), st);
             if (style.labels) {
                 QPicture label;
                 QPainter q(&label);
-                drawLabel(q, doc, int(i), info[i].hydrogens, hSide(int(i)), st);
+                drawLabel(q, doc, int(i), st.hideImplicitHydrogens ? 0 : info[i].hydrogens, hSide(int(i)), st);
                 q.end();
                 style.labels->resize(doc.atoms.size());
                 (*style.labels)[i] = label.boundingRect();
             }
         } else if (a.charge) {
-            QFont sub = labelFont(st, 0.7);
+            QFont sub = labelFont(st, st.scriptScale);
             QString c = QString(a.charge > 0 ? "+" : "−");
             if (std::abs(a.charge) > 1) c.prepend(QString::number(std::abs(a.charge)));
             const auto d = chargeDirection(doc, int(i), 0, HSide::Right);
@@ -916,7 +954,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             for (double side : {-1.0, 1.0}) p.drawEllipse(a.pos + dirs[k] * r + perp(dirs[k]) * side * 1.6, dot, dot);
         p.setBrush(Qt::NoBrush);
         if (a.partial) {
-            const QFont f = labelFont(st, 0.7);
+            const QFont f = labelFont(st, st.scriptScale);
             const QString s = a.partial > 0 ? "δ+" : "δ−";
             QFontMetricsF fm(f);
             const QPointF at = a.pos + dirs[k] * (r + 2.5);
@@ -946,7 +984,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             }
             p.drawPath(path);
         }
-        if (!b.label.isEmpty()) drawText(p, b.label, QPointF(box.right() + 1.5, box.bottom() + 1), labelFont(st, 0.7));
+        if (!b.label.isEmpty()) drawText(p, b.label, QPointF(box.right() + 1.5, box.bottom() + 1), labelFont(st, st.scriptScale));
     }
     for (size_t i = 0; i < doc.atoms.size(); ++i) {
         const Atom& a = doc.atoms[i];
@@ -978,7 +1016,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         drawText(p, s, besideCentre(int(i), 0) - QPointF(fm.horizontalAdvance(s) / 2, -fm.capHeight() / 2), f);
     }
     if (doc.showStereo) {  // small italic (R)/(E), clear of the atom's bonds or the double bond's second line
-        QFont f = labelFont(st, 0.7);
+        QFont f = labelFont(st, st.scriptScale);
         f.setItalic(true);
         for (const auto& l : chem::stereoLabels(doc)) {
             QPointF at;
@@ -1108,7 +1146,7 @@ QRectF pageRect(const Document& doc) {
     return {};
 }
 
-double exportScale(const Document& doc) { return drawingStyle(doc.style).bondLength / kBondLength; }
+double exportScale(const Document& doc) { return documentStyle(doc).bondLength / kBondLength; }
 
 // The exported area (model units) and the points per model unit.
 static std::pair<QRectF, double> exportFrame(const Document& doc, const ExportOptions& o) {

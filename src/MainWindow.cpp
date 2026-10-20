@@ -1,4 +1,6 @@
 #include "MainWindow.h"
+#include "Styles.h"
+#include "StyleEditor.h"
 #include "NumberBox.h"
 #include "Canvas.h"
 #include "Chem.h"
@@ -1048,7 +1050,7 @@ void MainWindow::addPage() {
     };
     while (taken(tr("Page %1").arg(n))) ++n;
     Document blank;
-    blank.style = QSettings().value("defaultStyle").toString();  // Edit > Preferences
+    applyDrawingStyle(blank, QSettings().value("defaultStyle").toString());
     auto* undo = new QUndoStack(this);
     undoGroup_->addStack(undo);
     pages_.push_back({tr("Page %1").arg(n), blank, undo});
@@ -1518,6 +1520,8 @@ void MainWindow::insertTemplate(QTreeWidgetItem* item) {
     if (!item || item->data(0, Qt::UserRole).isNull()) return;  // a category
     if (auto doc = Document::fromJson(item->data(0, Qt::UserRole).toByteArray())) {
         doc->style = canvas_->document().style;
+        doc->styleSettings = canvas_->document().styleSettings;
+        doc->labelRatio = canvas_->document().labelRatio;
         canvas_->insert(*doc, tr("Insert %1").arg(item->text(0)));
     }
 }
@@ -2110,7 +2114,7 @@ void MainWindow::buildFormatToolbar() {
             font->setCurrentIndex(name.isEmpty() ? 0 : font->findText(name));
             if (!name.isEmpty() && font->currentIndex() < 0) font->setEditText(name);
         }
-        size->setValue(mixed([](const Text& t) { return t.scale; }) ? 0 : texts.front().scale * documentStyle(doc).fontSize * exportScale(doc));
+        size->setValue(mixed([](const Text& t) { return t.scale; }) ? 0 : texts.front().scale * captionStyle(documentStyle(doc)).fontSize * exportScale(doc));
         auto check = [&](QCheckBox* b, auto get) {
             const bool m = mixed(get);
             b->setText(b == bold ? tr("Bold") : tr("Italic"));
@@ -2559,7 +2563,7 @@ void MainWindow::buildMenus() {
     file->addAction(tr("&New"), QKeySequence::New, this, [this] {
         if (!maybeSave()) return;
         Document blank;
-        blank.style = QSettings().value("defaultStyle").toString();  // Edit > Preferences
+        applyDrawingStyle(blank, QSettings().value("defaultStyle").toString());
         setPages({{tr("Page 1"), blank}});
         path_.clear();
         updateTitle();
@@ -2799,23 +2803,32 @@ void MainWindow::buildMenus() {
     // Drawing style presets, like ChemDraw's document settings; stored in the .penz.
     auto* styles = format->addMenu(tr("Drawing &Style"));
     auto* styleGroup = new QActionGroup(this);
-    for (const auto& st : drawingStyles()) {
-        auto* act = styles->addAction(st.name);
-        act->setCheckable(true);
-        styleGroup->addAction(act);
-        connect(act, &QAction::triggered, this, [this, name = st.name] {
-            Document next = canvas_->document();
-            next.style = name == drawingStyles()[0].name ? QString() : name;
-            next.labelRatio = 0;  // the style's own label size, not an imported file's (#203)
-            if (!(next == canvas_->document())) canvas_->commit(next, tr("Drawing style"));
-        });
-    }
+    auto populateStyles = [this, styles, styleGroup] {
+        QAction* separator = nullptr;
+        for (auto* action : styles->actions()) if (action->isSeparator()) { separator = action; break; }
+        for (auto* action : styleGroup->actions()) { styleGroup->removeAction(action); styles->removeAction(action); delete action; }
+        for (const auto& st : drawingStyles()) {
+            auto* act = styles->addAction(st.name);
+            if (separator) styles->insertAction(separator, act);
+            act->setCheckable(true);
+            styleGroup->addAction(act);
+            connect(act, &QAction::triggered, this, [this, name = st.name] {
+                Document next = canvas_->document();
+                if (!applyDrawingStyle(next, name)) return;
+                if (!(next == canvas_->document())) canvas_->commit(next, tr("Drawing style"));
+            });
+        }
+    };
+    populateStyles();
     auto syncStyle = [this, styleGroup] {
-        const QString current = drawingStyle(canvas_->document().style).name;
+        const QString current = documentStyle(canvas_->document()).name;
         for (auto* act : styleGroup->actions()) act->setChecked(act->text() == current);
     };
     connect(canvas_, &Canvas::documentChanged, this, syncStyle);
     syncStyle();
+    connect(styles, &QMenu::aboutToShow, this, [populateStyles, syncStyle] { populateStyles(); syncStyle(); });
+    styles->addSeparator();
+    styles->addAction(tr("Edit Styles…"), this, [this] { editDrawingStyles(this, canvas_->document()); });
     // Display options belong to the document (saved, and in exports), so changing one is an edit.
     auto setDisplay = [this](auto change, const QString& what) {
         Document next = canvas_->document();

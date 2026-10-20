@@ -8,6 +8,8 @@
 #include "WhatsNew.h"
 #include "Templates.h"
 #include "Render.h"
+#include "Styles.h"
+#include "StyleEditor.h"
 
 #include <QApplication>
 #include <QNativeGestureEvent>
@@ -76,8 +78,15 @@ struct App {  // base class so the QApplication exists before any widget member
     App() {
         static int argc = 1;
         static char name[] = "tests";
-        static char* argv[] = {name};
-        static QApplication app(argc, argv);
+        static char* argv[] = {name, nullptr};
+        // Match the app's style; Qt's native caches outlive local static destructors.
+        static QApplication* app = [] {
+            auto* app = new QApplication(argc, argv);
+            app->setStyle(themedStyle());
+            return app;
+        }();
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        qApp->setStyleSheet({});  // New fixtures need fresh caches after native widgets have been destroyed.
         QApplication::setOrganizationName("penzene-tests");  // keep the user's settings out of it
         QStandardPaths::setTestModeEnabled(true);  // and their app data (autosave)
     }
@@ -2615,6 +2624,69 @@ TEST_CASE("the colour swatch opens CPK colours; the pick paints atoms and bonds 
     CHECK(canvas->document().bonds[0].color == blue);
 }
 
+TEST_CASE("custom style editor saves a portable style and canvas undo restores its scale (#625)") {
+    App app;
+    QApplication::processEvents();
+    MainWindow w;
+    w.resize(1000, 700);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("[NH3]->[Pt+2](<-[NH3])(Cl)Cl"));
+    canvas->fitToDocument();
+    const QString name = "Penzene editor regression";
+    deleteDrawingStyle(name);
+    struct Cleanup { QString name; ~Cleanup() { deleteDrawingStyle(name); } } cleanup{name};
+    QTimer::singleShot(0, [&] {
+        auto* dialog = QApplication::activeModalWidget();
+        REQUIRE(dialog);
+        auto* length = dialog->findChild<QDoubleSpinBox*>("bondLength");
+        auto* save = dialog->findChild<QPushButton*>("saveStyle");
+        REQUIRE(length); REQUIRE(save);
+        CHECK_FALSE(length->isEnabled());
+        CHECK_FALSE(save->isEnabled());
+        dialog->findChild<QPushButton*>("duplicateStyle")->click();
+        CHECK(length->isEnabled());
+        dialog->findChild<QLineEdit*>("styleName")->setText(name);
+        length->setValue(20);
+        dialog->findChild<QDoubleSpinBox*>("labelMargin")->setValue(2);
+        save->click();
+        CHECK(dialog->findChild<QPushButton*>("deleteStyle")->isEnabled());
+        const QString preview = qEnvironmentVariable("PENZENE_STYLES_PREVIEW");
+        if (!preview.isEmpty()) {
+            REQUIRE(dialog->grab().save(preview + "/style-editor.png"));
+            if (qEnvironmentVariableIsSet("PENZENE_FEEDBACK_PREVIEW_LIVE")) {
+                QEventLoop loop;
+                QObject::connect(qobject_cast<QDialog*>(dialog), &QDialog::finished, &loop, &QEventLoop::quit);
+                loop.exec();
+                return;
+            }
+        }
+        qobject_cast<QDialog*>(dialog)->accept();
+    });
+    editDrawingStyles(&w, canvas->document());
+    if (qEnvironmentVariableIsSet("PENZENE_FEEDBACK_PREVIEW_LIVE")) return;
+    QTimer::singleShot(0, [&] {
+        auto* preferences = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        REQUIRE(preferences);
+        for (auto* box : preferences->findChildren<QComboBox*>())
+            if (box->findText("Dark") >= 0) box->setCurrentText("Dark");
+        preferences->accept();
+    });
+    w.showPreferences();
+    const Document before = canvas->document();
+    const double scale = canvas->transform().m11();
+    Document after = before;
+    REQUIRE(applyDrawingStyle(after, name));
+    canvas->commit(after, "Drawing style");
+    CHECK(canvas->transform().m11() / scale == Catch::Approx(20 / 14.4));
+    CHECK(canvas->selectedSubset().styleSettings == after.styleSettings);
+    w.findChild<QUndoGroup*>()->undo();
+    CHECK(canvas->document() == before);
+    CHECK(canvas->transform().m11() == Catch::Approx(scale));
+    w.findChild<QUndoGroup*>()->redo();
+    CHECK(canvas->document().styleSettings == after.styleSettings);
+}
+
 TEST_CASE("Text has its own rail button and keeps its hotkey (#622)") {
     App app;
     // Cocoa treats Catch's test filter as a file to open; consume launch events before the window listens.
@@ -4878,4 +4950,27 @@ TEST_CASE("measurement fields keep precision and localized keyboard entry withou
         box.stepUp();
         CHECK(box.value() == Catch::Approx(2.125));
     }
+}
+
+TEST_CASE("embedded custom styles can be edited without the original style library") {
+    App app;
+    MainWindow window;
+    Document doc = *chem::fromSmiles("CCO");
+    auto style = styleSettings(drawingStyle("RSC"));
+    style.name = "Portable embedded style regression";
+    style.bondLength = 18.75;
+    style.captionSize = 6.5;
+    doc.styleSettings = style;
+    QTimer::singleShot(0, [&] {
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        REQUIRE(dialog);
+        CHECK(dialog->findChild<QLineEdit*>("styleName")->text() == style.name);
+        CHECK(dialog->findChild<QDoubleSpinBox*>("bondLength")->value() == Catch::Approx(18.75));
+        CHECK(dialog->findChild<QDoubleSpinBox*>("captionSize")->value() == Catch::Approx(6.5));
+        CHECK(dialog->findChild<QPushButton*>("saveStyle")->isEnabled());
+        CHECK_FALSE(dialog->findChild<QPushButton*>("deleteStyle")->isEnabled());
+        dialog->reject();
+    });
+    editDrawingStyles(&window, doc);
+    CHECK(doc.styleSettings == style);
 }

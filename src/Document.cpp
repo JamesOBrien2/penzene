@@ -1,4 +1,5 @@
 #include "Document.h"
+#include "Styles.h"
 
 #include <QJsonArray>
 #include <QImage>
@@ -121,6 +122,7 @@ QByteArray Document::toJson() const {
     }
     if (!bs2.isEmpty()) root["brackets"] = bs2;
     if (!style.isEmpty()) root["style"] = style;
+    if (styleSettings) root["styleSettings"] = styleToJson(*styleSettings);
     if (carbonLabels != CarbonLabels::None) root["carbonLabels"] = carbonLabels == CarbonLabels::All ? "all" : "terminal";
     if (labelRatio > 0) root["labelRatio"] = labelRatio;
     if (showStereo) root["showStereo"] = true;
@@ -182,6 +184,11 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         return std::nullopt;
     Document doc;
     doc.style = root["style"].toString();
+    if (root.contains("styleSettings")) {
+        doc.styleSettings = styleFromJson(root["styleSettings"].toObject());
+        if (!doc.styleSettings) return std::nullopt;
+        doc.style = doc.styleSettings->name;
+    }
     const QString carbons = root["carbonLabels"].toString();
     doc.carbonLabels = carbons == "all"        ? Document::CarbonLabels::All
                        : carbons == "terminal" ? Document::CarbonLabels::Terminal
@@ -471,7 +478,7 @@ static QJsonObject sheetObject(const Sheet& s) {
 }
 
 // Document settings: at the top of a version 2 file when every page has the same, else on each page.
-static const char* kShared[] = {"style", "carbonLabels", "labelRatio", "showStereo",
+static const char* kShared[] = {"style", "styleSettings", "carbonLabels", "labelRatio", "showStereo",
                                 "showAtomNumbers", "showShifts", "aromaticCircles"};
 
 QByteArray sheetsToJson(const std::vector<Sheet>& sheets) {

@@ -55,6 +55,15 @@ Without `fill`, old `filled` shapes keep using the line colour.
 
 ### Versions
 
+Custom styles are stored as optional `styleSettings` snapshots, with
+`format: "penzene-drawing-style"`, `version: 1`, and the complete measurements.
+Lengths are real points; `bondSpacing` is a fraction of bond length. The
+`labelRadius` minimum clearance preserves preset geometry, while `labelMargin`
+sets the gap beyond a glyph. Embedded definitions override the local library
+and survive pages, clipboard copies and embedded SVG/PNG/PDF drawings. Invalid
+embedded definitions are refused rather than silently replaced. Earlier Penzene
+versions ignore this field and may use their default style.
+
 Every Penzene release reads the files of every earlier one. Examples from each release live in
 `tests/data/penz/`, and the tests open all of them.
 

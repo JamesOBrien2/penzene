@@ -13,7 +13,7 @@ constexpr double kMergeRadius = 0.3 * kBondLength;  // closer than this is the s
 // Direction for a new bond from `atom` that avoids existing bonds; `newOrder`
 // makes it straight on at an sp centre.
 QPointF freeDirection(const Document& doc, int atom, int newOrder = 1);
-QPointF snapped(QPointF from, QPointF to);  // unit vector rounded to 30°
+QPointF snapped(QPointF from, QPointF to, double increment = 30);  // unit vector rounded to the angle increment
 int atomNear(const Document& doc, QPointF p, double r, int skip = -1);
 // What a curved arrow's end at p rests on (Arrow::fromAt): an atom or its electron pair, else a bond.
 std::array<int, 2> anchorAt(const Document& doc, QPointF p);

@@ -71,7 +71,9 @@ class Document:
 
     @property
     def style(self) -> str:
-        """Drawing style: 'ACS 1996' (default), 'JDP' or 'RSC' (since 0.4)"""
+        """
+        Drawing style name, from drawing_styles(); includes saved user styles (since 0.4)
+        """
 
     @style.setter
     def style(self, arg: str, /) -> None: ...
