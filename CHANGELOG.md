@@ -28,6 +28,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - The NMR panel imports processed ¹H and ¹³C JCAMP-DX spectra as a normalized experimental trace beneath the prediction (#553).
 - The Templates library adds 24 heterocycles, macrocycles, ligands and reagents, including cyclen, bipyridine, dppe, DMAP and CDI (#474).
 - A five-minute first-molecule tutorial walks through installing Penzene, drawing ethanol, saving it and exporting a figure (#602).
+- A tutorial for users moving from another editor covers hotspot shortcuts, drawing styles and CDXML editing (#603).
 
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 
