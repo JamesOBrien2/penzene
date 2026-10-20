@@ -216,7 +216,7 @@ const std::vector<Template>& builtinTemplates() {
          [] { return fischer("CHO", {true, false, true, true}, "CH2OH"); }},
         {"Projections", "Fischer: D-glyceraldehyde", "C([C@H](C=O)O)O", [] { return fischer("CHO", {true}, "CH2OH"); }},
         {"Projections", "Newman: butane, anti (staggered)", "",
-         [] { return newman(60, {"CH3", "H", "H"}, {"H", "H", "CH3"}); }},
+         [] { return newman(60, {"CH3", "H", "H"}, {"H", "CH3", "H"}); }},
         {"Projections", "Newman: ethane, eclipsed", "", [] { return newman(24, {"H", "H", "H"}, {"H", "H", "H"}); }},
         {"Lab", "TLC plate", "", tlcPlate},
     };
