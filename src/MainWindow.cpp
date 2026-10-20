@@ -7,6 +7,7 @@
 #include "Edit.h"
 #include "Online.h"
 #include "Templates.h"
+#include "Stoichiometry.h"
 #include "WhatsNew.h"
 #ifdef Q_OS_WIN
 #include "OleServer.h"
@@ -715,6 +716,19 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
         const auto k = std::find_if(s.begin(), s.end(), [&](const chem::NmrStick& k) { return std::count(k.atoms.begin(), k.atoms.end(), atom); });
         if (nmrDock_->isVisible()) nmr_->setCurrent(k == s.end() ? -1 : int(k - s.begin()));
     });
+    stoichiometryDock_ = new QDockWidget(tr("Stoichiometry"), this);
+    stoichiometryDock_->setObjectName("stoichiometry");
+    stoichiometry_ = new StoichiometryPanel;
+    auto* stoichiometryCard = new QFrame;
+    stoichiometryCard->setObjectName("panelCard");
+    auto* stoichiometryLayout = new QVBoxLayout(stoichiometryCard);
+    stoichiometryLayout->setContentsMargins(0, 0, 0, 0);
+    stoichiometryLayout->addWidget(stoichiometry_);
+    stoichiometryDock_->setWidget(stoichiometryCard);
+    addDockWidget(Qt::BottomDockWidgetArea, stoichiometryDock_);
+    stoichiometryDock_->hide();
+    connect(stoichiometryDock_, &QDockWidget::visibilityChanged, this, &MainWindow::updateStoichiometry);
+    connect(canvas_, &Canvas::documentChanged, this, &MainWindow::updateStoichiometry);
     buildTools();
     buildFormatToolbar();
     buildMenus();
@@ -859,6 +873,10 @@ QString formulaHtml(const std::string& formula) {
     return sup.isEmpty() ? html : html + "<sup>" + sup + "</sup>";
 }
 
+void MainWindow::updateStoichiometry() {
+    if (stoichiometryDock_->isVisible()) stoichiometry_->setDocument(canvas_->document(), undo_);
+}
+
 void MainWindow::updateProfile() {
     if (!profileDock_->isVisible()) return;
     const auto p = chem::profile(canvas_->selectedSubset());
@@ -983,6 +1001,7 @@ std::vector<Sheet> MainWindow::sheets() const {
 }
 
 void MainWindow::setPages(const std::vector<Sheet>& sheets) {
+    stoichiometry_->reset();
     QUndoStack* first = pages_[0].undo;
     // Off the old pages before their stacks go: deleting the group's active stack signals
     // cleanChanged, and updateTitle would read the stacks already deleted.
@@ -3062,6 +3081,9 @@ void MainWindow::buildMenus() {
     auto* nmrToggle = nmrDock_->toggleViewAction();
     nmrToggle->setText(tr("&NMR Panel"));
     view->addAction(nmrToggle);
+    auto* stoichiometryToggle = stoichiometryDock_->toggleViewAction();
+    stoichiometryToggle->setText(tr("&Stoichiometry"));
+    view->addAction(stoichiometryToggle);
     view->addSeparator();
     themeMenu_ = view->addMenu(tr("T&heme"));
     themeGroup_ = new QActionGroup(this);

@@ -24,6 +24,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - View → Theme imports and exports versioned JSON theme files; imported themes remain available after restarting (#475).
 - Edit → Find Substructure (Ctrl/Cmd+F) selects every SMILES or SMARTS match on the current page, including groups inside abbreviations (#485).
 - Drag the Erase tool across atoms, bonds, arrows and text to preview their removal, then release to erase them in one undo step; Escape cancels (#487).
+- View → Stoichiometry calculates reactant and reagent quantities from a limiting reagent, mmol scale, equivalents and optional densities; Copy as Text keeps the table for a lab notebook (#486).
 
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 

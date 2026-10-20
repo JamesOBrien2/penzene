@@ -116,6 +116,7 @@ private:
     void updateProfile();  // the Properties panel, while it's visible
     void updateMassSpec();  // the Mass Spec panel, likewise
     void updateNmr();       // and the NMR panel
+    void updateStoichiometry();
     void applyTheme(const QString& name);
     void importTheme();
     void exportTheme();
@@ -171,6 +172,8 @@ private:
     class QDockWidget* nmrDock_;
     class QComboBox* nucleus_;
     class NmrView* nmr_;
+    class QDockWidget* stoichiometryDock_;
+    class StoichiometryPanel* stoichiometry_;
     std::vector<std::pair<QAction*, std::function<QIcon()>>> icons_;
     std::vector<struct FlyoutFrame*> flyouts_;  // the tool rail's group flyouts
 };
