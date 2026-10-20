@@ -2175,6 +2175,54 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>&amp;What&apos;s New</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Check for &amp;Updates…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;About Penzene</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>About Penzene</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;h3&gt;Penzene %1&lt;/h3&gt;&lt;p&gt;An open-source chemical structure editor.&lt;/p&gt;&lt;p&gt;GPL-3.0 • &lt;a href=&apos;https://github.com/JamesOBrien2/penzene&apos;&gt;GitHub&lt;/a&gt;&lt;/p&gt;&lt;p&gt;Chemistry by RDKit. GUI by Qt.&lt;/p&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>One-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser, H-Gly-D-Phe-OH, Ac-Gly-Phe-NH2):</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Find Substructure</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>SMILES or SMARTS (current page):</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not search. Check the SMILES or SMARTS pattern and the drawing&apos;s structure.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No matches found</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>1 match selected</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%1 matches selected</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;p&gt;Point at an atom or bond to make it the &lt;b&gt;hotspot&lt;/b&gt;. It stays put when the mouse
 moves off, so you can keep typing.&lt;/p&gt;
 &lt;table cellspacing=&quot;5&quot;&gt;
@@ -2223,6 +2271,7 @@ moves off, so you can keep typing.&lt;/p&gt;
 &lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;No hotspot (Esc)&lt;/th&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;x X j e t Space&lt;/b&gt;&lt;/td&gt;&lt;td&gt;bond, chain, benzene, arrow, text, select tool&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Selection&lt;/th&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F&lt;/b&gt;&lt;/td&gt;&lt;td&gt;find a SMILES or SMARTS substructure on the current page&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;nudge 1 pt; with &lt;b&gt;Shift&lt;/b&gt; 10 pt&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Enter&lt;/b&gt;&lt;/td&gt;&lt;td&gt;back to a hotspot on the selection&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Drag onto an atom&lt;/b&gt;&lt;/td&gt;&lt;td&gt;merge (Select tool) &amp;nbsp;•&amp;nbsp; &lt;b&gt;Shift+drag&lt;/b&gt; move straight; draw a bond at any angle&lt;/td&gt;&lt;/tr&gt;
@@ -2234,27 +2283,7 @@ moves off, so you can keep typing.&lt;/p&gt;
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>&amp;What&apos;s New</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Check for &amp;Updates…</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&amp;About Penzene</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>About Penzene</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>&lt;h3&gt;Penzene %1&lt;/h3&gt;&lt;p&gt;An open-source chemical structure editor.&lt;/p&gt;&lt;p&gt;GPL-3.0 • &lt;a href=&apos;https://github.com/JamesOBrien2/penzene&apos;&gt;GitHub&lt;/a&gt;&lt;/p&gt;&lt;p&gt;Chemistry by RDKit. GUI by Qt.&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>One-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser, H-Gly-D-Phe-OH, Ac-Gly-Phe-NH2):</source>
+        <source>&amp;Find Substructure…</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

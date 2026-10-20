@@ -229,6 +229,56 @@ TEST_CASE("insert centres the fragment and selects it") {
     CHECK(f.canvas.selection() == QSet<int>{3, 4, 5});
 }
 
+TEST_CASE("Find Substructure selects all matches, preserves edits and seeds from selection (#485)") {
+    App app;
+    MainWindow w;
+    w.resize(1000, 800);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    REQUIRE(canvas);
+    const Document doc = *chem::fromSmiles("CC(=O)OC.CC=O");
+    canvas->setDocumentSilently(doc);
+    canvas->fitToSelection();
+    canvas->setSelection({1, 2});
+    QAction* find = nullptr;
+    for (auto* a : w.findChildren<QAction*>()) if (a->text() == "&Find Substructure…") find = a;
+    REQUIRE(find);
+    QString initial;
+    const QString preview = qEnvironmentVariable("PENZENE_FIND_PREVIEW");
+    QApplication::processEvents();
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/before.png"));
+    auto search = [&](const QString& pattern) {
+        QTimer::singleShot(0, &w, [&, pattern] {
+            auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+            REQUIRE(dialog);
+            initial = dialog->textValue();
+            dialog->setTextValue(pattern);
+            dialog->accept();
+        });
+        find->trigger();
+    };
+    search("C=O");
+    CHECK_FALSE(initial.isEmpty());
+    CHECK(canvas->selection() == QSet<int>{1, 2, 6, 7});
+    CHECK(w.statusBar()->currentMessage() == "2 matches selected");
+    CHECK(canvas->document() == doc);
+    QApplication::processEvents();
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/after.png"));
+    QTimer::singleShot(0, &w, [&] {
+        QTimer::singleShot(0, &w, [] {
+            auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+            REQUIRE(box);
+            box->accept();
+        });
+    });
+    search("C1");
+    CHECK(canvas->selection() == QSet<int>{1, 2, 6, 7});
+    search("N");
+    CHECK(canvas->selection().isEmpty());
+    CHECK(w.statusBar()->currentMessage() == "No matches found");
+    CHECK(canvas->document() == doc);
+}
+
 // The documentation's screenshots: `pixi run screenshots` writes them to docs/_static.
 TEST_CASE("main window screenshots") {
     App app;
