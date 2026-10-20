@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="19.4028mm" height="9.525mm"
+ viewBox="0 0 54.9415 27.2"
+ xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.2" baseProfile="tiny">
+<metadata id="penzene">ewogICAgImF0b21zIjogWwogICAgICAgIHsKICAgICAgICAgICAgIngiOiAwLAogICAgICAgICAgICAieSI6IDAsCiAgICAgICAgICAgICJ6IjogNgogICAgICAgIH0sCiAgICAgICAgewogICAgICAgICAgICAieCI6IDEyLjQ3MDc2NTgxNDQ5NTkxOCwKICAgICAgICAgICAgInkiOiAtNy4xOTk5OTk5OTk5OTk5OTksCiAgICAgICAgICAgICJ6IjogNgogICAgICAgIH0sCiAgICAgICAgewogICAgICAgICAgICAieCI6IDI0Ljk0MTUzMTYyODk5MTgzNiwKICAgICAgICAgICAgInkiOiAwLAogICAgICAgICAgICAieiI6IDgKICAgICAgICB9CiAgICBdLAogICAgImJvbmRzIjogWwogICAgICAgIHsKICAgICAgICAgICAgImEiOiAwLAogICAgICAgICAgICAiYiI6IDEsCiAgICAgICAgICAgICJvcmRlciI6IDEKICAgICAgICB9LAogICAgICAgIHsKICAgICAgICAgICAgImEiOiAxLAogICAgICAgICAgICAiYiI6IDIsCiAgICAgICAgICAgICJvcmRlciI6IDEKICAgICAgICB9CiAgICBdLAogICAgImZvcm1hdCI6ICJwZW56ZW5lIiwKICAgICJ2ZXJzaW9uIjogMQp9Cg==</metadata>
+<title>Penzene</title>
+<desc>Generated with Qt</desc>
+<defs>
+</defs>
+<g fill="none" stroke="black" stroke-width="1" fill-rule="evenodd" stroke-linecap="square" stroke-linejoin="bevel" >
+
+<g fill="none" stroke="#000000" stroke-opacity="1" stroke-width="1" stroke-linecap="square" stroke-linejoin="bevel" transform="matrix(1,0,0,1,15,17.2)"
+font-family="Sans Serif" font-size="9" font-weight="400" font-style="normal" 
+>
+</g>
+
+<g fill="none" stroke="#000000" stroke-opacity="1" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round" transform="matrix(1,0,0,1,15,17.2)"
+font-family="Sans Serif" font-size="9" font-weight="400" font-style="normal" 
+>
+<polyline fill="none" vector-effect="none" points="0,0 12.4708,-7.2 " />
+<polyline fill="none" vector-effect="none" points="12.4708,-7.2 20.1784,-2.75 " />
+</g>
+
+<g fill="#000000" fill-opacity="1" stroke="none" transform="matrix(1,0,0,1,15,17.2)"
+font-family="Sans Serif" font-size="9" font-weight="400" font-style="normal" 
+>
+<path vector-effect="none" fill-rule="evenodd" d="M21.5303,0.0917969 C21.5303,-1.09635 21.8493,-2.02653 22.4873,-2.69873 C23.1253,-3.37093 23.9489,-3.70703 24.958,-3.70703 C25.6188,-3.70703 26.2145,-3.54915 26.7451,-3.2334 C27.2757,-2.91764 27.6802,-2.47738 27.9585,-1.9126 C28.2368,-1.34782 28.376,-0.707357 28.376,0.00878906 C28.376,0.734701 28.2295,1.38411 27.9365,1.95703 C27.6436,2.52995 27.2285,2.9637 26.6914,3.2583 C26.1543,3.5529 25.5749,3.7002 24.9531,3.7002 C24.2793,3.7002 23.6771,3.53743 23.1465,3.21191 C22.6159,2.88639 22.2139,2.44206 21.9404,1.87891 C21.667,1.31576 21.5303,0.720052 21.5303,0.0917969 Z M22.5068,0.106445 C22.5068,0.969076 22.7388,1.6486 23.2026,2.14502 C23.6665,2.64144 24.2484,2.88965 24.9482,2.88965 C25.6611,2.88965 26.2479,2.639 26.7085,2.1377 C27.1691,1.63639 27.3994,0.92513 27.3994,0.00390625 C27.3994,-0.578776 27.3009,-1.0874 27.104,-1.52197 C26.9071,-1.95654 26.619,-2.29346 26.2397,-2.53271 C25.8605,-2.77197 25.4349,-2.8916 24.9629,-2.8916 C24.2923,-2.8916 23.7153,-2.6613 23.2319,-2.20068 C22.7485,-1.74007 22.5068,-0.971029 22.5068,0.106445 Z "/>
+</g>
+
+<g fill="#000000" fill-opacity="1" stroke="none" transform="matrix(1,0,0,1,15,17.2)"
+font-family="Sans Serif" font-size="9" font-weight="400" font-style="normal" 
+>
+<path vector-effect="none" fill-rule="evenodd" d="M29.6133,3.57813 L29.6133,-3.58008 L30.5605,-3.58008 L30.5605,-0.640625 L34.2813,-0.640625 L34.2813,-3.58008 L35.2285,-3.58008 L35.2285,3.57813 L34.2813,3.57813 L34.2813,0.204102 L30.5605,0.204102 L30.5605,3.57813 L29.6133,3.57813 Z "/>
+</g>
+
+<g fill="none" stroke="#000000" stroke-opacity="1" stroke-width="1" stroke-linecap="square" stroke-linejoin="bevel" transform="matrix(1,0,0,1,15,17.2)"
+font-family="Sans Serif" font-size="9" font-weight="400" font-style="normal" 
+>
+</g>
+</g>
+</svg>

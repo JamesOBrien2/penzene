@@ -19,8 +19,9 @@ It runs on macOS, Linux and Windows, and does its chemistry with [RDKit](https:/
 
 ::::
 
-New to Penzene? The [tutorials](tutorials/index.md) walk through complete workflows, from drawing
-caffeine with the keyboard to rendering a whole dataset from Python.
+New to Penzene? Start with [Your first molecule in five minutes](tutorials/first-molecule.md).
+The [tutorials](tutorials/index.md) then walk through drawing caffeine with the keyboard,
+reaction schemes and rendering a whole dataset from Python.
 
 The same drawing from a script:
 
