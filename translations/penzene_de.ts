@@ -2573,6 +2573,18 @@ moves off, so you can keep typing.&lt;/p&gt;
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Discrete bonds</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Aromatic circles</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Aromatic rings:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Preview</source>
         <translation type="unfinished"></translation>
     </message>
