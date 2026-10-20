@@ -19,6 +19,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Text has its own button on the tool rail, with the same `t` shortcut (#622).
 - A tutorial covers figures in Word, PowerPoint and LaTeX, with vector examples and the Windows drawing-object workflow (#607).
 - Predicted NMR names quintets, sextets and septets when one equivalent set of neighbouring hydrogens splits a signal; mixed sets stay multiplets (#574).
+- Peptide import accepts N-acetyl (`Ac-`) and C-terminal amide (`-NH2`) caps, including `Ac-Gly-Phe-NH2` (#572).
 
 - Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
 

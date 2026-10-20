@@ -25,6 +25,7 @@
 #include <GraphMol/FileParsers/FileWriters.h>
 #include <GraphMol/FileParsers/SequenceParsers.h>
 #include <GraphMol/MolOps.h>
+#include <GraphMol/MonomerInfo.h>
 #include <GraphMol/atomic_data.h>
 #include <GraphMol/new_canon.h>
 #include <GraphMol/SmilesParse/SmilesParse.h>
@@ -968,12 +969,14 @@ std::optional<Document> fromSequence(const QString& sequence) {
         {"ala", 'A'}, {"arg", 'R'}, {"asn", 'N'}, {"asp", 'D'}, {"cys", 'C'}, {"gln", 'Q'}, {"glu", 'E'},
         {"gly", 'G'}, {"his", 'H'}, {"ile", 'I'}, {"leu", 'L'}, {"lys", 'K'}, {"met", 'M'}, {"phe", 'F'},
         {"pro", 'P'}, {"ser", 'S'}, {"thr", 'T'}, {"trp", 'W'}, {"tyr", 'Y'}, {"val", 'V'}};
-    // Three-letter codes: Gly-Phe or GLY PHE, with H-…-OH free ends and D- or L- before a residue; a lone
+    // Three-letter codes: Gly-Phe or GLY PHE, with free or capped ends and D- or L- before a residue; a lone
     // unhyphenated one only as written (Gly), since GLY is also Gly-Leu-Tyr.
     QStringList words = sequence.split(QRegularExpression("[\\s-]+"), Qt::SkipEmptyParts);
     const bool hyphens = sequence.contains('-');
-    if (hyphens && words.size() > 1 && words.first() == "H") words.removeFirst();
-    if (hyphens && words.size() > 1 && words.last() == "OH") words.removeLast();
+    const bool acetyl = hyphens && words.size() > 1 && words.first() == "Ac";
+    const bool amide = hyphens && words.size() > 1 && words.last() == "NH2";
+    if (acetyl || (hyphens && words.size() > 1 && words.first() == "H")) words.removeFirst();
+    if (amide || (hyphens && words.size() > 1 && words.last() == "OH")) words.removeLast();
     QString letters;
     bool three = !words.isEmpty();
     for (int i = 0; i < words.size() && three; ++i) {
@@ -982,16 +985,37 @@ std::optional<Document> fromSequence(const QString& sequence) {
         three = prefix || (codes.contains(w) && (hyphens || words.size() > 1 || words[i] == words[i].left(1).toUpper() + w.mid(1)));
         if (three && !prefix) letters += i > 0 && words[i - 1] == "D" ? codes[w].toLower() : codes[w];
     }
-    if (!three && hyphens) return std::nullopt;  // Ala-X-Phe: refused, not read as one-letter codes
-    if (!three) letters = sequence.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts).join("");  // one-letter, lower case for D
+    if (!three && hyphens && (!(acetyl || amide) || words.size() != 1)) return std::nullopt;
+    if (!three) letters = hyphens ? words.first() : words.join("");  // one-letter, lower case for D
     if (letters.isEmpty()) return std::nullopt;
     std::unique_ptr<RWMol> mol;
     try {
         mol.reset(RDKit::SequenceToMol(letters.toStdString(), true, true));  // lower case: D
+        if (!mol || !mol->getNumAtoms()) return std::nullopt;
+        int amino = -1, acid = -1;
+        for (const auto* atom : mol->atoms())
+            if (const auto* residue = atom->getMonomerInfo()) {
+                const QString name = QString::fromStdString(residue->getName()).trimmed();
+                if (residue->getResidueNumber() == 1 && name == "N") amino = int(atom->getIdx());
+                if (name == "OXT") acid = int(atom->getIdx());
+            }
+        if (amide) {
+            if (acid < 0) return std::nullopt;
+            mol->getAtomWithIdx(acid)->setAtomicNum(7);
+        }
+        if (acetyl) {
+            if (amino < 0) return std::nullopt;
+            const unsigned carbon = mol->addAtom(new RDKit::Atom(6), true, true);
+            const unsigned oxygen = mol->addAtom(new RDKit::Atom(8), true, true);
+            const unsigned methyl = mol->addAtom(new RDKit::Atom(6), true, true);
+            mol->addBond(amino, carbon, RDKit::Bond::SINGLE);
+            mol->addBond(carbon, oxygen, RDKit::Bond::DOUBLE);
+            mol->addBond(carbon, methyl, RDKit::Bond::SINGLE);
+        }
+        if (acetyl || amide) RDKit::MolOps::sanitizeMol(*mol);
     } catch (...) {
         return std::nullopt;
     }
-    if (!mol || !mol->getNumAtoms()) return std::nullopt;
     layout(*mol);
     RDKit::Chirality::wedgeMolBonds(*mol, &mol->getConformer());
     return fromRDKit(*mol);

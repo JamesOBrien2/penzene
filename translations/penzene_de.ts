@@ -1333,10 +1333,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>One-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser, H-Gly-D-Phe-OH):</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Not a peptide sequence.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -2215,6 +2211,10 @@ moves off, so you can keep typing.&lt;/p&gt;
     </message>
     <message>
         <source>&lt;h3&gt;Penzene %1&lt;/h3&gt;&lt;p&gt;An open-source chemical structure editor.&lt;/p&gt;&lt;p&gt;GPL-3.0 • &lt;a href=&apos;https://github.com/JamesOBrien2/penzene&apos;&gt;GitHub&lt;/a&gt;&lt;/p&gt;&lt;p&gt;Chemistry by RDKit. GUI by Qt.&lt;/p&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>One-letter (GFLS; lower case for D) or three-letter (Gly-Phe-Leu-Ser, H-Gly-D-Phe-OH, Ac-Gly-Phe-NH2):</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
