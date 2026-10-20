@@ -1,0 +1,12 @@
+Formula	C9H8O4
+MW	180.16
+Exact mass	180.0423
+Elemental (%)	C 60.00, H 4.48, O 35.52
+cLogP	1.31
+TPSA (Å²)	63.6
+H-bond donors	1
+H-bond acceptors	3
+Rotatable bonds	2
+Heavy atoms	13
+Lipinski (Ro5)	passes
+Veber	passes
