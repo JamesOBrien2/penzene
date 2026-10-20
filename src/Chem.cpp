@@ -445,6 +445,22 @@ static std::unique_ptr<RWMol> drawingMol(const Document& in, bool expand = true,
                           b.stereo == BondStereo::Wedge ? 1u : b.stereo == BondStereo::Hash ? 6u : 4u);
         }
     }
+    // Partial bonds aren't in the mol, but they still hold valence: as half bonds (a partial double
+    // 1.5) when filling hydrogens, so a drawn TS keeps its reactants' formula (#655).
+    std::vector<double> held(doc.atoms.size());
+    std::vector<bool> onPartial(doc.atoms.size());
+    for (const auto& b : doc.bonds) {
+        const bool partial = b.stereo == BondStereo::Partial;
+        for (int end : {b.a, b.b}) held[end] += partial ? b.order - 0.5 : chemicalOrder(b), onPartial[end] = onPartial[end] || partial;
+    }
+    for (size_t i = 0; i < doc.atoms.size(); ++i) {
+        const auto& a = doc.atoms[i];
+        const int valence = onPartial[i] && a.hydrogens < 0 ? firstValence(a.z, a.charge) : -1;
+        if (valence < 0) continue;
+        auto* atom = mol->getAtomWithIdx(i);
+        atom->setNumExplicitHs(std::max(0, int(std::floor(valence - held[i] - a.radicals + 1e-9))));
+        atom->setNoImplicit(true);
+    }
     // A variable attachment is MDL's position variation bond (V3000 ENDPTS), from its bare point.
     for (size_t i = 0; i < in.atoms.size(); ++i) {
         const auto& ends = in.atoms[i].attachments;

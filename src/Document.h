@@ -37,8 +37,9 @@ struct StyleSettings {
 // double bond they style one line).
 // Interaction (dotted: H-bond, contact, coordination) and Partial (dashed: bonds
 // forming or breaking in a transition state) are drawn, not chemistry: neither
-// an interaction nor a partial single counts, and a partial double counts as the
-// double it was, so hydrogens (and the formula) stay those of the reactants.
+// an interaction nor a partial single is a bond of the molecule, and a partial double
+// counts as the double it was. When filling hydrogens a partial bond holds half a bond
+// more than that (a partial single 0.5, a double 1.5), so they stay the reactants' (#655).
 // Dative is a coordinate bond drawn as an arrow from its donor (a) to its acceptor (b):
 // it takes none of the donor's hydrogens. A plain line to a metal is read as one too
 // where the donor has no bond to spare (PPh3, NMe3, pyridine; see chem::toRDKit).
