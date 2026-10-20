@@ -75,6 +75,10 @@ Every Penzene release reads the files of every earlier one. Examples from each r
 
 ## ChemDraw
 
+Groups of whole molecules, arrows and text survive CDXML and CDX round trips. A group covering
+only part of a bonded molecule is exported without grouping those atoms, so its fragment stays
+intact. Nested imported groups become one outer group.
+
 CDXML import keeps what the file draws: molecules with their labels and abbreviations, arrows, text,
 lines, boxes, ovals and lone-pair symbols. Pasting from ChemDraw works on macOS (and on Windows
 where ChemDraw offers CDXML). The file's label size relative to its bond length comes with it, so
