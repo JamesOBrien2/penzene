@@ -169,6 +169,11 @@ if importlib.util.find_spec("jsonschema"):
     with open(os.path.join(root, "docs", "_static", "penz.schema.json")) as f:
         schema = json.load(f)
     jsonschema.Draft202012Validator.check_schema(schema)
+    with open(os.path.join(root, "docs", "_static", "theme.schema.json")) as f:
+        theme_schema = json.load(f)
+    jsonschema.Draft202012Validator.check_schema(theme_schema)
+    with open(os.path.join(root, "docs", "_static", "theme-example.json")) as f:
+        jsonschema.validate(json.load(f), theme_schema)
     examples = sorted(glob.glob(os.path.join(os.environ["PENZENE_TEST_DATA"], "penz", "v*.penz")))
     assert len(examples) >= 8
     for path in examples:

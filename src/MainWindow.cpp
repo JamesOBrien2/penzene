@@ -1437,7 +1437,7 @@ void MainWindow::showPreferences() {
     settings.setValue("updates/auto", updates->isChecked());
     settings.setValue("language", languageBox->currentData().toString());
     applyTheme(themeBox->currentText());
-    for (auto* a : themeGroup_->actions()) a->setChecked(a->text() == themeBox->currentText());
+    for (auto* a : themeGroup_->actions()) a->setChecked(a->data().toString() == themeBox->currentText());
 }
 
 QWidget* MainWindow::checkStructure() {
@@ -2558,6 +2558,62 @@ void MainWindow::applyTheme(const QString& name) {
     QSettings().setValue("theme", chosen.name);
 }
 
+void MainWindow::refreshThemeMenu() {
+    themeMenu_->clear();
+    const QString current = theme(QSettings().value("theme", "System").toString()).name;
+    for (const auto& t : themes()) {
+        QString label = t.name;
+        auto* a = themeMenu_->addAction(label.replace('&', "&&"), this, [this, n = t.name] { applyTheme(n); });
+        a->setData(t.name);
+        a->setCheckable(true);
+        a->setChecked(t.name == current);
+        themeGroup_->addAction(a);
+        if (t.name == "Dark") themeMenu_->addSeparator();
+    }
+    themeMenu_->addSeparator();
+    themeMenu_->addAction(tr("Import Theme…"), this, &MainWindow::importTheme);
+    themeMenu_->addAction(tr("Export Theme…"), this, &MainWindow::exportTheme);
+}
+
+void MainWindow::importTheme() {
+    const QString path = QFileDialog::getOpenFileName(this, tr("Import Theme"), {}, tr("Theme files (*.json)"));
+    if (path.isEmpty()) return;
+    QFile file(path);
+    const auto imported = file.open(QIODevice::ReadOnly) ? Theme::fromJson(file.readAll()) : std::nullopt;
+    if (!imported) {
+        QMessageBox::warning(this, tr("Import Theme"), tr("Could not read a valid version 1 Penzene theme."));
+        return;
+    }
+    const auto all = themes();
+    auto existing = std::find_if(all.begin(), all.end(), [&](const Theme& t) { return t.name == imported->name; });
+    if (existing != all.end() && imported->isBuiltIn() && existing->toJson() != imported->toJson()) {
+        QMessageBox::warning(this, tr("Import Theme"), tr("Built-in themes cannot be replaced; use a different name."));
+        return;
+    }
+    if (existing != all.end() && existing->toJson() != imported->toJson()) {
+        QMessageBox confirm(QMessageBox::Question, tr("Import Theme"), tr("Replace the saved theme \"%1\"?").arg(imported->name),
+                            QMessageBox::Yes | QMessageBox::No, this);
+        confirm.setTextFormat(Qt::PlainText);
+        if (confirm.exec() != QMessageBox::Yes) return;
+    }
+    if (!saveUserTheme(*imported)) {
+        QMessageBox::warning(this, tr("Import Theme"), tr("Could not save the theme."));
+        return;
+    }
+    applyTheme(imported->name);
+    QTimer::singleShot(0, this, &MainWindow::refreshThemeMenu);
+}
+
+void MainWindow::exportTheme() {
+    const QString selected = QSettings().value("theme", "System").toString();
+    Theme chosen = theme(selected);
+    if (selected == "System") chosen = theme(QApplication::palette().color(QPalette::Base).lightness() < 128 ? "Dark" : "Light");
+    QString path = QFileDialog::getSaveFileName(this, tr("Export Theme"), "theme.json", tr("Theme files (*.json)"));
+    if (path.isEmpty()) return;
+    if (!path.endsWith(".json", Qt::CaseInsensitive)) path += ".json";
+    if (!writeWhole(path, chosen.toJson())) QMessageBox::warning(this, tr("Export Theme"), tr("Could not write the theme file."));
+}
+
 void MainWindow::buildMenus() {
     auto* file = menuBar()->addMenu(tr("&File"));
     file->addAction(tr("&New"), QKeySequence::New, this, [this] {
@@ -2988,16 +3044,10 @@ void MainWindow::buildMenus() {
     nmrToggle->setText(tr("&NMR Panel"));
     view->addAction(nmrToggle);
     view->addSeparator();
-    auto* themeMenu = view->addMenu(tr("T&heme"));
-    auto* themeGroup = themeGroup_ = new QActionGroup(this);
+    themeMenu_ = view->addMenu(tr("T&heme"));
+    themeGroup_ = new QActionGroup(this);
     const QString current = QSettings().value("theme", "System").toString();
-    for (const auto& t : themes()) {
-        auto* a = themeMenu->addAction(t.name, this, [this, n = t.name] { applyTheme(n); });
-        a->setCheckable(true);
-        a->setChecked(t.name == theme(current).name);
-        themeGroup->addAction(a);
-        if (t.name == "Dark") themeMenu->addSeparator();
-    }
+    refreshThemeMenu();
     applyTheme(current);
     // Following the OS: repaint the canvas and icons when it switches.
     connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this, [this] {

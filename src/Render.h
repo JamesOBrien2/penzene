@@ -8,6 +8,7 @@
 #include <QImage>
 #include <QPainterPath>
 #include <QStringList>
+#include <optional>
 #include <vector>
 
 class QPainter;
@@ -22,19 +23,24 @@ struct RenderStyle {
 
 // Screen colours. Exports and copies always use black ink on a clear
 // background, so a dark theme never leaks into a paper.
+struct Chrome {
+    QColor border, secondary, accentBg;
+};
 struct Theme {
     QString name;
     bool dark = false;
     QColor paper = Qt::white, ink = Qt::black, error = QColor(220, 40, 40);
     QColor accent = QColor(40, 120, 255), hotspot = QColor(40, 170, 60);
     QColor window, surface, text;  // UI palette; invalid = leave Qt's own
+    Chrome chromeColors;  // invalid colours use the preset's derived chrome
+    bool isBuiltIn() const;
+    QByteArray toJson() const;
+    static std::optional<Theme> fromJson(const QByteArray& data);
 };
-const std::vector<Theme>& themes();  // "System" first; "System" follows the OS light/dark
-const Theme& theme(const QString& name);
+std::vector<Theme> themes();  // "System" first; includes saved user themes
+Theme theme(const QString& name);
+bool saveUserTheme(const Theme& theme);  // atomically replaces a user theme of the same name
 // The interface's colours beyond the palette: borders, secondary text and the accent's tint.
-struct Chrome {
-    QColor border, secondary, accentBg;
-};
 Chrome chrome(const Theme& t);
 
 // A document style preset, like ChemDraw stationery. Lengths in points.

@@ -753,6 +753,85 @@ TEST_CASE("themes: Catppuccin palettes; exports stay black") {
     CHECK(dark);  // black ink, not the theme's pale text
 }
 
+TEST_CASE("imported themes persist, appear in the menu and keep exports black (#475)") {
+    App app;
+    Theme custom = theme("Light");
+    custom.name = "Shared & ../theme";
+    custom.paper = QColor("#eff1f5");
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/themes";
+    const QStringList before = QDir(dir).entryList({"*.json"}, QDir::Files);
+    QTemporaryDir files;
+    REQUIRE(files.isValid());
+    const QString source = files.filePath("shared.json"), exported = files.filePath("exported");
+    REQUIRE(writeWhole(source, custom.toJson()));
+    MainWindow w;
+    w.resize(1000, 800);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    REQUIRE(canvas);
+    canvas->setDocumentSilently(*chem::fromSmiles("CCO"));
+    auto action = [&](const QString& name) {
+        for (auto* a : w.findChildren<QAction*>()) if (a->text() == name || a->data().toString() == name) return a;
+        return static_cast<QAction*>(nullptr);
+    };
+    const QString preview = qEnvironmentVariable("PENZENE_THEME_PREVIEW");
+    if (!preview.isEmpty()) {
+        action("Light")->trigger();
+        QApplication::processEvents();
+        REQUIRE(w.grab().save(QString(preview).replace(".png", "-before.png")));
+    }
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
+    auto chooseFile = [&](const QString& path, bool cancelReplacement = false) {
+        QTimer::singleShot(0, &w, [&, path, cancelReplacement] {
+            auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+            REQUIRE(dialog);
+            if (cancelReplacement) QTimer::singleShot(0, &w, [] {
+                auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+                REQUIRE(box);
+                box->button(QMessageBox::No)->click();
+            });
+            dialog->selectFile(path);
+            static_cast<QDialog*>(dialog)->accept();
+        });
+    };
+    REQUIRE(action("Import Theme…"));
+    chooseFile(source);
+    action("Import Theme…")->trigger();
+    QApplication::processEvents();
+    CHECK(theme(custom.name).toJson() == custom.toJson());
+    CHECK(QSettings().value("theme").toString() == custom.name);
+    REQUIRE(action(custom.name));
+    CHECK(action(custom.name)->isChecked());
+    CHECK(action(custom.name)->text() == "Shared && ../theme");
+    CHECK(QApplication::palette().color(QPalette::Base) == custom.paper);
+    CHECK(renderSvg(canvas->document()).contains("#000000"));
+    if (!preview.isEmpty()) REQUIRE(w.grab().save(preview));
+    chooseFile(exported);
+    action("Export Theme…")->trigger();
+    QFile output(exported + ".json");
+    REQUIRE(output.open(QIODevice::ReadOnly));
+    CHECK(output.readAll() == custom.toJson());
+    Theme replacement = custom;
+    replacement.paper = QColor("#fafafa");
+    REQUIRE(writeWhole(source, replacement.toJson()));
+    chooseFile(source, true);
+    action("Import Theme…")->trigger();
+    CHECK(theme(custom.name).toJson() == custom.toJson());
+    CHECK(QApplication::palette().color(QPalette::Base) == custom.paper);
+    QApplication::setAttribute(Qt::AA_DontUseNativeDialogs, false);
+    MainWindow reopened;
+    bool found = false;
+    for (auto* a : reopened.findChildren<QAction*>()) if (a->data().toString() == custom.name) found = a->isChecked();
+    CHECK(found);
+    Theme preset = theme("Light");
+    preset.ink = Qt::red;
+    CHECK_FALSE(saveUserTheme(preset));
+    CHECK(theme("Light").ink != QColor(Qt::red));
+    for (const QString& file : QDir(dir).entryList({"*.json"}, QDir::Files))
+        if (!before.contains(file)) REQUIRE(QFile::remove(dir + "/" + file));
+    QSettings().remove("theme");
+}
+
 TEST_CASE("message box icons: a black glyph takes the theme's text colour (#418)") {
     App app;
     const QColor text = theme("Catppuccin Mocha").text;
