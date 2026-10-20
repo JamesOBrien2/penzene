@@ -117,6 +117,10 @@ recorded for that code. A `~` marks a match of two spheres or fewer.
 ¹H shifts are averaged over an atom's hydrogens, so diastereotopic CH₂ protons show as one value.
 Solvent and stereochemistry aren't taken into account.
 
+First-order splitting uses neighbouring carbon-bound hydrogens. Signals split by four, five or six
+hydrogens in one equivalent set are labelled `quint`, `sext` or `sept`; mixed sets remain `m`.
+Hydrogens on O or N exchange and do not split neighbouring signals.
+
 On one compound in ten held out of the table (by InChIKey), the mean absolute errors were:
 
 | Spheres matched | ¹³C (ppm) | ¹H (ppm) | Share of ¹³C shifts |

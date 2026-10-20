@@ -2248,6 +2248,29 @@ TEST_CASE("predicted spectra: one stick per set of equivalent atoms, for the cho
     CHECK(chem::nmrSticks(d, true).size() == proton.size() + 3);  // everything
 }
 
+TEST_CASE("higher NMR multiplicities require one equivalent coupling set (#574)") {
+    for (auto [smiles, atom, expected] : {std::tuple{"CCCCC", 2, "quint"}, {"CC(O)C", 1, "sept"},
+                                        {"CCCO", 1, "m"}}) {
+        INFO(smiles);
+        const Document d = *chem::fromSmiles(smiles);
+        const auto sticks = chem::nmrSticks(d, true, {atom});
+        REQUIRE(sticks.size() == 1);
+        CHECK(sticks[0].multiplicity() == expected);
+        CHECK(chem::nmrLine(d, true, {atom}).contains(QString("(%1,").arg(expected)));
+        const auto withH = chem::addHydrogens(d);
+        CHECK(chem::nmrSticks(withH, true, {atom})[0].multiplicity() == expected);
+    }
+    chem::NmrStick stick;
+    stick.singleCouplingSet = true;
+    stick.coupled = 5;
+    CHECK(stick.multiplicity() == "sext");
+    stick.singleCouplingSet = false;
+    CHECK(stick.multiplicity() == "m");
+    stick.singleCouplingSet = true;
+    stick.coupled = 7;
+    CHECK(stick.multiplicity() == "m");
+}
+
 TEST_CASE("a spectrum counts the atoms inside an abbreviation, the same as drawn out (#611)") {
     Document d = *chem::fromSmiles("CO");
     REQUIRE(edit::applyLabel(d, 0, "tBu", true));
