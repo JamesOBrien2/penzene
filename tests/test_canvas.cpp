@@ -3,6 +3,7 @@
 #include "Edit.h"
 #include "Geometry.h"
 #include "MainWindow.h"
+#include "NumberBox.h"
 #include "Online.h"
 #include "WhatsNew.h"
 #include "Templates.h"
@@ -36,6 +37,8 @@
 #include <QTest>
 
 #include <QComboBox>
+#include <QDoubleSpinBox>
+#include <QEventLoop>
 #include <QDialog>
 #include <QSpinBox>
 #include <QTest>
@@ -63,6 +66,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 #include <catch2/reporters/catch_reporter_event_listener.hpp>
 #include <catch2/reporters/catch_reporter_registrars.hpp>
 
@@ -4626,4 +4630,177 @@ TEST_CASE("metal ligand labels and dative hotkeys work on the canvas (#616)") {
     f.undo.undo();
     CHECK(f.doc().bonds[0].stereo == BondStereo::None);
     CHECK(chem::atomInfo(f.doc())[1].hydrogens == 3);
+}
+
+
+TEST_CASE("format toolbar: mixed selections, undo and enabled controls (#621)") {
+    MainWindow w;
+    w.resize(1100, 750);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    auto* undo = w.findChild<QUndoStack*>();
+    auto* colour = w.findChild<QToolButton*>("formatColour");
+    auto* fill = w.findChild<QToolButton*>("formatFill");
+    auto* font = w.findChild<QComboBox*>("formatFont");
+    auto* size = w.findChild<QDoubleSpinBox*>("formatSize");
+    auto* bold = w.findChild<QCheckBox*>("formatBold");
+    auto* italic = w.findChild<QCheckBox*>("formatItalic");
+    REQUIRE(canvas); REQUIRE(undo); REQUIRE(colour); REQUIRE(fill); REQUIRE(font); REQUIRE(size); REQUIRE(bold); REQUIRE(italic);
+    CHECK(!canvas->colour().isValid());
+    CHECK(!fill->isEnabled());
+    CHECK(!font->isEnabled());
+    Document d;
+    d.atoms = {{{0, 0}}, {{kBondLength, 0}, 8}};
+    d.bonds = {{0, 1}};
+    d.arrows = {{{-20, -20}, {50, 20}, ArrowKind::Box}, {{60, -20}, {100, 20}, ArrowKind::Ellipse}};
+    d.arrows[1].filled = true, d.arrows[1].fill = Qt::red;
+    d.texts = {{{0, 40}, "heat"}, {{0, 65}, "H2O"}};
+    d.texts[1].bold = true, d.texts[1].italic = true, d.texts[1].scale = 2, d.texts[1].font = "Times New Roman";
+    canvas->setDocumentSilently(d);
+    canvas->setTool(Canvas::Tool::Select);
+    canvas->setSelection({0});
+    CHECK(!fill->isEnabled()); CHECK(!font->isEnabled()); CHECK(!bold->isEnabled());
+    canvas->setSelection({}, {0, 1});
+    CHECK(fill->isEnabled()); CHECK(!font->isEnabled());
+    CHECK(fill->text().contains("Mixed"));
+    canvas->setSelection({}, {}, {0, 1});
+    CHECK(!fill->isEnabled()); CHECK(font->isEnabled()); CHECK(size->isEnabled()); CHECK(bold->isEnabled());
+    CHECK(font->currentIndex() == -1);
+    CHECK(size->value() == 0);
+    CHECK(bold->checkState() == Qt::PartiallyChecked);
+    CHECK(italic->checkState() == Qt::PartiallyChecked);
+    const int before = undo->count();
+    bold->click();
+    CHECK(undo->count() == before + 1);
+    CHECK(canvas->document().texts[0].bold); CHECK(canvas->document().texts[1].bold);
+    undo->undo();
+    CHECK(canvas->document() == d);
+    CHECK(bold->checkState() == Qt::PartiallyChecked);
+    canvas->setSelection({0, 1}, {0}, {0, 1});
+    const int colourBefore = undo->index();
+    auto* swatch = colour->menu()->findChild<QWidgetAction*>()->defaultWidget()->findChildren<QToolButton*>()[1];
+    swatch->click();
+    CHECK(undo->index() == colourBefore + 1);
+    const QColor blue(0x30, 0x50, 0xF8);
+    CHECK(canvas->colour() == blue);
+    CHECK(canvas->document().atoms[0].color == blue);
+    CHECK(canvas->document().bonds[0].color == blue);
+    CHECK(canvas->document().arrows[0].color == blue);
+    CHECK(canvas->document().texts[1].color == blue);
+    colour->menu()->actions()[0]->trigger();  // Automatic
+    CHECK(!canvas->colour().isValid());
+    CHECK(!canvas->document().texts[0].color.isValid());
+    canvas->setSelection({}, {0});
+    fill->menu()->findChild<QWidgetAction*>()->defaultWidget()->findChildren<QToolButton*>()[0]->click();
+    CHECK(canvas->document().arrows[0].filled);
+    CHECK(canvas->document().arrows[0].fill == QColor(207, 227, 255));
+    fill->menu()->actions()[0]->trigger();  // None
+    CHECK(!canvas->document().arrows[0].filled);
+    canvas->setSelection({}, {}, {0, 1});
+    size->setValue(12);
+    const int fontBefore = undo->index();
+    font->lineEdit()->selectAll();
+    QTest::keyClicks(font->lineEdit(), "Times New Roman");
+    QTest::keyClick(font->lineEdit(), Qt::Key_Return);
+    CHECK(undo->index() == fontBefore + 1);
+    CHECK(canvas->document().texts[0].font == "Times New Roman");
+    CHECK(canvas->document().texts[1].font == "Times New Roman");
+    canvas->setTextBold(true);
+    canvas->setTextItalic(true);
+    CHECK(size->value() == 12);
+    CHECK(font->currentText() == "Times New Roman");
+    CHECK(bold->isChecked()); CHECK(italic->isChecked());
+    const QString previews = qEnvironmentVariable("PENZENE_FORMAT_PREVIEW");
+    if (!previews.isEmpty()) {
+        canvas->setSelection({}, {0}); canvas->setFillColor(QColor(207, 227, 255)); canvas->fillSelection();
+        canvas->setSelection({}, {}, {0, 1}); canvas->fitToDocument();
+        QApplication::processEvents();
+        CHECK(w.grab().save(previews + "/formatted.png"));
+        QFile sample(previews + "/formatted.penz");
+        REQUIRE(sample.open(QIODevice::WriteOnly)); sample.write(canvas->document().toJson());
+        canvas->setDocumentSilently(d); canvas->setSelection({}, {}, {0, 1});
+        QApplication::processEvents(); CHECK(w.grab().save(previews + "/mixed.png"));
+    }
+    canvas->setSelection({});
+    canvas->setTool(Canvas::Tool::Text);
+    CHECK(font->isEnabled()); CHECK(!fill->isEnabled());
+    canvas->setArrow(ArrowKind::Box, false);
+    canvas->setTool(Canvas::Tool::Arrow);
+    CHECK(fill->isEnabled()); CHECK(!font->isEnabled());
+    Document old = d;
+    old.arrows[0].filled = true;
+    canvas->setDocumentSilently(old); canvas->setSelection({}, {0});
+    CHECK(fill->text().contains("Automatic"));
+    if (qEnvironmentVariableIsSet("PENZENE_FORMAT_PREVIEW_LIVE")) {
+        canvas->setTool(Canvas::Tool::Select);
+        canvas->setSelection({}, {}, {0, 1}); canvas->fitToDocument();
+        QEventLoop preview;
+        QObject::connect(qApp, &QApplication::lastWindowClosed, &preview, &QEventLoop::quit);
+        preview.exec();
+    }
+}
+
+TEST_CASE("format defaults reach new shapes, text, bonds and ring fills (#621)") {
+    Fixture f;
+    f.canvas.setColour(Qt::blue);
+    f.canvas.setFillColor(Qt::red);
+    f.canvas.setTextFont("Times New Roman");
+    f.canvas.setTextSize(12);
+    f.canvas.setTextBold(true);
+    f.canvas.setTextItalic(true);
+    CHECK(f.undo.count() == 0);
+    f.canvas.setArrow(ArrowKind::Box, false);
+    f.canvas.setTool(Canvas::Tool::Arrow);
+    f.drag({0, 0}, {40, 25});
+    REQUIRE(f.doc().arrows.size() == 1);
+    CHECK(f.doc().arrows[0].color == Qt::blue);
+    CHECK(f.doc().arrows[0].filled);
+    CHECK(f.doc().arrows[0].fill == Qt::red);
+    QTimer::singleShot(0, [] { auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); REQUIRE(dialog); dialog->setTextValue("H2O"); dialog->accept(); });
+    f.canvas.editText(-1, {0, 50});
+    REQUIRE(f.doc().texts.size() == 1);
+    CHECK(f.doc().texts[0].font == "Times New Roman");
+    CHECK(f.doc().texts[0].bold); CHECK(f.doc().texts[0].italic);
+    CHECK(f.doc().texts[0].color == Qt::blue);
+    CHECK(std::abs(f.doc().texts[0].scale * documentStyle(f.doc()).fontSize * exportScale(f.doc()) - 12) < 1e-6);
+    f.canvas.setTool(Canvas::Tool::Bond);
+    f.click({70, 50});
+    REQUIRE(f.doc().bonds.size() == 1);
+    CHECK(f.doc().bonds[0].color == Qt::blue);
+    CHECK(f.doc().atoms[0].color == Qt::blue);
+    f.canvas.setTool(Canvas::Tool::Ring);
+    f.click({70, 90});
+    const auto rings = chem::rings(f.doc()); REQUIRE(rings.size() == 1);
+    f.canvas.setSelection(QSet<int>(rings[0].begin(), rings[0].end()));
+    const int index = f.undo.index();
+    f.canvas.fillSelection();
+    CHECK(f.undo.index() == index + 1);
+    REQUIRE(f.doc().fills.size() == 1); CHECK(f.doc().fills[0].color == Qt::red);
+    f.canvas.setFillColor({}); f.canvas.fillSelection(); CHECK(f.doc().fills.empty());
+    f.undo.undo(); REQUIRE(f.doc().fills.size() == 1);
+}
+
+TEST_CASE("measurement fields keep precision and localized keyboard entry without trailing zeroes") {
+    App app;
+    for (const QLocale& locale : {QLocale::c(), QLocale(QLocale::German), QLocale(QLocale::Arabic)}) {
+        NumberBox box;
+        box.setLocale(locale);
+        box.setDecimals(6);
+        box.setRange(0, 1000);
+        box.setValue(20);
+        CHECK(box.cleanText() == locale.toString(20));
+        box.setValue(0.595276);
+        CHECK(box.value() == Catch::Approx(0.595276));
+        CHECK(box.cleanText() == locale.toString(0.595276, 'f', 6));
+        box.show();
+        box.setFocus();
+        box.selectAll();
+        if (locale.language() == QLocale::Arabic)
+            box.findChild<QLineEdit*>()->setText(locale.toString(1.125, 'f', 3));
+        else QTest::keyClicks(&box, locale.language() == QLocale::German ? "1,125" : "1.125");
+        QTest::keyClick(&box, Qt::Key_Return);
+        CHECK(box.value() == Catch::Approx(1.125));
+        box.stepUp();
+        CHECK(box.value() == Catch::Approx(2.125));
+    }
 }

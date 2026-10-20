@@ -101,7 +101,8 @@ qt_add_resources(penzene_ui "licenses" PREFIX "/" FILES THIRD_PARTY_LICENSES.md)
 # The logo (window icon, What's New) and What's New's icons, with the widgets so tests see them too.
 file(GLOB whatsnew_icons RELATIVE ${CMAKE_SOURCE_DIR}/resources ${CMAKE_SOURCE_DIR}/resources/whatsnew/*.svg)
 list(TRANSFORM whatsnew_icons PREPEND resources/)
-qt_add_resources(penzene_ui "art" PREFIX "/" BASE resources FILES resources/logo.svg ${whatsnew_icons})
+file(GLOB ui_icons RELATIVE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/resources/ui/*.svg)
+qt_add_resources(penzene_ui "art" PREFIX "/" BASE resources FILES resources/logo.svg ${whatsnew_icons} ${ui_icons})
 # Translations: each translations/penzene_<lang>.ts is compiled and embedded as :/i18n/penzene_<lang>.qm.
 find_package(Qt6 REQUIRED COMPONENTS LinguistTools)
 file(GLOB penzene_ts CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/translations/penzene_*.ts)

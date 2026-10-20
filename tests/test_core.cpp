@@ -2192,9 +2192,11 @@ TEST_CASE(".penz schema describes every field the app writes (#573)") {
     Arrow arrow;
     arrow.to = {50, 0}, arrow.bend = 5, arrow.color = Qt::red, arrow.dashed = arrow.behind = arrow.crossed = true;
     arrow.look = OrbitalLook::Shaded, arrow.head = 2, arrow.fromAt = {0, -1}, arrow.toAt = {1, 2}, arrow.group = 0;
+    arrow.filled = true, arrow.fill = Qt::blue;
     d.arrows.push_back(arrow);
     Text text{{0, 40}, "1"};
     text.scale = 2, text.color = Qt::red, text.compound = text.legend = true, text.anchor = 0, text.group = 0;
+    text.font = "Times New Roman", text.bold = text.italic = true;
     d.texts.push_back(text);
     d.fills.push_back({{0, 1, 2}, Qt::red});
     d.brackets.push_back({{0, 1}, false, "n"});
@@ -2816,4 +2818,62 @@ TEST_CASE("metal2d README examples and the polynuclear fallback (#618)") {
             }
         }
     }
+}
+
+
+TEST_CASE("format toolbar model: text and separate fills round trip (#621)") {
+    Document d;
+    d.style = "RSC";
+    Arrow box{{0, 0}, {40, 20}, ArrowKind::RoundedBox};
+    box.color = Qt::red, box.filled = true, box.fill = QColor(207, 227, 255);
+    d.arrows.push_back(box);
+    Text text{{0, 40}, "H2O and SO4^2-"};
+    text.font = "Times New Roman", text.bold = text.italic = true, text.scale = 1.5, text.color = Qt::blue;
+    d.texts.push_back(text);
+    REQUIRE(Document::fromJson(d.toJson()));
+    CHECK(*Document::fromJson(d.toJson()) == d);
+    CHECK(sheetsFromJson(sheetsToJson({{"Sample", d}}))[0].doc == d);
+    for (const QByteArray& bytes : {chem::toCdxml(d), chem::toCdx(d)}) {
+        if (bytes.isEmpty()) continue;  // a build without binary CDX
+        const auto back = chem::fromChemDraw(bytes);
+        REQUIRE(back);
+        REQUIRE(back->arrows.size() == 1);
+        CHECK(back->arrows[0].filled);
+        CHECK(back->arrows[0].fill == box.fill);
+        CHECK(back->arrows[0].color == box.color);
+        REQUIRE(back->texts.size() == 1);
+        CHECK(back->texts[0].font == text.font);
+        CHECK(back->texts[0].bold);
+        CHECK(back->texts[0].italic);
+        CHECK(back->texts[0].color == text.color);
+        CHECK(std::abs(back->texts[0].scale - text.scale) < 1e-4);
+        CHECK(back->texts[0].text == text.text);
+    }
+    const auto xml = chem::toCdxml(d);
+    CHECK(xml.contains("bgcolor="));
+    CHECK(xml.contains("face=\"3\""));
+    Text styled = text;
+    styled.text = "Format";
+    QFont expected = labelFont(documentStyle(d), styled.scale);
+    expected.setFamily(styled.font);
+    expected.setBold(styled.bold);
+    expected.setItalic(styled.italic);
+    QPainterPath expectedPath;
+    expectedPath.addText(styled.pos, expected, styled.text);
+    CHECK(textPath(styled, documentStyle(d)) == expectedPath);
+    CHECK(renderSvg(d).contains("#cfe3ff"));
+}
+
+TEST_CASE("old filled shapes retain their line colour (#621)") {
+    const auto old = Document::fromJson(R"({"format":"penzene","version":1,"arrows":[{"x1":0,"y1":0,"x2":30,"y2":20,"kind":"box","filled":true,"color":"#ff0000"}],"texts":[{"x":0,"y":40,"text":"heat"}]})");
+    REQUIRE(old);
+    REQUIRE(old->arrows.size() == 1);
+    CHECK(old->arrows[0].filled);
+    CHECK(!old->arrows[0].fill.isValid());
+    CHECK(old->texts[0].font.isEmpty());
+    CHECK(!old->texts[0].bold);
+    CHECK(!old->texts[0].italic);
+    CHECK(old->texts[0].scale == 1);
+    CHECK(renderSvg(*old).contains("#ff0000"));
+    CHECK(Document::fromJson(old->toJson()) == old);
 }

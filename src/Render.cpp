@@ -591,7 +591,7 @@ static void drawArrow(QPainter& p, const Arrow& a) {
         p.setPen(dashes);
     }
     if (isShape(a.kind)) {
-        if (a.filled && a.kind != ArrowKind::Line && !isOrbital(a.kind)) p.fillPath(arrowPath(a), p.pen().color());
+        if (a.filled && a.kind != ArrowKind::Line && !isOrbital(a.kind)) p.fillPath(arrowPath(a), a.fill.isValid() ? a.fill : p.pen().color());
         p.drawPath(arrowPath(a));
         return;
     }
@@ -673,7 +673,11 @@ std::vector<Script> scripts(const QString& s) {
 // in runs (not per letter) so kerning and spaces match ordinary text.
 QPainterPath textPath(const Text& t, const DrawingStyle& st) {
     QFont f = labelFont(st, t.scale), small = labelFont(st, 0.7 * t.scale);
-    f.setBold(t.compound), small.setBold(t.compound);
+    for (QFont* font : {&f, &small}) {
+        if (!t.font.isEmpty()) font->setFamily(t.font);
+        font->setBold(t.bold || t.compound);
+        font->setItalic(t.italic);
+    }
     QFontMetricsF fm(f), sm(small);
     const double tab = kTabSpaces * fm.horizontalAdvance(' ');
     QPainterPath path;

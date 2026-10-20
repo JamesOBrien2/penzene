@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "NumberBox.h"
 #include "Canvas.h"
 #include "Chem.h"
 #include "Edit.h"
@@ -77,6 +78,7 @@
 #include <QStatusBar>
 #include <QStackedWidget>
 #include <QToolBar>
+#include <QFontDatabase>
 #include <QUndoStack>
 #include <array>
 
@@ -316,10 +318,44 @@ static QString uiStyle(const Theme& t) {
         QTabBar#pageTabs::tab:selected { color: %6; background: %2; border-top-color: %6; font-weight: 600; }
         QToolButton#addPage { color: %5; background: transparent; border: none; border-radius: 6px; padding: 2px 9px; font-size: 15px; }
         QToolButton#addPage:hover { background: %7; color: %6; }
-        QTreeWidget, QTextEdit, QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+        QToolBar#formatToolbar { background: %1; border: none; padding: 6px 12px; spacing: 8px; }
+        QToolBar#formatToolbar QToolButton { color: %4; background: transparent; border: 1px solid transparent;
+                                           border-radius: 7px; padding: 5px 24px 5px 10px; min-height: 22px; }
+        QToolBar#formatToolbar QToolButton:hover { background: %7; }
+        QToolBar#formatToolbar QToolButton:focus { border-color: %6; }
+        QToolBar#formatToolbar QToolButton::menu-indicator { image: url(:/ui/chevron-down-%8.svg); width: 8px; height: 5px;
+                                                           subcontrol-position: right center; right: 8px; }
+        QToolBar#formatToolbar QCheckBox { margin: 0 5px; }
+        QTreeWidget, QListWidget, QTableWidget, QTextEdit, QLineEdit, QComboBox, QAbstractSpinBox {
             background: %2; color: %4; border: 1px solid %3; border-radius: 7px; padding: 3px;
             selection-background-color: %7; selection-color: %6;
         }
+        QLineEdit, QComboBox, QAbstractSpinBox { min-height: 22px; padding: 4px 8px; }
+        QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus { border-color: %6; }
+        QLineEdit:disabled, QComboBox:disabled, QAbstractSpinBox:disabled, QPushButton:disabled { color: %5; background: %1; }
+        QAbstractSpinBox { padding-right: 24px; }
+        QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { subcontrol-origin: border; width: 22px; border: none; background: transparent; }
+        QAbstractSpinBox::up-button { subcontrol-position: top right; }
+        QAbstractSpinBox::down-button { subcontrol-position: bottom right; }
+        QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover { background: %7; }
+        QComboBox { padding-right: 24px; }
+        QComboBox::drop-down { subcontrol-origin: border; width: 22px; border: none; background: transparent; }
+        QComboBox QLineEdit { border: none; background: transparent; padding: 0; }
+        QAbstractSpinBox::up-arrow { image: url(:/ui/chevron-up-%8.svg); width: 8px; height: 5px; }
+        QAbstractSpinBox::down-arrow, QComboBox::down-arrow { image: url(:/ui/chevron-down-%8.svg); width: 8px; height: 5px; }
+
+        QListWidget#styleList { background: transparent; border: none; padding: 0; outline: none; }
+        QListWidget#styleList::item { padding: 9px 10px; margin: 1px 0; border-radius: 7px; }
+        QListWidget#styleList::item:hover { background: %2; }
+        QListWidget#styleList::item:selected { background: %7; color: %6; }
+        QHeaderView::section { background: %1; color: %5; padding: 8px; border: none; border-bottom: 1px solid %3; }
+        QTableWidget { gridline-color: %3; }
+        QLabel#secondary { color: %5; }
+        QLabel#sectionTitle { font-weight: 600; }
+        QTabWidget::pane { border: none; }
+        QTabBar::tab { color: %5; background: transparent; padding: 8px 12px; border-bottom: 2px solid transparent; }
+        QTabBar::tab:selected { color: %6; border-bottom-color: %6; }
+
         QPushButton { background: %2; color: %4; border: 1px solid %3; border-radius: 8px; padding: 6px 12px; }
         QPushButton:hover { border-color: %6; }
         QPushButton:default { background: %6; color: %1; border-color: %6; }
@@ -330,7 +366,7 @@ static QString uiStyle(const Theme& t) {
         QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
         QScrollBar::add-page, QScrollBar::sub-page { background: transparent; }
     )").arg(t.window.name(), t.surface.name(), c.border.name(), t.text.name(), c.secondary.name(), t.accent.name(),
-              c.accentBg.name());
+              c.accentBg.name(), t.dark ? "dark" : "light");
 }
 
 // A tool flyout: the tools flow into as many columns as fit its width. Drag it by any part that
@@ -678,6 +714,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
         if (nmrDock_->isVisible()) nmr_->setCurrent(k == s.end() ? -1 : int(k - s.begin()));
     });
     buildTools();
+    buildFormatToolbar();
     buildMenus();
     connect(undoGroup_, &QUndoGroup::cleanChanged, this, &MainWindow::updateTitle);
     updateTitle();
@@ -1854,7 +1891,7 @@ static void pressable(QAbstractButton* b) {
 // A drop-down of colour swatches plus "Custom…", for the colour and ring fill tools.
 // The current colour's swatch is shown pressed; `names` label the swatches.
 static QMenu* colourMenu(QWidget* parent, const QList<QColor>& presets, std::function<QColor()> current,
-                         std::function<void(QColor)> picked, const QStringList& names = {}) {
+                         std::function<void(QColor)> picked, const QStringList& names = {}, const QString& reset = {}) {
     auto* menu = new QMenu(parent);
     auto* w = new QWidget;
     auto* grid = new QGridLayout(w);
@@ -1884,6 +1921,7 @@ static QMenu* colourMenu(QWidget* parent, const QList<QColor>& presets, std::fun
         if (c.isValid()) picked(c);
     });
     grid->addWidget(custom, (presets.size() + 3) / 4, 0, 1, 4);
+    if (!reset.isEmpty()) menu->addAction(reset, menu, [picked] { picked(QColor()); });
     auto* action = new QWidgetAction(menu);
     action->setDefaultWidget(w);
     menu->addAction(action);
@@ -1956,6 +1994,137 @@ static QWidget* periodicTable(const std::function<void(int)>& picked) {
     }
     grid->setRowMinimumHeight(7, 8);  // gap above the f block
     return w;
+}
+
+void MainWindow::buildFormatToolbar() {
+    auto* bar = new QToolBar(tr("Format"), centralWidget());
+    bar->setObjectName("formatToolbar");
+    bar->setMovable(false);
+    qobject_cast<QVBoxLayout*>(centralWidget()->layout())->insertWidget(0, bar);
+    auto button = [&](const QString& name, const QString& label) {
+        auto* b = new QToolButton(bar);
+        b->setObjectName(name);
+        b->setText(label);
+        b->setAccessibleName(label);
+        b->setPopupMode(QToolButton::InstantPopup);
+        bar->addWidget(b);
+        return b;
+    };
+    auto* colour = button("formatColour", tr("Colour"));
+    colour->setMenu(colourMenu(colour,
+        {Qt::black, QColor(0x30, 0x50, 0xF8), QColor(0xFF, 0x0D, 0x0D), QColor(0, 0x90, 0x30)},
+        [this] { return canvas_->colour(); }, [this](QColor c) { canvas_->setColour(c); canvas_->colourSelection(); }, {}, tr("Automatic")));
+    auto* fill = button("formatFill", tr("Fill"));
+    fill->setMenu(colourMenu(fill,
+        {QColor(207, 227, 255), QColor(255, 214, 214), QColor(212, 240, 210), QColor(255, 236, 196)},
+        [this] { return canvas_->fillColor(); }, [this](QColor c) { canvas_->setFillColor(c); canvas_->fillSelection(); }, {}, tr("None")));
+    bar->addSeparator();
+    auto* font = new QComboBox(bar);
+    font->setObjectName("formatFont");
+    font->setAccessibleName(tr("Text font"));
+    font->setEditable(true);
+    font->setInsertPolicy(QComboBox::NoInsert);
+    font->addItem(tr("Automatic"), QString());
+    for (const QString& family : QFontDatabase::families()) font->addItem(family, family);
+    font->setMinimumWidth(150);
+    font->setMaximumWidth(200);
+    bar->addWidget(font);
+    auto* size = new NumberBox(bar);
+    size->setObjectName("formatSize");
+    size->setAccessibleName(tr("Text size in points"));
+    size->setRange(0, 288);
+    size->setDecimals(6);
+    size->setSuffix(tr(" pt"));
+    size->setSpecialValueText(tr("Mixed"));
+    size->setKeyboardTracking(false);
+    bar->addWidget(size);
+    auto* bold = new QCheckBox(tr("Bold"), bar);
+    bold->setObjectName("formatBold");
+    bold->setAccessibleName(tr("Bold"));
+    bar->addWidget(bold);
+    auto* italic = new QCheckBox(tr("Italic"), bar);
+    italic->setObjectName("formatItalic");
+    italic->setAccessibleName(tr("Italic"));
+    bar->addWidget(italic);
+    connect(font, &QComboBox::textActivated, this, [=, this](const QString& family) {
+        canvas_->setTextFont(font->currentIndex() == 0 ? QString() : family);
+    });
+    connect(font->lineEdit(), &QLineEdit::editingFinished, this, [=, this] {
+        const QString family = font->currentText();
+        if (!family.isEmpty() && family != tr("Mixed")) canvas_->setTextFont(family == tr("Automatic") ? QString() : family);
+    });
+    connect(size, &QDoubleSpinBox::valueChanged, canvas_, &Canvas::setTextSize);
+    connect(bold, &QCheckBox::checkStateChanged, this, [this](Qt::CheckState s) { canvas_->setTextBold(s == Qt::Checked); });
+    connect(italic, &QCheckBox::checkStateChanged, this, [this](Qt::CheckState s) { canvas_->setTextItalic(s == Qt::Checked); });
+    auto update = [=, this] {
+        QSignalBlocker bFont(font), bSize(size), bBold(bold), bItalic(italic);
+        const Document& doc = canvas_->document();
+        const bool selected = canvas_->hasSelection();
+        QList<QColor> colours;
+        QStringList fills;
+        std::vector<Text> texts;
+        for (int i : canvas_->selection()) colours << doc.atoms[i].color;
+        for (const Bond& b : doc.bonds)
+            if (canvas_->selection().contains(b.a) && canvas_->selection().contains(b.b)) colours << b.color;
+        for (int i : canvas_->selectedArrows()) {
+            const Arrow& a = doc.arrows[i];
+            colours << a.color;
+            if (a.kind == ArrowKind::Box || a.kind == ArrowKind::RoundedBox || a.kind == ArrowKind::Ellipse)
+                fills << (!a.filled ? tr("None") : a.fill.isValid() ? a.fill.name() : a.color.isValid() ? a.color.name() : tr("Automatic"));
+        }
+        for (int i : canvas_->selectedTexts()) colours << doc.texts[i].color, texts.push_back(doc.texts[i]);
+        for (const auto& ring : chem::rings(doc)) {
+            if (!std::all_of(ring.begin(), ring.end(), [&](int i) { return canvas_->selection().contains(i); })) continue;
+            QColor c;
+            for (const Fill& f : doc.fills)
+                if (QSet<int>(f.atoms.begin(), f.atoms.end()) == QSet<int>(ring.begin(), ring.end())) c = f.color;
+            fills << (c.isValid() ? c.name() : tr("None"));
+        }
+        if (!selected) {
+            colours << canvas_->colour();
+            fills << ((canvas_->shapeFilled() || canvas_->tool() == Canvas::Tool::Fill) && canvas_->fillColor().isValid() ? canvas_->fillColor().name() : tr("None"));
+            texts.push_back(canvas_->textFormat());
+        }
+        auto colourLabel = [&](QToolButton* b, const QList<QColor>& values, const QString& label, const QString& empty) {
+            const bool mixed = !values.isEmpty() && std::any_of(values.begin(), values.end(), [&](QColor c) { return c != values.front(); });
+            const QString value = mixed ? tr("Mixed") : values.isEmpty() || !values.front().isValid() ? empty : values.front().name();
+            b->setText(label + ": " + value);
+            b->setAccessibleName(b->text());
+        };
+        colourLabel(colour, colours, tr("Colour"), tr("Automatic"));
+        const bool mixedFill = !fills.isEmpty() && std::any_of(fills.begin(), fills.end(), [&](const QString& c) { return c != fills.front(); });
+        fill->setText(tr("Fill") + ": " + (mixedFill ? tr("Mixed") : fills.isEmpty() ? tr("None") : fills.front()));
+        fill->setAccessibleName(fill->text());
+        const ArrowKind kind = canvas_->arrowKind();
+        fill->setEnabled(selected ? !fills.isEmpty() : canvas_->tool() == Canvas::Tool::Fill ||
+            (canvas_->tool() == Canvas::Tool::Arrow && (kind == ArrowKind::Box || kind == ArrowKind::RoundedBox || kind == ArrowKind::Ellipse)));
+        const bool textEnabled = selected ? !texts.empty() : canvas_->tool() == Canvas::Tool::Text;
+        for (QWidget* w : std::array<QWidget*, 4>{font, size, bold, italic}) w->setEnabled(textEnabled);
+        if (texts.empty()) texts.push_back(canvas_->textFormat());
+        auto mixed = [&](auto get) { return std::any_of(texts.begin(), texts.end(), [&](const Text& t) { return get(t) != get(texts.front()); }); };
+        auto family = [&](const Text& t) { return t.font.isEmpty() ? documentStyle(doc).font : t.font; };
+        if (mixed(family)) font->setCurrentIndex(-1), font->lineEdit()->setPlaceholderText(tr("Mixed"));
+        else {
+            font->lineEdit()->setPlaceholderText({});
+            const QString name = texts.front().font;
+            font->setCurrentIndex(name.isEmpty() ? 0 : font->findText(name));
+            if (!name.isEmpty() && font->currentIndex() < 0) font->setEditText(name);
+        }
+        size->setValue(mixed([](const Text& t) { return t.scale; }) ? 0 : texts.front().scale * documentStyle(doc).fontSize * exportScale(doc));
+        auto check = [&](QCheckBox* b, auto get) {
+            const bool m = mixed(get);
+            b->setText(b == bold ? tr("Bold") : tr("Italic"));
+            if (m) b->setText(b->text() + ": " + tr("Mixed"));
+            b->setTristate(m);
+            b->setCheckState(m ? Qt::PartiallyChecked : get(texts.front()) ? Qt::Checked : Qt::Unchecked);
+        };
+        check(bold, [](const Text& t) { return t.bold || t.compound; });
+        check(italic, [](const Text& t) { return t.italic; });
+    };
+    connect(canvas_, &Canvas::selectionChanged, bar, update);
+    connect(canvas_, &Canvas::documentChanged, bar, update);
+    connect(canvas_, &Canvas::formattingChanged, bar, update);
+    update();
 }
 
 void MainWindow::buildTools() {
@@ -2136,7 +2305,7 @@ void MainWindow::buildTools() {
     auto colour = std::make_shared<QColor>(canvas_->colour());
     const IconMaker colourIcon = paintedIcon([colour](QPainter& p, QColor ink) {
         p.setPen(QPen(ink, 1));
-        p.setBrush(*colour);
+        p.setBrush(colour->isValid() ? *colour : ink);
         p.drawRoundedRect(QRectF(5, 5, 14, 14), 3, 3);
     });
     auto* colourTool = add(colourIcon, tr("Colour: click the swatch to pick a colour, then click atoms, bonds, arrows "
@@ -2162,7 +2331,11 @@ void MainWindow::buildTools() {
                                   },
                                   {tr("Carbon"), tr("Nitrogen"), tr("Oxygen"), tr("Sulfur"), tr("Phosphorus"),
                                    tr("Fluorine"), tr("Chlorine"), tr("Bromine"), tr("Iodine"), tr("Iron"),
-                                   tr("Carbon (grey)"), tr("Boron")}));
+                                   tr("Carbon (grey)"), tr("Boron")}, tr("Automatic")));
+            connect(canvas_, &Canvas::formattingChanged, colourTool, [=, this] {
+                *colour = canvas_->colour();
+                colourTool->setIcon(colourIcon());
+            });
         }
     const QPointF bondPts[] = {{0, 0}, {0.87, -0.5}};
     auto bondIcon = [&](int order, BondStereo st = BondStereo::None) {
@@ -2201,7 +2374,7 @@ void MainWindow::buildTools() {
     auto fill = std::make_shared<QColor>(canvas_->fillColor());
     const IconMaker fillIcon = [fill] {
         Document filled = ringDoc(6, false);
-        filled.fills.push_back({{0, 1, 2, 3, 4, 5}, *fill});
+        if (fill->isValid()) filled.fills.push_back({{0, 1, 2, 3, 4, 5}, *fill});
         return docIcon(filled)();
     };
     auto* fillTool = add(fillIcon, tr("Ring fill: click inside a ring to shade it (again to clear); pick the colour from the arrow"),
@@ -2222,7 +2395,11 @@ void MainWindow::buildTools() {
                                       fillTool->setIcon(fillIcon());
                                   },
                                   {tr("Blue"), tr("Rose"), tr("Green"), tr("Amber"), tr("Lavender"), tr("Pink"),
-                                   tr("Grey"), tr("Yellow")}));
+                                   tr("Grey"), tr("Yellow")}, tr("None")));
+            connect(canvas_, &Canvas::formattingChanged, fillTool, [=, this] {
+                *fill = canvas_->fillColor();
+                fillTool->setIcon(fillIcon());
+            });
         }
 
 

@@ -799,6 +799,9 @@ Arrow Canvas::draggedArrow() const {
         double deg = std::round(qRadiansToDegrees(std::atan2(v.y(), v.x())) / 15) * 15;
         a.to = pressPos_ + dirAt(deg) * len(v);
     }
+    a.color = colour_;
+    a.fill = shapeFilled_ ? fillColor_ : QColor();
+    a.filled = shapeFilled_ && (a.kind == ArrowKind::Box || a.kind == ArrowKind::RoundedBox || a.kind == ArrowKind::Ellipse);
     return a;
 }
 
@@ -1221,9 +1224,11 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
                 return QSet<int>(f.atoms.begin(), f.atoms.end()) == QSet<int>(best.begin(), best.end());
             };
             auto it = std::find_if(next.fills.begin(), next.fills.end(), same);
-            if (it == next.fills.end()) next.fills.push_back({best, fillColor_});
-            else if (it->color == fillColor_) next.fills.erase(it);
-            else it->color = fillColor_;
+            if (it == next.fills.end() && fillColor_.isValid()) next.fills.push_back({best, fillColor_});
+            else if (it != next.fills.end()) {
+                if (!fillColor_.isValid() || it->color == fillColor_) next.fills.erase(it);
+                else it->color = fillColor_;
+            }
             what = tr("Ring fill");
             break;
         }
@@ -1237,6 +1242,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
             break;
         }
     }
+    styleNewObjects(next);
     if (!what.isEmpty() && !(next == beforeDrag_)) commit(next, what);
     viewport()->update();
     emit selectionChanged();
@@ -1772,6 +1778,76 @@ void Canvas::duplicateSelection(QPointF dir) {
                  range(int(doc_.texts.size() - copy.texts.size()), int(doc_.texts.size())));
 }
 
+Text Canvas::textFormat() const {
+    Text t = textFormat_;
+    if (textSize_ > 0) t.scale = textSize_ / (documentStyle(doc_).fontSize * exportScale(doc_));
+    return t;
+}
+
+void Canvas::formatTexts(const std::function<void(Text&)>& change) {
+    Document next = doc_;
+    for (int i : selectedTexts_) change(next.texts[i]);
+    if (!(next == doc_)) commit(next, tr("Text format"));
+    emit formattingChanged();
+}
+
+void Canvas::setTextFont(const QString& font) {
+    textFormat_.font = font;
+    formatTexts([&](Text& t) { t.font = font; });
+}
+
+void Canvas::setTextSize(double points) {
+    if (!std::isfinite(points) || points <= 0) return;
+    textSize_ = points;
+    formatTexts([&](Text& t) { t.scale = textFormat().scale; });
+}
+
+void Canvas::setTextBold(bool bold) {
+    textFormat_.bold = bold;
+    formatTexts([&](Text& t) { t.bold = bold; });
+}
+
+void Canvas::setTextItalic(bool italic) {
+    textFormat_.italic = italic;
+    formatTexts([&](Text& t) { t.italic = italic; });
+}
+
+void Canvas::styleNewObjects(Document& next) const {
+    for (size_t i = doc_.atoms.size(); i < next.atoms.size(); ++i) next.atoms[i].color = colour_;
+    for (size_t i = doc_.bonds.size(); i < next.bonds.size(); ++i) next.bonds[i].color = colour_;
+    for (size_t i = doc_.arrows.size(); i < next.arrows.size(); ++i) {
+        Arrow& a = next.arrows[i];
+        a.color = colour_;
+        if (a.kind == ArrowKind::Box || a.kind == ArrowKind::RoundedBox || a.kind == ArrowKind::Ellipse)
+            a.filled = shapeFilled_, a.fill = shapeFilled_ ? fillColor_ : QColor();
+    }
+    for (size_t i = doc_.texts.size(); i < next.texts.size(); ++i) {
+        Text& t = next.texts[i];
+        const Text style = textFormat();
+        t.color = colour_, t.font = style.font, t.scale = style.scale, t.bold = style.bold, t.italic = style.italic;
+    }
+}
+
+void Canvas::fillSelection() {
+    Document next = doc_;
+    for (int i : selectedArrows_) {
+        Arrow& a = next.arrows[i];
+        if (a.kind == ArrowKind::Box || a.kind == ArrowKind::RoundedBox || a.kind == ArrowKind::Ellipse)
+            a.filled = fillColor_.isValid(), a.fill = fillColor_;
+    }
+    for (const auto& ring : chem::rings(doc_)) {
+        if (!std::all_of(ring.begin(), ring.end(), [&](int i) { return selectedAtoms_.contains(i); })) continue;
+        const QSet<int> atoms(ring.begin(), ring.end());
+        auto it = std::find_if(next.fills.begin(), next.fills.end(), [&](const ::Fill& f) {
+            return QSet<int>(f.atoms.begin(), f.atoms.end()) == atoms;
+        });
+        if (!fillColor_.isValid()) { if (it != next.fills.end()) next.fills.erase(it); }
+        else if (it == next.fills.end()) next.fills.push_back({ring, fillColor_});
+        else it->color = fillColor_;
+    }
+    if (!(next == doc_)) commit(next, tr("Fill"));
+}
+
 void Canvas::colourSelection() {
     Document next = doc_;
     for (int i : selectedAtoms_) next.atoms[i].color = colour_;
@@ -1806,6 +1882,7 @@ void Canvas::addArrowAfter() {
     Document next = doc_;
     Arrow a{*p, *p + QPointF(3 * kBondLength, 0), !arrowCurved_ && !isShape(arrowKind_) ? arrowKind_ : ArrowKind::Reaction};
     next.arrows.push_back(a);
+    styleNewObjects(next);
     commit(next, tr("Arrow"));
     emit toolKey(" ");
     setSelection({}, {int(doc_.arrows.size()) - 1});
@@ -1906,6 +1983,7 @@ void Canvas::editText(int i, QPointF pos) {
     if (i < 0 && !s.isEmpty()) next.texts.push_back({pos, s});
     else if (i >= 0 && s.isEmpty()) next.texts.erase(next.texts.begin() + i);
     else if (i >= 0 && s != doc_.texts[i].text) next.texts[i].text = s, next.texts[i].series = 0;  // retyped: joins what it now reads as
+    styleNewObjects(next);
     if (!(next == doc_)) commit(next, tr("Text"));
 }
 
@@ -2006,6 +2084,7 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
             return h.atom >= 0 ? doc_.atoms[h.atom].pos : (doc_.atoms[doc_.bonds[h.bond].a].pos + doc_.atoms[doc_.bonds[h.bond].b].pos) / 2;
         };
         next.arrows.push_back(curvedArrow(at(arrowMark_), at(here), arrowCurved_ && !isShape(arrowKind_) ? arrowKind_ : ArrowKind::Reaction));
+        styleNewObjects(next);
         commit(next, tr("Arrow"));
         emit toolKey(" ");  // selected, so Alt+Up/Down can bend it
         setSelection({}, {int(doc_.arrows.size()) - 1});
@@ -2026,6 +2105,7 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
         if (tools.contains(t)) return emit toolKey(t);
     }
     if (const Hotspot h = hotkey(next, {hoverAtom_, hoverBond_}, t); h.valid()) {
+        styleNewObjects(next);
         commit(next, tr("Hotkey %1").arg(t));
         hoverAtom_ = h.atom, hoverBond_ = h.bond;
         viewport()->update();
@@ -2041,7 +2121,7 @@ QMenu* Canvas::contextMenuAt(QPointF at) {
     auto keyOn = [this](Hotspot h, const QString& key, const QString& what) {
         return [this, h, key, what] {
             Document next = doc_;
-            if (hotkey(next, h, key).valid()) commit(next, what);
+            if (hotkey(next, h, key).valid()) { styleNewObjects(next); commit(next, what); }
         };
     };
     auto label = [this](int atom, const QString& text) {
