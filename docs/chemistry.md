@@ -122,6 +122,28 @@ quantities; check the structure before using the table.
 
 ## NMR prediction
 
+### Compare with an experimental spectrum
+
+In **View → NMR Panel**, choose **Import Experimental…** and open a `.jdx`, `.dx` or `.jcamp`
+file. The panel selects its ¹H or ¹³C nucleus and draws the measured spectrum in grey beneath
+the coloured predicted sticks, with a shared ppm axis. Experimental intensity is normalized;
+negative intensities and missing-sample gaps are retained. **Remove Overlay** clears it.
+If a linked file contains several spectra, choose the spectrum to compare.
+
+Import accepts processed, one-dimensional spectra using XYDATA, XYPOINTS, PEAK TABLE or real
+NTUPLES tables, with ordinary numeric or SQZ/DIF/DUP compression. The file must identify its
+nucleus and use ppm or Hz; Hz data also needs the observe frequency in MHz. Chemical shift
+references are applied when supplied, including JCAMP's one-based reference point and Bruker
+offsets. See the [IUPAC JCAMP-DX specifications](https://iupac.org/what-we-do/digital-standards/jcamp-dx/).
+Process FIDs and two-dimensional spectra in your NMR software before importing.
+
+The overlay stays in this session until removed or another drawing is opened; it is not saved
+in `.penz` files or drawing exports. A cancelled or invalid import keeps the existing overlay.
+**Copy SI Line** still copies the prediction, labelled **predicted**, for replacement with measured
+values; it does not derive shifts or assignments from the experimental trace.
+
+### How the prediction is calculated
+
 Shifts are looked up by HOSE code in a table built from [nmrshiftdb2](https://nmrshiftdb.nmr.uni-koeln.de),
 an open database of assigned spectra. A HOSE code describes an atom's surroundings sphere by sphere
 (Bremser's scheme, written as the CDK writes it). Penzene uses up to four spheres. When the table has
