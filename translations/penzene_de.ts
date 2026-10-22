@@ -312,7 +312,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Text (H2O becomes H₂O, Cu2+ Cu²⁺; ^ marks a charge: SO4^2-):</source>
+        <source>Text (H2O becomes H₂O, Cu2+ Cu²⁺; ^ marks a charge: SO4^2-). Return or clicking away keeps it, shift+Return starts a new line, Escape drops it.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
