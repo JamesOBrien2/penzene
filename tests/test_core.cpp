@@ -1513,6 +1513,40 @@ TEST_CASE("radicals are chemistry; lone pairs and δ are drawn (#106)") {
     CHECK(*back == water);
 }
 
+TEST_CASE("a lone labelled radical sits at its upper-right superscript position (#666)") {
+    Document plain;
+    const int atom = plain.addAtom({0, 0});
+    plain.atoms[atom].label = "R";
+    Document radical = plain;
+    radical.atoms[atom].radicals = 1;
+
+    auto render = [](const Document& doc, std::vector<QRectF>& labels) {
+        QImage image(160, 120, QImage::Format_ARGB32_Premultiplied);
+        image.fill(Qt::transparent);
+        QPainter painter(&image);
+        painter.translate(80, 60);
+        RenderStyle style;
+        style.labels = &labels;
+        paintDocument(painter, doc, style);
+        return image;
+    };
+    std::vector<QRectF> plainLabels, radicalLabels;
+    const QImage before = render(plain, plainLabels), after = render(radical, radicalLabels);
+    REQUIRE(plainLabels.size() == 1);
+    REQUIRE(radicalLabels.size() == 1);
+    double weight = 0, x = 0, y = 0;
+    for (int py = 0; py < after.height(); ++py)
+        for (int px = 0; px < after.width(); ++px) {
+            const double delta = std::abs(after.pixelColor(px, py).alpha() - before.pixelColor(px, py).alpha());
+            weight += delta;
+            x += px * delta;
+            y += py * delta;
+        }
+    REQUIRE(weight > 0);
+    CHECK(x / weight > 80 + plainLabels[0].right());
+    CHECK(y / weight < 60 + plainLabels[0].top() + plainLabels[0].height() / 2);
+}
+
 TEST_CASE("shapes and lines: saved, exported and read from CDXML (#107)") {
     Document doc = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
     doc.arrows.push_back({{-40, -40}, {40, 40}, ArrowKind::RoundedBox, 0, {}, true});  // a dashed box around it

@@ -202,7 +202,7 @@ static ChargeShape chargeShape(const QString& text, const DrawingStyle& st, bool
 
 static void drawCharge(QPainter& p, const QString& text, QPointF at, const DrawingStyle& st, bool circled, QRectF* bounds = nullptr) {
     const auto shape = chargeShape(text, st, circled);
-    if (bounds && !shape.circle.isEmpty()) {
+    if (bounds) {
         const double pad = p.pen().widthF() / 2;
         *bounds = shape.bounds().translated(at).adjusted(-pad, -pad, pad, pad);
     }
@@ -210,7 +210,8 @@ static void drawCharge(QPainter& p, const QString& text, QPointF at, const Drawi
     if (!shape.circle.isEmpty()) p.drawEllipse(shape.circle.translated(at));
 }
 
-static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const DrawingStyle& st, bool circled, QRectF* chargeBounds = nullptr) {
+static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const DrawingStyle& st, bool circled, QRectF* chargeBounds = nullptr,
+                             double chargeShift = 0) {
     QFontMetricsF fm(labelFont(st));
     const QString s = fromRight ? reversedLabel(a.label) : a.label;
     const double base = a.pos.y() + fm.capHeight() / 2;
@@ -222,7 +223,7 @@ static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const D
     if (const int extra = labelCharge(a)) {
         QString c = QString(extra > 0 ? "+" : "−");
         if (std::abs(extra) > 1) c.prepend(QString::number(std::abs(extra)));
-        drawCharge(p, c, {x + path.boundingRect().right(), base - fm.capHeight() * st.superscriptOffset}, st, circled, chargeBounds);
+        drawCharge(p, c, {x + path.boundingRect().right() + chargeShift, base - fm.capHeight() * st.superscriptOffset}, st, circled, chargeBounds);
     }
 }
 
@@ -296,7 +297,10 @@ static QPointF chargeAt(QPointF pos, QPointF dir, double clear, const QString& c
 static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HSide side, const DrawingStyle& st, QRectF* chargeBounds = nullptr) {
     const bool hLeft = side == HSide::Left;
     const auto& a = doc.atoms[i];
-    if (abbreviated(a)) return drawAbbreviation(p, a, hLeft, st, doc.circledCharges, chargeBounds);
+    const bool isolatedRadical = a.radicals && hydrogens == 0 &&
+        std::none_of(doc.bonds.begin(), doc.bonds.end(), [i](const Bond& b) { return b.a == i || b.b == i; });
+    const double radicalChargeGap = isolatedRadical ? 2.4 : 0;
+    if (abbreviated(a)) return drawAbbreviation(p, a, hLeft, st, doc.circledCharges, chargeBounds, radicalChargeGap);
     QFont f = labelFont(st), sub = labelFont(st, st.scriptScale);
     QFontMetricsF fm(f), sm(sub);
     const QString sym = atomSymbol(a);
@@ -335,7 +339,7 @@ static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HS
         if (std::abs(a.charge) > 1) c.prepend(QString::number(std::abs(a.charge)));
         if (const auto d = chargeDirection(doc, i, hydrogens, side))
             drawCharge(p, c, chargeAt(a.pos, *d, exitAlong(QRectF(-w / 2, -fm.capHeight() / 2, w, fm.capHeight()), *d), c, st, doc.circledCharges), st, doc.circledCharges, chargeBounds);
-        else drawCharge(p, c, {right, base - fm.capHeight() * st.superscriptOffset}, st, doc.circledCharges, chargeBounds);  // after any H
+        else drawCharge(p, c, {right + radicalChargeGap, base - fm.capHeight() * st.superscriptOffset}, st, doc.circledCharges, chargeBounds);  // after any H
     }
 }
 
@@ -967,16 +971,17 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
     for (const Bracket& b : doc.brackets)
         for (int i : b.atoms) bracketed[i] = true;
     std::vector<QRectF> drawn(doc.atoms.size());
+    std::vector<QRectF> radicalChargeBoxes(doc.atoms.size());
     if (style.labels) style.labels->assign(doc.atoms.size(), {});
     for (size_t i = 0; i < doc.atoms.size(); ++i) {
         const auto& a = doc.atoms[i];
         p.setPen(QPen(style.markValenceErrors && info[i].valenceError ? style.error : ink(a.color), lineWidth));
         drawAtomLabel(p, doc, int(i), info[i].hydrogens, hSide(int(i)), labeled[i], st);
-        if ((style.labels || bracketed[i]) && (labeled[i] || a.charge)) {
+        if ((style.labels || bracketed[i] || (a.radicals && labeled[i])) && (labeled[i] || a.charge)) {
             QPicture label;
             QPainter q(&label);
             q.setPen(p.pen());
-            drawAtomLabel(q, doc, int(i), info[i].hydrogens, hSide(int(i)), labeled[i], st);
+            drawAtomLabel(q, doc, int(i), info[i].hydrogens, hSide(int(i)), labeled[i], st, &radicalChargeBoxes[i]);
             q.end();
             drawn[i] = label.boundingRect();
             if (style.labels) (*style.labels)[i] = drawn[i];
@@ -1043,6 +1048,15 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             gaps.push_back({mid, start + width - mid});
         }
         const double r = (labeled[i] ? 0.66 : 0.3) * kBondLength, dot = 0.9 * lineWidth + 0.4;
+        const bool loneLabelRadical = labeled[i] && degree[i] == 0 && info[i].hydrogens == 0 &&
+            a.radicals && !a.map && !doc.showAtomNumbers && !drawn[i].isNull();
+        QPointF superscriptRadical;
+        if (loneLabelRadical) {
+            const QRectF charge = radicalChargeBoxes[i];
+            superscriptRadical = charge.isEmpty()
+                ? QPointF(drawn[i].right() + 0.35, drawn[i].top() + drawn[i].height() * 0.12)
+                : QPointF(charge.left() - dot - 0.35, charge.center().y());
+        }
         p.setPen(Qt::NoPen);
         p.setBrush(ink(a.color));
         size_t k = 0;
@@ -1050,7 +1064,8 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             p.drawEllipse(c, dot, dot);
             drawn[i] |= QRectF(c - QPointF(dot, dot), QSizeF(2 * dot, 2 * dot));
         };
-        for (int n = 0; n < a.radicals; ++n, ++k) mark(a.pos + dirs[k] * r);
+        for (int n = 0; n < a.radicals; ++n, ++k)
+            mark(loneLabelRadical && n == 0 ? superscriptRadical : a.pos + dirs[k] * r);
         for (int n = 0; n < a.lonePairs; ++n, ++k)
             for (double side : {-1.0, 1.0}) mark(a.pos + dirs[k] * r + perp(dirs[k]) * side * 1.6);
         p.setBrush(Qt::NoBrush);

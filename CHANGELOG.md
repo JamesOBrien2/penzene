@@ -4,6 +4,10 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
+## 2.0.1 (unreleased)
+
+- Lone labelled radicals now sit at the label's upper right; a coexisting formal charge has room to read as `R•⁺` in the app, exports and Python rendering (#666).
+
 ## 2.0.0 (2026-10-22)
 
 - Lists, tables and measurement controls use consistent themed surfaces, focus states and step buttons.

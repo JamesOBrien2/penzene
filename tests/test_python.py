@@ -135,6 +135,10 @@ assert ts.atoms[c].label == ""
 ion = pz.from_smiles("C[CH2]")
 ion.set_charge(1, -1), ion.set_radicals(0, 1)
 assert (ion.atoms[1].charge, ion.atoms[0].radicals) == (-1, 1)
+radical = pz.Document()
+radical_atom = radical.add_atom("R", generic=True)
+radical.set_radicals(radical_atom, 1)
+assert radical.to_svg().count("<circle") == 1  # the API uses the shared radical-mark renderer
 for bad, kind in ((lambda: ts.set_bond_style(1, "wedge"), ValueError), (lambda: ts.set_bond_style(0, "squiggly"), ValueError),
                   (lambda: ts.set_charge(9, 1), IndexError), (lambda: ts.set_radicals(0, 3), ValueError),
                   (lambda: ts.show_symbol(r), ValueError), (lambda: ts.add_bracket([]), ValueError)):
