@@ -968,10 +968,10 @@ void Canvas::mousePressEvent(QMouseEvent* e) {
             if (!one) selectGroups();
             drag_ = threeD ? Drag::Rotate3D
                            : !(e->modifiers() & Qt::AltModifier) ? Drag::Move : shift ? Drag::Rotate3D : Drag::Rotate;
-            if (drag_ == Drag::Rotate3D && !(pose_ = chem::pose3D(doc_, moleculesOfSelection())))
+            if (drag_ == Drag::Rotate3D && !(pose_ = chem::pose3D(doc_, atomsOfSelection())))
                 drag_ = threeD ? Drag::None : Drag::Rotate;
         } else if (threeD && !selectedAtoms_.isEmpty() && selectionBox().contains(pressPos_)) {
-            drag_ = (pose_ = chem::pose3D(doc_, moleculesOfSelection())) ? Drag::Rotate3D : Drag::None;
+            drag_ = (pose_ = chem::pose3D(doc_, atomsOfSelection())) ? Drag::Rotate3D : Drag::None;
         } else if (!shift && inSelectedBox(pressPos_)) {
             drag_ = e->modifiers() & Qt::AltModifier ? Drag::Rotate : Drag::Move;  // anywhere in a selected thing's box
         } else {
@@ -1660,6 +1660,13 @@ void Canvas::removeBrackets() {
     if (!(next == doc_)) commit(next, tr("Remove brackets"));
 }
 
+std::vector<int> Canvas::atomsOfSelection() const {
+    std::vector<int> out;
+    for (int i = 0; i < int(doc_.atoms.size()); ++i)
+        if (selectedAtoms_.isEmpty() || selectedAtoms_.contains(i)) out.push_back(i);
+    return out;
+}
+
 std::vector<int> Canvas::moleculesOfSelection() const {
     std::vector<int> out;
     std::vector<bool> seen(doc_.atoms.size());
@@ -1678,7 +1685,7 @@ std::vector<int> Canvas::moleculesOfSelection() const {
 }
 
 void Canvas::rotate3D(double aboutX, double aboutY) {
-    if (auto pose = chem::pose3D(doc_, moleculesOfSelection()))
+    if (auto pose = chem::pose3D(doc_, atomsOfSelection()))
         commit(chem::project3D(doc_, *pose, aboutX, aboutY), tr("Rotate in 3D"));
 }
 
