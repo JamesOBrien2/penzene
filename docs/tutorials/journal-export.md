@@ -43,7 +43,7 @@ Inspect the generated file, including Greek letters, subscripts and charges.
 
 With **Page → Page Size → None**, export crops to the drawing. This is useful for a single structure
 or a compact scheme, as in `journal-caffeine.pdf`. The cropped width depends on the figure's content.
-**Edit → Preferences → Margin around exports** adds a margin in points around a cropped figure.
+**Edit → Preferences → Margin around exports and copies** adds a margin in points around a cropped figure.
 
 For a figure laid out within a column, choose **Page → Page Size → RSC single column**, or an ACS/RSC
 double-column preset. Export takes the entire page when nothing is selected. The RSC single-column
