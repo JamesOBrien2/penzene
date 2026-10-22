@@ -1320,6 +1320,14 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Benzene — j: click empty space for a ring, an atom to attach one, or a bond to fuse one; drag to orient it at 15° steps</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>%1-membered ring: click empty space, an atom (spiro/attached) or a bond (fused); drag to orient it at 15° steps, Ctrl to size it</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Import Theme…</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1533,14 +1541,6 @@
     </message>
     <message>
         <source>Rings</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Benzene — j: click empty space for a ring, an atom to attach one, or a bond to fuse one</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>%1-membered ring: click empty space, an atom (spiro/attached) or a bond (fused)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

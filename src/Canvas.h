@@ -211,7 +211,8 @@ private:
     QPointF pressPos_, curPos_;
     QPointF pressRaw_;  // where the mouse went down, before an orbital snaps pressPos_ to its atom
     QPolygonF lasso_;   // an Alt-drag selection's loop; empty for the rectangle
-    bool shift_ = false;  // held during the drag: free bond angle, or move along one axis
+    bool shift_ = false;   // held during the drag: free bond angle, or move along one axis
+    bool expand_ = false;  // Ctrl during a ring drag: size the ring (non-aromatic only)
     int pressAtom_ = -1;
     Document beforeDrag_;
     QPoint panLast_;

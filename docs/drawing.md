@@ -69,7 +69,8 @@ Caffeine from one click and twelve keys, step by step: [Caffeine from the keyboa
 ## Rings and templates
 
 Ring tools draw 3- to 8-membered rings and benzene: click empty space, an atom (spiro or attached),
-or a bond (fused). On a bond, `a z v 4–8 9 0` fuse rings, `9` and `0` chair cyclohexanes.
+or a bond (fused). Dragging orients a ring at 15° steps like a bond; Ctrl (Cmd) sizes a non-aromatic
+ring, and an aromatic ring never grows. On a bond, `a z v 4–8 9 0` fuse rings, `9` and `0` chair cyclohexanes.
 
 **View → Templates** opens the template library: amino acids, sugars, nucleobases, common scaffolds,
 heterocycles, macrocycles, ligands and reagents, and Haworth, Fischer and Newman projections. Haworth and Fischer drawings give the right stereo
