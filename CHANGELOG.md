@@ -4,6 +4,10 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
+## Unreleased
+
+- Paste places a structure over the selected arrow, or the arrow under the pointer, instead of the middle of the view (#670).
+
 ## 2.0.0 (2026-10-22)
 
 - Lists, tables and measurement controls use consistent themed surfaces, focus states and step buttons.
