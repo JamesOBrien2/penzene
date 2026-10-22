@@ -2783,6 +2783,18 @@ TEST_CASE("3D rotation from the mouse and keyboard keeps stereo (#173)") {
     }
 }
 
+TEST_CASE("3D rotation turns only the selected atoms (#672)") {
+    Fixture f;
+    auto d = chem::fromSmiles("CCCC");
+    REQUIRE(d);
+    f.canvas.setDocumentSilently(*d);
+    f.canvas.setSelection({0, 1});
+    const QPointF keep = f.doc().atoms[3].pos;
+    f.canvas.rotate3D(15, 0);
+    CHECK(f.doc().atoms[3].pos == keep);
+    CHECK_FALSE(f.doc().atoms[0].pos == d->atoms[0].pos);
+}
+
 TEST_CASE("the Select flyout offers 3D rotation without modifier keys") {
     App app;
     MainWindow w;
