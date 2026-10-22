@@ -2650,7 +2650,11 @@ moves off, so you can keep typing.&lt;/p&gt;
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Also in this release</source>
+        <source>More in this release</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>…and many more small fixes and improvements.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

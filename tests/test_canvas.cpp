@@ -71,6 +71,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QScreen>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_approx.hpp>
 #include <catch2/reporters/catch_reporter_event_listener.hpp>
@@ -3067,6 +3070,24 @@ TEST_CASE("What's New separates highlighted additions from smaller changes (#215
     CHECK(notes.others == QStringList{"Faster opening with large files."});
 }
 
+TEST_CASE("2.0 release notes are short and pick 4-10 highlights (#691)") {
+    QFile f(":/CHANGELOG.md");
+    REQUIRE(f.open(QIODevice::ReadOnly));
+    const auto notes = online::parseReleaseNotes(online::releaseNotes(QString::fromUtf8(f.readAll()), "2.0.0"));
+    CHECK(notes.highlights.size() >= 4);
+    CHECK(notes.highlights.size() <= 10);
+    auto words = [](const QString& s) { return int(s.simplified().split(' ', Qt::SkipEmptyParts).size()); };
+    for (const auto& h : notes.highlights) {
+        const int count = words(h.title) + words(h.detail);
+        CHECK(count >= 2);
+        CHECK(count <= 12);
+    }
+    for (const auto& other : notes.others) {
+        CHECK(words(other) >= 2);
+        CHECK(words(other) <= 12);
+    }
+}
+
 TEST_CASE("What's New shows one card per highlighted addition (#215)") {
     App app;
     const QString changelog = "## 0.9.0 (2026-10-01)\n\n"
@@ -3095,8 +3116,45 @@ TEST_CASE("What's New shows one card per highlighted addition (#215)") {
             CHECK(others);
             if (others) {
                 CHECK(others->textFormat() == Qt::PlainText);
-                CHECK(others->text().startsWith("• Faster opening.\n• Lone pairs"));
+                CHECK(others->text().startsWith("• Faster opening."));
+                CHECK(dialog->findChildren<QLabel*>("others").size() == 5);
+                auto* scroll = dialog->findChild<QScrollArea*>("moreScroll");
+                CHECK(scroll);
+                if (scroll) CHECK((scroll->widget() && scroll->widget()->isAncestorOf(others)));
             }
+            auto* many = dialog->findChild<QLabel*>("manyMore");
+            CHECK(many);
+            if (many) CHECK(many->text().contains("many more"));
+            dialog->accept();
+        }
+    });
+    showWhatsNewDialog(nullptr, changelog, "0.9.0");
+    CHECK(inspected);
+}
+
+TEST_CASE("What's New stays on screen and scrolls its smaller changes (#691)") {
+    App app;
+    QString changelog = "## 0.9.0 (2026-10-01)\n\n";
+    for (int i = 0; i < 6; ++i)
+        changelog += QString("- **Feature %1**: Short detail. <!-- icon: sparkles -->\n").arg(i);
+    for (int i = 0; i < 40; ++i) changelog += QString("- Small change %1.\n").arg(i);
+    bool inspected = false;
+    QTimer::singleShot(0, [&] {
+        for (auto* top : QApplication::topLevelWidgets()) {
+            auto* dialog = qobject_cast<QDialog*>(top);
+            if (!dialog || dialog->objectName() != "whatsNew") continue;
+            inspected = true;
+            if (const QScreen* screen = dialog->screen()) {
+                const QRect available = screen->availableGeometry();
+                CHECK(available.contains(dialog->geometry()));
+            }
+            auto* ok = dialog->findChild<QPushButton*>("continue");
+            REQUIRE(ok);
+            CHECK(ok->isVisible());
+            CHECK(dialog->rect().contains(ok->geometry().center()));
+            auto* scroll = dialog->findChild<QScrollArea*>("moreScroll");
+            REQUIRE(scroll);
+            CHECK(scroll->verticalScrollBar()->maximum() > 0);
             dialog->accept();
         }
     });
