@@ -2282,6 +2282,18 @@ TEST_CASE("a typed charged label sets the element and charge (#324)") {
     }
 }
 
+TEST_CASE("typing an element clears a charge (#669)") {
+    Document d;
+    d.atoms = {{{0, 0}, 8, -1}};
+    REQUIRE(edit::applyLabel(d, 0, "O", true));
+    CHECK(d.atoms[0].z == 8);
+    CHECK(d.atoms[0].charge == 0);
+    d.atoms[0].charge = 1;
+    REQUIRE(edit::applyLabel(d, 0, "N"));
+    CHECK(d.atoms[0].z == 7);
+    CHECK(d.atoms[0].charge == 0);
+}
+
 TEST_CASE("CDXML import's Kekulé restore isn't fooled by overlapping atoms (#365)") {
     Document d;
     for (int k = 0; k < 6; ++k) d.addAtom({kBondLength * std::cos(M_PI / 3 * k), kBondLength * std::sin(M_PI / 3 * k)});

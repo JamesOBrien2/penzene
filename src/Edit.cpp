@@ -678,7 +678,7 @@ bool applyLabel(Document& doc, int at, const QString& label, bool anyText) {
         return z > 0 && (mass == 0 || mass >= z) ? std::pair{z, mass} : std::pair{0, 0};  // no mass below the proton count
     };
     if (const auto [z, mass] = elementOf(label); z > 0) {
-        a.z = z, a.isotope = mass, a.label.clear();
+        a.z = z, a.isotope = mass, a.label.clear(), a.charge = 0;  // the new element is neutral
         return true;
     }
     // With a charge: NH3+, O-, Na+, O2- (#324). Digits before the sign are the
