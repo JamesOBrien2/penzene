@@ -420,6 +420,21 @@ TEST_CASE("insert centres the fragment and selects it") {
     CHECK(f.canvas.selection() == QSet<int>{3, 4, 5});
 }
 
+TEST_CASE("pasting over an arrow centres the fragment on it (#670)") {
+    Fixture f;
+    Document d;
+    d.arrows = {{{100, 0}, {160, 0}}};
+    f.canvas.setDocumentSilently(d);
+    f.canvas.setSelection({}, {0});
+    auto frag = chem::fromSmiles("CC");
+    REQUIRE(frag);
+    f.canvas.insert(*frag, "Paste");
+    REQUIRE(f.canvas.document().atoms.size() == 2);
+    const QPointF middle = (f.canvas.document().atoms[0].pos + f.canvas.document().atoms[1].pos) / 2;
+    CHECK(QLineF(middle, {130, 0}).length() < 0.1);
+    CHECK(f.canvas.selection() == QSet<int>{0, 1});
+}
+
 TEST_CASE("Find Substructure selects all matches, preserves edits and seeds from selection (#485)") {
     App app;
     MainWindow w;
