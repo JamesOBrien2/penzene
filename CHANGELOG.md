@@ -4,6 +4,10 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
+## Unreleased
+
+- Predicted NMR shifts use a fifth HOSE sphere, telling a primary amine's ring carbons from those next to a ring nitrogen; the NMR panel keeps just the nmrshiftdb2 licence notice (#682).
+
 ## 2.0.0 (2026-10-22)
 
 - Lists, tables and measurement controls use consistent themed surfaces, focus states and step buttons.

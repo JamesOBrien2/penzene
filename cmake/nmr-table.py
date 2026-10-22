@@ -2,7 +2,7 @@
 
 From nmrshiftdb2's public export (nmrshiftdb2withsignals.sd, nmrshiftdb2 Database License): every
 assigned 13C and 1H shift, keyed by the HOSE code of its atom (the carbon, or the atom the H is on)
-at 1 to 4 spheres. Each line of hose.tsv is "<spheres> <code>\t13C\tcount\t1H\tcount": the median
+at 1 to 5 spheres. Each line of hose.tsv is "<spheres> <code>\t13C\tcount\t1H\tcount": the median
 shift in ppm and how many shifts it's from (empty without any), sorted by key for binary search.
 
 The codes come from Penzene's own HOSE code function (chem::hoseCodes, through the Python module),
@@ -27,7 +27,7 @@ from penzene import _penzene
 
 URL = "https://sourceforge.net/projects/nmrshiftdb2/files/data/nmrshiftdb2withsignals.sd/download"
 ROOT = Path(__file__).resolve().parent.parent
-SPHERES = 4
+SPHERES = 5
 FIELD = re.compile(r"^> +<([^>]+)>\n(.*?)(?:\n\n|\n?\Z)", re.M | re.S)
 
 

@@ -2520,7 +2520,7 @@ TEST_CASE("predicted 13C and 1H shifts: benzene, ethanol (#403)") {
     REQUIRE(benzene.size() == 6);
     for (const auto& s : benzene) {
         CHECK(s.carbon == Catch::Approx(128.5).margin(2));
-        CHECK(s.carbonSpheres == 4);
+        CHECK(s.carbonSpheres == 5);
         CHECK(s.proton == Catch::Approx(7.3).margin(0.3));
     }
     auto ethanol = chem::predictShifts(*chem::fromSmiles("CCO"));
@@ -2531,6 +2531,16 @@ TEST_CASE("predicted 13C and 1H shifts: benzene, ethanol (#403)") {
     CHECK(ethanol[1].proton == Catch::Approx(3.7).margin(0.3));
     CHECK(ethanol[2].carbonSpheres == 0);  // O: 1H only
     CHECK(ethanol[2].protonSpheres > 0);
+}
+
+TEST_CASE("a fifth HOSE sphere tells a primary aniline's ring from N in a ring (#682)") {
+    // The 4-sphere code of aniline's para carbon is shared with ring N, which pulls its median to
+    // 125 ppm; the fifth sphere (the terminal N's empty branch) gives 117.4, near the 118.5 measured.
+    const auto shifts = chem::predictShifts(*chem::fromSmiles("Nc1ccccc1"));
+    const auto para = std::find_if(shifts.begin(), shifts.end(), [](const chem::Shift& s) { return s.atom == 4; });
+    REQUIRE(para != shifts.end());
+    CHECK(para->carbonSpheres == 5);
+    CHECK(para->carbon == Catch::Approx(117.4).margin(1.5));
 }
 
 TEST_CASE("predicted spectra: one stick per set of equivalent atoms, for the chosen molecule (#444)") {
