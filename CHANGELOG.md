@@ -4,6 +4,10 @@ What's new in each release. The app shows its own version's section once after a
 a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name -->` from
 `resources/whatsnew/`); the rest are listed as text.
 
+## Unreleased
+
+- Structure → Join Fragments (Ctrl/Cmd+J) bonds two selected atoms from different fragments into one structure (#683).
+
 ## 2.0.0 (2026-10-22)
 
 - Lists, tables and measurement controls use consistent themed surfaces, focus states and step buttons.
