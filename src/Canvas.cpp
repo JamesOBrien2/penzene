@@ -11,6 +11,7 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QContextMenuEvent>
+#include <QCursor>
 #include <QKeyEvent>
 #include <QMenu>
 #include <QLineEdit>
@@ -517,7 +518,14 @@ void Canvas::deleteSelection() {
 void Canvas::insert(Document frag, const QString& text) {
     if (frag.empty()) return;
     Document next = doc_;
-    next.append(frag, viewCenter() - documentBounds(frag).center());
+    // Over an arrow: a selected one, or the one under the pointer, takes the paste.
+    int arrow = selectedArrows_.size() == 1 ? *selectedArrows_.begin() : -1;
+    if (arrow < 0) {
+        const QPoint pointer = viewport()->mapFromGlobal(QCursor::pos());
+        if (viewport()->rect().contains(pointer)) arrow = arrowAt(mapToScene(pointer));
+    }
+    const QPointF centre = arrow >= 0 ? arrowPath(doc_.arrows[arrow]).pointAtPercent(0.5) : viewCenter();
+    next.append(frag, centre - documentBounds(frag).center());
     commit(next, text);
     setSelection(range(int(doc_.atoms.size() - frag.atoms.size()), int(doc_.atoms.size())),
                  range(int(doc_.arrows.size() - frag.arrows.size()), int(doc_.arrows.size())),
