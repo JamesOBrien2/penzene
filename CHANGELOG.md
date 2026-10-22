@@ -14,6 +14,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - The `1` hotkey keeps a chain straight instead of kinking, and `0` closes it into a regular ring (#676).
 - Bonds stop short of abbreviation labels (CF3, Ph, MgBr…) instead of running into them (#677).
 - Templates have a button of their own below the tools and a link on the welcome card, so the library is easy to find (#679).
+- Crown ether templates use the standard drawing, with the oxygens evenly spaced on an inner ring and the CH2CH2 bridges between them (#680).
 
 ## 2.0.0 (2026-10-22)
 
