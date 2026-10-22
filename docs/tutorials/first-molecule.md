@@ -3,13 +3,15 @@
 Draw ethanol, save an editable drawing, and export a figure. Once Penzene is installed, this takes
 about five minutes. You need no chemistry file or online lookup.
 
+If line endings and unlabelled corners are new to you, read
+[Reading a structure drawing](reading-structures.md) first.
+
 Example file: {download}`first-molecule.penz <files/first-molecule.penz>` (the finished drawing).
 
 ## 1. Install and start
 
-Download the installer for your computer from the
-[latest release](https://github.com/JamesOBrien2/penzene/releases/latest) and follow
-[Installing](../install.md). Open Penzene, then choose **File → New** for an empty drawing.
+Choose the download for your computer on [Installing](../install.md) and follow that page's
+first-opening steps. Open Penzene, then choose **File → New** for an empty drawing.
 If a drawing is already open, save it when prompted.
 
 ## 2. Draw two bonds
@@ -22,8 +24,9 @@ Alternatively, press Esc, then `x`.
 3. Point at the new end until it lights up, then type lowercase `o`. That carbon becomes oxygen,
    displayed as **OH**. Do not click it with the bond tool, which would add another bond.
 
-The two unlabelled positions are carbons; Penzene supplies their hydrogens automatically. The status
-bar should read **C₂H₆O**, with a molecular weight of about **46.07**. If it does not, use **Edit → Undo**
+The unlabelled line end and corner are carbons; Penzene supplies their hydrogens automatically.
+The drawing is CH₃–CH₂–OH. The status bar should read **C₂H₆O**, with a molecular weight of about
+**46.07**. If it does not, use **Edit → Undo**
 (⌘Z on macOS, Ctrl+Z elsewhere) and repeat the last step. Press Esc to clear the hotspot.
 
 ```{image} ../_static/tutorials/first-molecule.png
@@ -53,5 +56,6 @@ Here is the exported figure, enlarged for display:
 The exported SVG also reopens in Penzene as editable atoms and bonds. Keep the `.penz` file as your
 working document, and use the exported figure in your slides or manuscript.
 
-Next, try [Caffeine from the keyboard](keyboard.md) or [A reaction scheme](reaction-scheme.md).
+Next, try [Show calculated stereo labels](stereochemistry.md), [Caffeine from the keyboard](keyboard.md)
+or [A reaction scheme](reaction-scheme.md).
 For all the tools and hotkeys, see [Drawing](../drawing.md) and [Keyboard shortcuts](../keys.md).

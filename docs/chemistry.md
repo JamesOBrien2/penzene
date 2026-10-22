@@ -39,7 +39,9 @@ Labels get their hydrogens (OH, NH₂). An atom with too many bonds is drawn in 
 ```{feature} rotate-3d
 :title: Stereochemistry
 Wedges and hashes set stereocentres; E/Z comes from the drawing. **Format → Stereo Labels**
-shows CIP (R)/(S) and (E)/(Z).
+shows the calculated CIP (R)/(S) and (E)/(Z) labels. The menu item is a toggle, saved with the
+drawing and shown in exports. It cannot choose an unspecified enantiomer from a flat skeletal
+structure. Try the [stereo-label tutorial](tutorials/stereochemistry.md).
 ```
 
 ```{feature} checklist

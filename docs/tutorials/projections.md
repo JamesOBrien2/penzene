@@ -24,7 +24,7 @@ the back carbon. Three spokes run from the centre, and three from the circle's e
 
 The inserted drawing is selected. Choose **Arrange → Group** (⌘G or Ctrl+G) to make its circle,
 spokes and labels move together. With **Select**, drag it to a new position. To change a substituent,
-choose the text tool from **Shapes** and click its label, or double-click the label with Select.
+choose the **Text** button on the left rail and click its label, or double-click the label with Select.
 The text editor takes `CH3`, `Et` or any other text; formula digits become subscripts.
 
 Changing a Newman label changes the illustration. The circle, spokes and text do not define atoms

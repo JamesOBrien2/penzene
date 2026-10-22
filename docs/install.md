@@ -16,6 +16,11 @@ The distributed dependencies and their notices are listed in
 Universities may deploy the installers through their usual software distribution tools; consult
 your institution's software licensing process when redistributing copies.
 
+On a Mac, **Apple menu → About This Mac** tells you whether its chip is Apple silicon (M-series)
+or Intel. On Windows, choose the **installer** for ordinary use; the portable ZIP is for a
+computer where you cannot install software and does not register Penzene's editable drawing
+object in Word or PowerPoint.
+
 ## Opening it the first time
 
 :::{note}
@@ -25,13 +30,12 @@ asks once whether to trust it.
 
 **macOS.** Drag Penzene to Applications and open it. If macOS says it "can't be opened" or can't be
 checked, go to **System Settings → Privacy & Security**, scroll down to the message about Penzene,
-and click **Open Anyway**. You only need to do this once. From a terminal, this does the same:
+and click **Open Anyway** after confirming you downloaded it from the release linked above. You
+only need to do this once. On a managed university computer, ask your IT team if that control is
+unavailable.
 
-```sh
-xattr -dr com.apple.quarantine /Applications/Penzene.app
-```
-
-**Windows.** If SmartScreen shows "Windows protected your PC", click **More info → Run anyway**.
+**Windows.** If SmartScreen shows "Windows protected your PC", confirm the installer came from the
+release linked above, then click **More info → Run anyway**.
 
 **Linux.** Make the AppImage executable, then run it:
 

@@ -1,9 +1,10 @@
 # Contributing
 
 - Pick an issue from the project board; comment to claim it.
-- Branch `feat/<issue>-<slug>` or `fix/<issue>-<slug>`; open a PR with `Closes #<issue>`.
+- Branch `feature/<issue>-<slug>` or `bugfix/<issue>-<slug>`; open a PR with `Closes #<issue>`.
 - `pixi run test` must pass; CI builds macOS, Linux and Windows.
 - Keep it small: one issue per PR, no speculative abstractions.
+- For hands-on checks, use the [manual user workflows](tests/workflow-qa.md).
 
 ## Code map
 
