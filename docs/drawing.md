@@ -49,6 +49,23 @@ Caffeine from one click and twelve keys, step by step: [Caffeine from the keyboa
 - `.` adds an attachment point. `j` and `J` bond an η⁵-cyclopentadienyl or η⁶-benzene through the
   ring's centre.
 
+### Leaving part of a structure unspecified
+
+For a substituent you do not want to draw out, label its end atom **R**, **R1** or **Ar** with the
+Text tool. Pointing at an atom and pressing `r` makes **R** quickly; typing `R1` gives a numbered
+R-group for MOL and ChemDraw exchange. Unlike a known abbreviation such as **Ph** or **OMe**, a
+generic group has no exact formula or mass.
+
+Point at an atom and press `.` to draw a wavy bond ending at a bare attachment point. It leaves
+the group beyond that point unspecified (`*` in SMILES). To show uncertainty about the spatial
+direction of an **existing** bond, point at the bond and press `y` instead. These are different
+from a solid wedge or hashed wedge, which specify stereochemistry; see the
+[stereo-label tutorial](tutorials/stereochemistry.md).
+
+If you mean a literal solid-support bead or filled ball, **Shapes → Ellipse** can draw a circle
+(hold Shift while dragging), and its context menu has **Filled**. That circle is a graphic shape,
+not an atom or a chemically connected placeholder.
+
 ## Bonds
 
 - `1 2 3` set the order; `2` on a double bond moves its second line to the other side, and `l c r`
