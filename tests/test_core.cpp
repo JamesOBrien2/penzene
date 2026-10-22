@@ -3665,8 +3665,9 @@ TEST_CASE("absolute double spacing and hash spacing reach the actual rendered st
     style.bondSpacingAbsolute = 2;
     doc.styleSettings = style;
     auto ink = [&](QPointF point) {
-        const QImage image = renderImage(doc, {720, Qt::white});
-        const QPoint pixel = ((point - documentBounds(doc).topLeft()) * exportScale(doc) * 10).toPoint();
+        const double margin = 2;  // model units of room to probe beyond the bond, now that exports crop tight
+        const QImage image = renderImage(doc, {720, Qt::white, 1, margin * exportScale(doc)});
+        const QPoint pixel = ((point - outputBounds(doc).topLeft() + QPointF(margin, margin)) * exportScale(doc) * 10).toPoint();
         return image.pixelColor(pixel).lightness() < 160;
     };
     doc.bonds[0].order = 2;
@@ -3678,7 +3679,7 @@ TEST_CASE("absolute double spacing and hash spacing reach the actual rendered st
     doc.bonds[0].order = 1;
     doc.bonds[0].stereo = BondStereo::Hash;
     const auto image = renderImage(doc, {720, Qt::white});
-    const auto bounds = documentBounds(doc);
+    const auto bounds = outputBounds(doc);
     const int row = qRound(-bounds.top() * 10);
     std::vector<double> centres;
     int first = -1;
