@@ -15,6 +15,7 @@
 
 class QPainter;
 class QMenu;
+class QPlainTextEdit;
 class QUndoStack;
 
 class Canvas : public QGraphicsView {
@@ -154,6 +155,8 @@ private:
     void fit(const Document& part);
     std::vector<QPointF> dragPath() const;
     void collectErase(QPointF from, QPointF to);
+    void commitTextEditor();
+    void cancelTextEditor();
 
     Document doc_;
     bool fitOnShow_ = false;
@@ -164,6 +167,9 @@ private:
     bool markValenceErrors_ = true;
     bool grid_ = false, rulers_ = false;
     std::vector<QPointF> preview_;
+    QPlainTextEdit* textEditor_ = nullptr;  // in place over the canvas while text is typed
+    int editingText_ = -1;                  // the text it edits; -1 for new text
+    QPointF editTextPos_;                   // where new text's baseline starts
     QUndoStack* undo_;
     edit::CompoundCount compoundStart_;
     void selectGroups();  // a click or marquee on one member takes its whole group

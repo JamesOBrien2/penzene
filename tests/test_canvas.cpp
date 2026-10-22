@@ -32,6 +32,7 @@
 #include <QToolBar>
 
 #include <QLabel>
+#include <QPlainTextEdit>
 #include <QDockWidget>
 #include <QPushButton>
 #include <QFrame>
@@ -3185,10 +3186,11 @@ TEST_CASE("keyboard: bend and flip a curved arrow, and place an arrow or text af
     CHECK(after.bend == 0);
     CHECK(std::abs(QLineF(after.from, after.to).length() - 3 * kBondLength) < 1e-9);
     CHECK(f.canvas.selectedArrows() == QSet<int>{1});
-    QTimer::singleShot(0, [] {
-        if (auto* d = qobject_cast<QInputDialog*>(QApplication::activeModalWidget())) d->setTextValue("heat"), d->accept();
-    });
     f.canvas.addTextAfter();
+    auto* editor = f.canvas.findChild<QPlainTextEdit*>("textEditor");
+    REQUIRE(editor);
+    QTest::keyClicks(editor, "heat");
+    QTest::keyClick(editor, Qt::Key_Return);
     REQUIRE(f.doc().texts.size() == 1);
     CHECK(f.doc().texts[0].text == "heat");
     CHECK(f.doc().texts[0].pos.x() > f.doc().arrows[1].to.x());
@@ -3579,11 +3581,12 @@ TEST_CASE("Text has its own rail button and keeps its hotkey (#622)") {
     QApplication::processEvents();
     if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/resting.png"));
     auto drawText = [&](QPointF pos, const QString& value) {
-        QTimer::singleShot(0, [value] {
-            if (auto* d = qobject_cast<QInputDialog*>(QApplication::activeModalWidget()))
-                d->setTextValue(value), d->accept();
-        });
         QTest::mouseClick(canvas->viewport(), Qt::LeftButton, {}, canvas->mapFromScene(pos));
+        auto* editor = canvas->findChild<QPlainTextEdit*>("textEditor");
+        REQUIRE(editor);
+        editor->setPlainText(value);
+        QTest::keyClick(editor, Qt::Key_Return);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     };
     text->click();
     CHECK(text->isChecked());
@@ -4192,7 +4195,11 @@ TEST_CASE("accessibility: every control is named, in the window, its closed flyo
             dialog(text, [a] { a->trigger(); });
     }
     dialog("atom properties", [&] { canvas->editAtomProperties(0); });
-    dialog("text", [&] { canvas->editText(-1, {}); });
+    canvas->editText(-1, {});
+    auto* editor = canvas->findChild<QPlainTextEdit*>("textEditor");
+    REQUIRE(editor);
+    CHECK(editor->accessibleName() == "Text");
+    QTest::keyClick(editor, Qt::Key_Escape);
     INFO(unnamed.join("\n").toStdString());
     CHECK(unnamed.isEmpty());
 }
@@ -5796,6 +5803,54 @@ TEST_CASE("colour and fill menus draw their swatches (#674)") {
     fill->menu()->close();
 }
 
+TEST_CASE("text is typed in place, where the canvas was clicked (#678)") {
+    Fixture f;
+    auto editor = [&]() -> QPlainTextEdit* {
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        for (auto* e : f.canvas.findChildren<QPlainTextEdit*>("textEditor"))
+            if (e->isVisible()) return e;
+        return nullptr;
+    };
+    f.canvas.setTool(Canvas::Tool::Text);
+    f.click({40, 50});
+    QPlainTextEdit* box = editor();
+    REQUIRE(box);
+    CHECK(box->parentWidget() == f.canvas.viewport());
+    CHECK(std::abs(box->pos().x() - f.at({40, 50}).x()) <= 10);  // over the click, not a dialog
+    QTest::keyClicks(box, "H2O");
+    QTest::keyClick(box, Qt::Key_Return);
+    REQUIRE(f.doc().texts.size() == 1);
+    CHECK(f.doc().texts[0].text == "H2O");
+    CHECK(f.doc().texts[0].pos == QPointF(40, 50));  // at the click, not centred in a dialog
+    CHECK(!box->isVisible());
+
+    f.canvas.setTool(Canvas::Tool::Select);
+    f.canvas.editText(0);
+    box = editor();
+    REQUIRE(box);
+    CHECK(box->toPlainText() == "H2O");
+    QTest::keyClicks(box, "D2O");  // the old text is selected: retyping replaces it
+    f.click({300, 300});           // clicking away keeps it
+    CHECK(f.doc().texts[0].text == "D2O");
+    CHECK(!box->isVisible());
+
+    f.canvas.editText(0);
+    box = editor();
+    REQUIRE(box);
+    QTest::keyClicks(box, "X");
+    QTest::keyClick(box, Qt::Key_Escape);
+    CHECK(f.doc().texts[0].text == "D2O");  // Escape drops the edit
+
+    f.canvas.editText(0);
+    box = editor();
+    REQUIRE(box);
+    QTest::keyClicks(box, "line");
+    QTest::keyClick(box, Qt::Key_Return, Qt::ShiftModifier);  // a new line, not a commit
+    QTest::keyClicks(box, "two");
+    QTest::keyClick(box, Qt::Key_Return);
+    CHECK(f.doc().texts[0].text == "line\ntwo");
+}
+
 TEST_CASE("format defaults reach new shapes, text, bonds and ring fills (#621)") {
     Fixture f;
     f.canvas.setColour(Qt::blue);
@@ -5812,8 +5867,11 @@ TEST_CASE("format defaults reach new shapes, text, bonds and ring fills (#621)")
     CHECK(f.doc().arrows[0].color == Qt::blue);
     CHECK(f.doc().arrows[0].filled);
     CHECK(f.doc().arrows[0].fill == Qt::red);
-    QTimer::singleShot(0, [] { auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget()); REQUIRE(dialog); dialog->setTextValue("H2O"); dialog->accept(); });
     f.canvas.editText(-1, {0, 50});
+    auto* editor = f.canvas.findChild<QPlainTextEdit*>("textEditor");
+    REQUIRE(editor);
+    QTest::keyClicks(editor, "H2O");
+    QTest::keyClick(editor, Qt::Key_Return);
     REQUIRE(f.doc().texts.size() == 1);
     CHECK(f.doc().texts[0].font == "Times New Roman");
     CHECK(f.doc().texts[0].bold); CHECK(f.doc().texts[0].italic);

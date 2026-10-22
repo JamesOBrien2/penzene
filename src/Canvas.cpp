@@ -25,6 +25,7 @@
 #include <QPainterPath>
 #include <QPicture>
 #include <QPlainTextEdit>
+#include <QTextDocument>
 #include <QPointer>
 #include <QRegularExpression>
 #include <QScrollBar>
@@ -172,6 +173,34 @@ static QString describeArrow(const Document& doc, int i) {
 // own widgets, so screen readers and automation tools can find, read and select them without a mouse.
 namespace {
 enum class Part { Atom, Bond, Arrow, Text };
+
+// Text typed over the canvas: Return or leaving it keeps the text, Escape drops it.
+class InlineTextEditor : public QPlainTextEdit {
+public:
+    std::function<void()> commit, cancel;
+
+    explicit InlineTextEditor(QWidget* parent) : QPlainTextEdit(parent) {}
+
+protected:
+    void keyPressEvent(QKeyEvent* e) override {
+        if (e->key() == Qt::Key_Escape) return finish(cancel);
+        if ((e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) && !(e->modifiers() & Qt::ShiftModifier))
+            return finish(commit);
+        QPlainTextEdit::keyPressEvent(e);
+    }
+    void focusOutEvent(QFocusEvent* e) override {
+        QPlainTextEdit::focusOutEvent(e);
+        finish(commit);
+    }
+
+private:
+    void finish(const std::function<void()>& action) {
+        if (done_) return;
+        done_ = true;
+        if (action) action();
+    }
+    bool done_ = false;
+};
 
 class CanvasPart : public QAccessibleInterface, public QAccessibleActionInterface {
 public:
@@ -364,6 +393,7 @@ void Canvas::commit(const Document& next, const QString& text) {
 }
 
 void Canvas::setDocumentSilently(const Document& doc) {
+    cancelTextEditor();  // the text it was over may be gone
     if (drag_ == Drag::Erase && !(doc == doc_)) drag_ = Drag::None;  // changed indices cancel a pending erase
     // Items added or removed (an erase, an undo) renumber the rest, so indices from
     // before would point at other atoms: drop them. Callers that know the new
@@ -537,7 +567,10 @@ void Canvas::refresh() {
     picture_ = QPicture();
     QPainter p(&picture_);
     labels_.assign(doc_.atoms.size(), {});
-    paintDocument(p, doc_, {theme_.ink, theme_.error, 0, &labels_, markValenceErrors_});
+    Document painted = doc_;
+    if (editingText_ >= 0 && editingText_ < int(painted.texts.size()))
+        painted.texts.erase(painted.texts.begin() + editingText_);  // the editor shows it instead
+    paintDocument(p, painted, {theme_.ink, theme_.error, 0, &labels_, markValenceErrors_});
     p.end();
     // The scene grows to hold the drawing and its page with room to spare, never shrinking under the view (#326).
     const QRectF drawn = documentBounds(doc_).united(pageRect(doc_)).adjusted(-2000, -2000, 2000, 2000);
@@ -927,6 +960,7 @@ std::vector<QPointF> Canvas::dragPath() const {
 }
 
 void Canvas::mousePressEvent(QMouseEvent* e) {
+    commitTextEditor();  // typing here finishes the text it was over
     if (e->button() == Qt::MiddleButton) {
         drag_ = Drag::Pan;
         panLast_ = e->pos();
@@ -2069,29 +2103,80 @@ void Canvas::setArrowHead(double size) {
 }
 
 void Canvas::editText(int i, QPointF pos) {
+    commitTextEditor();
+    const bool existing = i >= 0 && i < int(doc_.texts.size());
+    editingText_ = existing ? i : -1;
+    editTextPos_ = existing ? doc_.texts[i].pos : pos;
+    const double scale = existing ? doc_.texts[i].scale : textFormat().scale;
+    QFont f = labelFont(documentStyle(doc_), scale);
+    const double px = f.pointSizeF() * QFontMetricsF(f).fontDpi() / 72.0 * transform().m11();
+    f.setPixelSize(std::max(6, int(std::round(px))));
     // The editor uses the canvas font and tab stops, so spacing looks the same on both.
-    QInputDialog dialog(this);
-    dialog.setWindowTitle(tr("Text"));
-    dialog.setLabelText(tr("Text (H2O becomes H₂O, Cu2+ Cu²⁺; ^ marks a charge: SO4^2-):"));
-    dialog.setOption(QInputDialog::UsePlainTextEditForTextInput);
-    dialog.setTextValue(i >= 0 ? doc_.texts[i].text : QString());
-    if (auto* edit = dialog.findChild<QPlainTextEdit*>()) {
-        QFont f = labelFont(documentStyle(doc_));
-        f.setPixelSize(16);
-        edit->setFont(f);
-        edit->setTabStopDistance(kTabSpaces * QFontMetricsF(f).horizontalAdvance(' '));
-        edit->setAccessibleName(tr("Text"));  // QInputDialog's label isn't its buddy in plain-text mode
-    }
-    if (dialog.exec() != QDialog::Accepted) return;
+    auto* editor = new InlineTextEditor(viewport());
+    textEditor_ = editor;
+    editor->setObjectName("textEditor");
+    editor->setAccessibleName(tr("Text"));
+    editor->setAccessibleDescription(tr("Text (H2O becomes H₂O, Cu2+ Cu²⁺; ^ marks a charge: SO4^2-). Return or clicking away keeps it, shift+Return starts a new line, Escape drops it."));
+    editor->setToolTip(editor->accessibleDescription());
+    editor->setFont(f);
+    editor->document()->setDocumentMargin(2);
+    editor->setTabStopDistance(kTabSpaces * QFontMetricsF(f).horizontalAdvance(' '));
+    editor->setPlainText(existing ? doc_.texts[i].text : QString());
+    editor->setLineWrapMode(QPlainTextEdit::NoWrap);
+    editor->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    editor->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    editor->setStyleSheet(QString("QPlainTextEdit { background: %1; color: %2; border: 1px solid %3; }")
+                              .arg(theme_.paper.name(), theme_.ink.name(), theme_.accent.name()));
+    const QPoint origin = mapFromScene(editTextPos_);
+    const auto fit = [this, editor, origin] {
+        const QFontMetricsF fm(editor->font());
+        double w = 0;
+        for (const QString& line : editor->toPlainText().split('\n')) w = std::max(w, fm.horizontalAdvance(line));
+        const int lines = std::max(1, int(editor->toPlainText().count('\n')) + 1);
+        const int maxWidth = std::max(140, viewport()->width() - origin.x() - 8);
+        const int width = std::clamp(int(std::ceil(w)) + 18, 140, maxWidth);
+        const int height = int(std::ceil(fm.lineSpacing() * lines)) + 14;
+        editor->setGeometry(QRect(origin - QPoint(6, int(std::ceil(fm.ascent())) + 5), QSize(width, height)));
+    };
+    QObject::connect(editor, &QPlainTextEdit::textChanged, editor, fit);
+    editor->commit = [this, editor] { if (textEditor_ == editor) commitTextEditor(); };
+    editor->cancel = [this, editor] { if (textEditor_ == editor) cancelTextEditor(); };
+    fit();
+    editor->show();
+    editor->raise();
+    editor->setFocus();
+    if (existing) editor->selectAll();
+    refresh();  // hide the text it is over
+}
+
+void Canvas::commitTextEditor() {
+    auto* editor = static_cast<InlineTextEditor*>(textEditor_);
+    if (!editor) return;
+    const int i = editingText_;
+    textEditor_ = nullptr, editingText_ = -1;
     // Keep leading spaces and tabs; they are deliberate indentation.
-    QString s = dialog.textValue();
+    QString s = editor->toPlainText();
     s.remove(QRegularExpression("\\s+$"));
+    editor->hide();
+    editor->deleteLater();
     Document next = doc_;
-    if (i < 0 && !s.isEmpty()) next.texts.push_back({pos, s});
+    if (i < 0 && !s.isEmpty()) next.texts.push_back({editTextPos_, s});
     else if (i >= 0 && s.isEmpty()) next.texts.erase(next.texts.begin() + i);
     else if (i >= 0 && s != doc_.texts[i].text) next.texts[i].text = s, next.texts[i].series = 0;  // retyped: joins what it now reads as
     styleNewObjects(next);
     if (!(next == doc_)) commit(next, tr("Text"));
+    else refresh();
+    if (QApplication::focusWidget() == editor || !QApplication::focusWidget()) setFocus(Qt::OtherFocusReason);
+}
+
+void Canvas::cancelTextEditor() {
+    auto* editor = static_cast<InlineTextEditor*>(textEditor_);
+    if (!editor) return;
+    textEditor_ = nullptr, editingText_ = -1;
+    editor->hide();
+    editor->deleteLater();
+    refresh();
+    if (QApplication::focusWidget() == editor || !QApplication::focusWidget()) setFocus(Qt::OtherFocusReason);
 }
 
 void Canvas::keyPressEvent(QKeyEvent* e) {
