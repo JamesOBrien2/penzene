@@ -1,14 +1,20 @@
 # Installing
 
-Download the installer for your system from the
-[latest release](https://github.com/JamesOBrien2/penzene/releases/latest).
+Choose your system to download the latest stable installer directly:
 
 | System | File |
 |---|---|
-| macOS, Apple silicon | `penzene-macos-arm64.dmg` |
-| macOS, Intel | `penzene-macos-x86_64.dmg` |
-| Windows | `penzene-windows-x64-setup.exe` (or the `.zip`, no install needed) |
-| Linux | `penzene-linux-x86_64.AppImage` |
+| macOS, Apple silicon | [Download DMG](https://github.com/JamesOBrien2/penzene/releases/latest/download/penzene-macos-arm64.dmg) |
+| macOS, Intel | [Download DMG](https://github.com/JamesOBrien2/penzene/releases/latest/download/penzene-macos-x86_64.dmg) |
+| Windows | [Download installer](https://github.com/JamesOBrien2/penzene/releases/latest/download/penzene-windows-x64-setup.exe) or [portable ZIP](https://github.com/JamesOBrien2/penzene/releases/latest/download/penzene-windows-x64.zip) |
+| Linux | [Download AppImage](https://github.com/JamesOBrien2/penzene/releases/latest/download/penzene-linux-x86_64.AppImage) |
+
+These links always point to the newest stable release. The installers are free to use and
+Penzene is licensed under [GPL-3.0-or-later](https://github.com/JamesOBrien2/penzene/blob/main/LICENSE).
+The distributed dependencies and their notices are listed in
+[`THIRD_PARTY_LICENSES.md`](https://github.com/JamesOBrien2/penzene/blob/main/THIRD_PARTY_LICENSES.md).
+Universities may deploy the installers through their usual software distribution tools; consult
+your institution's software licensing process when redistributing copies.
 
 ## Opening it the first time
 
