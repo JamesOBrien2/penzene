@@ -206,6 +206,7 @@ private:
     QSet<int> eraseAtoms_, eraseBonds_, eraseArrows_, eraseTexts_;
     bool eraseMoved_ = false;
     std::vector<int> moleculesOfSelection() const;  // whole molecules; all atoms if none selected
+    std::vector<int> atomsOfSelection() const;      // just the selected atoms; all if none selected
     std::optional<chem::Pose3D> pose_;  // during a 3D rotation drag
     // Scale handles around the selection: corners scale, edges stretch along one axis.
     QRectF selectionBox() const;  // empty unless something with extent is selected
