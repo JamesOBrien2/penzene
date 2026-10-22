@@ -1481,6 +1481,35 @@ TEST_CASE("terminal bond deletion drops the end atom through each UI path") {
     }
 }
 
+TEST_CASE("Delete returns the cursor to the previous point (#675)") {
+    Document d;
+    d.atoms = {{{0, 0}}, {{kBondLength, 0}}, {{2 * kBondLength, 0}}};
+    d.bonds = {{0, 1}, {1, 2}};
+    SECTION("after deleting the atom under the cursor") {
+        Fixture f;
+        f.canvas.setDocumentSilently(d);
+        f.hover({2 * kBondLength, 0});
+        REQUIRE(f.canvas.hotspotAtom() == 2);
+        QTest::keyClick(f.canvas.viewport(), Qt::Key_Delete);
+        CHECK(f.doc().atoms.size() == 2);
+        CHECK(f.canvas.hotspotAtom() == 1);
+        f.key("1");  // drawing carries on from there
+        CHECK(f.doc().atoms.size() == 3);
+        CHECK(f.doc().bonds.size() == 2);
+    }
+    SECTION("after deleting the terminal bond under the cursor") {
+        Fixture f;
+        f.canvas.setDocumentSilently(d);
+        f.hover({1.5 * kBondLength, 0});
+        QTest::keyClick(f.canvas.viewport(), Qt::Key_Delete);
+        CHECK(f.doc().atoms.size() == 2);
+        CHECK(f.canvas.hotspotAtom() == 1);
+        f.key("1");
+        CHECK(f.doc().atoms.size() == 3);
+        CHECK(f.doc().bonds.size() == 2);
+    }
+}
+
 TEST_CASE("no two items in a menu share an access key") {
     App app;
     MainWindow w;

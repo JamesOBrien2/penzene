@@ -10,6 +10,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - The bond palette and Style menu offer double dashed (`e`, two dashed lines for a mechanism's electron pair), dashed double (`D`) and bold double (`B`); `Q` makes a quadruple bond, also `order=4` in Python (#668).
 - What's New shows the major changes as icon tiles, keeps the rest in a scroll and fits on screen (#691).
 - Colour and ring fill menus draw their swatches again, instead of empty boxes (#674).
+- Deleting the atom or bond under the cursor returns it to the previous atom, so drawing carries on without moving the mouse (#675).
 
 ## 2.0.0 (2026-10-22)
 
