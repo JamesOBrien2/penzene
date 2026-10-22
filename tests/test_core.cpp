@@ -634,6 +634,39 @@ TEST_CASE("hotkeys without a canvas: ChemDraw's dipeptide example") {
     CHECK_FALSE(edit::hotkey(doc, {0, -1}, "~").valid());  // not a hotkey
 }
 
+TEST_CASE("the 1 hotkey grows one straight chain (#676)") {
+    Document d;
+    d.addAtom({0, 0});
+    edit::Hotspot h{0, -1};
+    for (int i = 0; i < 8; ++i) h = edit::hotkey(d, h, "1");
+    REQUIRE(d.atoms.size() == 9);
+    for (int i = 1; i < 9; ++i) {
+        CHECK(d.atoms[i].pos.x() > d.atoms[i - 1].pos.x());
+        CHECK(len(d.atoms[i].pos - d.atoms[i - 1].pos) == Catch::Approx(kBondLength));
+    }
+    const double rise = std::abs(d.atoms[1].pos.y() - d.atoms[0].pos.y());
+    for (int i = 2; i < 9; ++i)
+        CHECK(std::abs(std::abs(d.atoms[i].pos.y() - d.atoms[i - 1].pos.y()) - rise) < 1e-9);
+}
+
+TEST_CASE("0 closes a hotkey chain into a ring (#676)") {
+    Document d;
+    d.addAtom({0, 0});
+    edit::Hotspot h{0, -1};
+    for (int i = 0; i < 6; ++i) h = edit::hotkey(d, h, "1");
+    REQUIRE(d.atoms.size() == 7);
+    const QPointF hotspot = d.atoms[h.atom].pos;
+    h = edit::hotkey(d, h, "0");
+    CHECK(h.valid());
+    CHECK(d.atoms.size() == 7);
+    CHECK(d.bonds.size() == 7);
+    CHECK(d.bondBetween(0, 6) >= 0);
+    CHECK(len(d.atoms[h.atom].pos - hotspot) < 1e-9);  // the hotspot atom stays put
+    for (const Bond& b : d.bonds)
+        CHECK(len(d.atoms[b.a].pos - d.atoms[b.b].pos) == Catch::Approx(kBondLength));
+    for (int i = 0; i < 7; ++i) CHECK(d.neighbors(i).size() == 2);
+}
+
 TEST_CASE("chair hotkey on two bonds of one ring fuses cleanly (#417)") {
     auto clean = [](const Document& doc, bool unitBonds = true) {
         for (int i = 0; i < int(doc.atoms.size()); ++i) {

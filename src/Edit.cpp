@@ -28,10 +28,25 @@ QPointF freeDirection(const Document& doc, int atom, int newOrder) {
         int have = doc.bonds[doc.bondBetween(atom, nbs[0])].order;
         if (have == 3 || newOrder == 3 || (have == 2 && newOrder == 2)) return -back;
         double base = qRadiansToDegrees(std::atan2(back.y(), back.x()));
-        // Of the style's two chain directions, take the one farther from everything else.
+        const double angle = documentStyle(doc).chainAngle;
+        // At the end of a chain the zig-zag repeats the bond two back (#676).
+        const auto prev = doc.neighbors(nbs[0]);
+        if (prev.size() == 2) {
+            const int before = prev[0] == atom ? prev[1] : prev[0];
+            const QPointF axis = unit(doc.atoms[nbs[0]].pos - doc.atoms[before].pos);
+            const QPointF first = dirAt(base + angle), second = dirAt(base - angle);
+            const QPointF chosen = QPointF::dotProduct(first, axis) >= QPointF::dotProduct(second, axis)
+                                       ? first : second;
+            const QPointF cand = p + chosen * kBondLength;
+            double near = 1e9;
+            for (size_t j = 0; j < doc.atoms.size(); ++j)
+                if (int(j) != atom) near = std::min(near, len(doc.atoms[j].pos - cand));
+            if (near >= 0.45 * kBondLength) return chosen;
+        }
+        // Otherwise take the of the style's two chain directions farther from everything else.
         QPointF best;
         double bestScore = -1;
-        for (double off : {documentStyle(doc).chainAngle, -documentStyle(doc).chainAngle}) {
+        for (double off : {angle, -angle}) {
             QPointF cand = p + dirAt(base + off) * kBondLength;
             double score = 1e9;
             for (size_t j = 0; j < doc.atoms.size(); ++j)
@@ -537,6 +552,44 @@ int farthestFrom(const Document& doc, const std::vector<int>& ids, int from) {
 
 constexpr int kUnhandled = -2;
 
+// The atoms from a terminal `at` back along a simple open chain to its other end.
+std::vector<int> openChain(const Document& doc, int at) {
+    if (doc.neighbors(at).size() != 1) return {};
+    std::vector<int> chain{at};
+    int previous = -1, current = at;
+    while (true) {
+        int next = -1;
+        for (int nb : doc.neighbors(current))
+            if (nb != previous) next = nb;
+        if (next < 0 || std::find(chain.begin(), chain.end(), next) != chain.end()) return {};
+        chain.push_back(next);
+        if (doc.neighbors(next).size() == 1) break;
+        if (doc.neighbors(next).size() != 2) return {};
+        previous = current, current = next;
+    }
+    return chain.size() >= 3 ? chain : std::vector<int>{};
+}
+
+// Lays the open chain out as a regular ring and joins its ends, keeping the
+// hotspot atom where it is.
+void closeChain(Document& doc, const std::vector<int>& chain) {
+    const int n = int(chain.size());
+    const QPointF first = doc.atoms[chain[0]].pos;
+    QPointF centroid;
+    for (int i : chain) centroid += doc.atoms[i].pos;
+    centroid /= n;
+    QPointF r = first - centroid;
+    r = (len(r) > 1e-9 ? unit(r) : doc.awayDirection(chain[0])) * circumradius(n);
+    const QPointF centre = first - r;
+    const double sign = cross(r, doc.atoms[chain[1]].pos - first) >= 0 ? 1 : -1;
+    for (int k = 0; k < n; ++k) {  // the winding follows the chain's first bond
+        const double a = sign * 2 * M_PI * k / n;
+        doc.atoms[chain[k]].pos = centre + QPointF(r.x() * std::cos(a) - r.y() * std::sin(a),
+                                                   r.x() * std::sin(a) + r.y() * std::cos(a));
+    }
+    link(doc, chain.back(), chain.front(), 1, BondStereo::None);
+}
+
 // Atom "sprout" hotkeys. Returns the new hotspot atom, or kUnhandled.
 int sproutHotkey(Document& doc, int at, const QString& key) {
     const Site s = site(doc, at);
@@ -544,6 +597,10 @@ int sproutHotkey(Document& doc, int at, const QString& key) {
 
     if (key == "1") return sprout(doc, at, freeDirection(doc, at));
     if (key == "0") {
+        if (const auto chain = openChain(doc, at); !chain.empty()) {
+            closeChain(doc, chain);
+            return at;
+        }
         if (s == Site::Primary) return sprout(doc, at, openDirections(doc, at).second);
         return sprout(doc, at, doc.awayDirection(at), 1, 6, BondStereo::None, 1.5 * kBondLength);
     }
