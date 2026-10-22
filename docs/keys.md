@@ -19,7 +19,7 @@ Generated from Help → Keyboard Shortcuts in the app. Point at an atom or bond 
 
 | Keys | |
 |---|---|
-| `1` / `0` | single bond, linear / cyclic mode (0 is longer on 2°/3° carbons) |
+| `1` / `0` | extend the chain / close it into a ring (0 is longer on 2°/3° carbons) |
 | `2` | acetyl (1°), C=O (2°), CH₂-acetyl (3°/aromatic) |
 | `3` or `a` | phenyl |
 | `4` / `5` | wedged / hashed methyl |
