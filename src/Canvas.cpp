@@ -138,7 +138,10 @@ static QString describeAtom(const Document& doc, int i) {
 
 static QString describeBond(const Document& doc, int i) {
     const Bond& b = doc.bonds[i];
-    const QString order = b.order == 3 ? Canvas::tr("triple") : b.order == 2 ? Canvas::tr("double") : Canvas::tr("single");
+    const QString order = b.order == 4 ? Canvas::tr("quadruple")
+                          : b.order == 3 ? Canvas::tr("triple")
+                          : b.order == 2 ? Canvas::tr("double")
+                                         : Canvas::tr("single");
     return Canvas::tr("%1 bond, %2 to %3").arg(order, atomName(doc, b.a), atomName(doc, b.b));
 }
 
@@ -1243,7 +1246,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
                 b.stereo = stereo, b.order = order, b.position = BondPosition::Auto;
             } else {
                 b.stereo = BondStereo::None;
-                b.order = (b.order != order && order > 1) ? order : b.order % 3 + 1;
+                b.order = (b.order != order && order > 1) ? order : b.order == 4 ? 1 : b.order % 3 + 1;
                 straightenSp(next, bond);
             }
             what = tr("Change bond");
@@ -2313,11 +2316,14 @@ QMenu* Canvas::contextMenuAt(QPointF at) {
         });
     } else if (bond >= 0) {
         const Hotspot h{-1, bond};
-        for (auto [text, key] : {std::pair{tr("Single"), "1"}, {tr("Double"), "2"}, {tr("Triple"), "3"}})
+        for (auto [text, key] : {std::pair{tr("Single"), "1"}, {tr("Double"), "2"}, {tr("Triple"), "3"},
+                                 {tr("Quadruple"), "Q"}})
             menu->addAction(text, this, keyOn(h, key, tr("Change bond")));
         auto* style = menu->addMenu(tr("Style"));
         for (auto [text, key] : {std::pair{tr("Wedge"), "w"}, {tr("Hash"), "h"}, {tr("Wavy"), "y"},
-                                 {tr("Bold"), "b"}, {tr("Dashed"), "d"}, {tr("Double Dashed"), "e"}})
+                                 {tr("Bold"), "b"}, {tr("Dashed"), "d"},
+                                 {tr("Dashed Double"), "D"}, {tr("Bold Double"), "B"},
+                                 {tr("Double Dashed"), "e"}})
             style->addAction(text, this, keyOn(h, key, tr("Bond style")));
         if (doc_.bonds[bond].order == 2) {
             auto* side = menu->addMenu(tr("Double Bond Position"));

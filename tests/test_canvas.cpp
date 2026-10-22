@@ -928,6 +928,15 @@ TEST_CASE("hotkeys: bond styles, positions, chair; duplicate across an arrow; to
     f.key("e");
     CHECK(f.doc().bonds[0].stereo == BondStereo::DoubleDashed);
     CHECK(f.doc().bonds[0].order == 1);
+    f.key("2");
+    CHECK(f.doc().bonds[0].order == 2);
+    CHECK(f.doc().bonds[0].stereo == BondStereo::None);
+    f.key("e");
+    CHECK(f.doc().bonds[0].stereo == BondStereo::DoubleDashed);
+    CHECK(f.doc().bonds[0].order == 2);  // keeps a double bond double
+    f.key("Q");
+    CHECK(f.doc().bonds[0].order == 4);
+    CHECK(f.doc().bonds[0].stereo == BondStereo::None);
     f.key("B");
     CHECK(f.doc().bonds[0].order == 2);
     CHECK(f.doc().bonds[0].stereo == BondStereo::Bold);

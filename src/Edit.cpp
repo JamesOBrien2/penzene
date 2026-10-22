@@ -801,7 +801,11 @@ Hotspot hotkey(Document& doc, Hotspot h, const QString& t) {
                                                        {"y", BondStereo::Wavy},   {"D", BondStereo::Dashed},
                                                        {"B", BondStereo::Bold},   {"e", BondStereo::DoubleDashed}};
         b.stereo = styles[t];
-        b.order = t == "D" || t == "B" ? 2 : 1;
+        // D and B are double bonds; e keeps an existing double (two dashed lines) and is a
+        // single electron pair otherwise.
+        b.order = t == "D" || t == "B" ? 2 : t == "e" && b.order == 2 ? 2 : 1;
+    } else if (t == "Q") {  // quadruple bond
+        b.order = 4, b.stereo = BondStereo::None, b.position = BondPosition::Auto;
     } else if (t == "f") {  // bring to front: drawn last, over bonds it crosses
         const Bond front = b;
         doc.bonds.erase(doc.bonds.begin() + h.bond);

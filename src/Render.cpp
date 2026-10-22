@@ -474,7 +474,8 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         if (b.stereo == BondStereo::Bold && main) q.setWidthF(st.boldWidth), q.setCapStyle(Qt::FlatCap);
         const bool dashed = b.stereo == BondStereo::Dashed || b.stereo == BondStereo::Partial ||
                             b.stereo == BondStereo::DoubleDashed;
-        if (dashed && (!main || b.order == 1)) q.setDashPattern({st.hashSpacing / q.widthF(), st.hashSpacing / q.widthF()});
+        if (dashed && (b.stereo == BondStereo::DoubleDashed || !main || b.order == 1))
+            q.setDashPattern({st.hashSpacing / q.widthF(), st.hashSpacing / q.widthF()});
         p.setPen(q);
         // A bond drawn later (in front) crossing this one leaves a gap in it.
         std::vector<double> cuts;  // along x→y, 0..1
@@ -504,6 +505,8 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         line(a, e, true);
         line(a + n * gap, e + n * gap, true);
         line(a - n * gap, e - n * gap, true);
+    } else if (b.order == 4) {
+        for (double side : {-1.5, -0.5, 0.5, 1.5}) line(a + n * (gap * side), e + n * (gap * side), true);
     } else {
         // Offset the second line toward the side where the neighbours are
         // (inside the ring); centre it for terminal bonds like C=O.
@@ -523,7 +526,7 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
 
     // A bold line ends flat, so at a skeletal atom fill the bevel to each other bond there, as a pen
     // joins a polyline: no notch at ring corners (#217). Labels keep their clearance.
-    if (b.stereo != BondStereo::Bold || (b.order == 2 && doubleBondSide(doc, b, at) == 0) || b.order == 3) return;
+    if (b.stereo != BondStereo::Bold || (b.order == 2 && doubleBondSide(doc, b, at) == 0) || b.order >= 3) return;
     p.save();
     p.setPen(Qt::NoPen);
     p.setBrush(pen.color());
