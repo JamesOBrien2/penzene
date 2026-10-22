@@ -2649,6 +2649,48 @@ TEST_CASE("template library: built-ins insert, selections save as templates (#32
     }
 }
 
+TEST_CASE("templates are reachable from the welcome card and the tool rail (#679)") {
+    App app;
+    MainWindow w;
+    w.resize(1000, 700);
+    w.show();
+    auto* dock = w.findChild<QDockWidget*>("templates");
+    REQUIRE(dock);
+    CHECK_FALSE(dock->isVisible());
+    QToolButton* library = nullptr;
+    for (auto* b : w.findChild<QFrame*>("toolCard")->findChildren<QToolButton*>("railButton"))
+        if (b->text() == "Templates") library = b;
+    REQUIRE(library);
+    CHECK(library->isCheckable());
+    library->click();
+    QApplication::processEvents();
+    CHECK(dock->isVisible());
+    CHECK(library->isChecked());
+    auto* tree = dock->findChild<QTreeWidget*>();
+    REQUIRE(tree);
+    CHECK(tree->topLevelItemCount() > 0);  // filled the first time it opens
+    library->click();
+    CHECK_FALSE(dock->isVisible());
+    CHECK_FALSE(library->isChecked());
+
+    auto* welcome = w.findChild<QLabel*>("welcomeLinks");
+    REQUIRE(welcome);
+    CHECK(welcome->text().contains("Templates"));
+    emit welcome->linkActivated("templates");
+    QApplication::processEvents();
+    CHECK(dock->isVisible());
+    CHECK(library->isChecked());  // the View toggle and the rail button agree
+
+    QAction* viewToggle = nullptr;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "&Templates") viewToggle = a;
+    REQUIRE(viewToggle);
+    CHECK(viewToggle->shortcut() == QKeySequence("Ctrl+Shift+T"));
+    viewToggle->trigger();
+    CHECK_FALSE(dock->isVisible());
+    CHECK_FALSE(library->isChecked());
+}
+
 TEST_CASE("Added templates retain their chemical identities and bond geometry (#474)") {
     App app;
     QFile file(QString(PENZENE_TEST_DATA) + "/template-identities.tsv");
@@ -3462,8 +3504,9 @@ TEST_CASE("White and teal theme; tools on a rail whose groups open beside it (#2
     CHECK_FALSE(w.findChild<QToolBar*>("modeBar"));  // no Draw / Chemistry / Figure switch
     QHash<QString, QToolButton*> rail;
     for (auto* b : w.findChildren<QToolButton*>("railButton")) rail[b->text()] = b;
-    CHECK(rail.keys().size() == 7);
+    CHECK(rail.keys().size() == 8);
     REQUIRE(rail.contains("Text"));
+    REQUIRE(rail.contains("Templates"));
     for (const char* g : {"Select", "Bonds", "Rings", "Atoms", "Arrows", "Shapes"}) REQUIRE(rail.contains(g));
     CHECK(rail["Bonds"]->isChecked());  // the single bond, chosen at start
     auto flyout = [&](const QString& g) {
@@ -3812,6 +3855,18 @@ TEST_CASE("every tool button does its job pressed through accessibility, as scre
             press(rail);
             CHECK(rail->isChecked());
             CHECK(w.statusBar()->currentMessage() == rail->toolTip());
+            continue;
+        }
+        if (rail->text() == "Templates") {
+            CHECK_FALSE(fly);
+            auto* dock = w.findChild<QDockWidget*>("templates");
+            REQUIRE(dock);
+            press(rail);
+            CHECK(dock->isVisible());
+            CHECK(rail->isChecked());
+            press(rail);
+            CHECK_FALSE(dock->isVisible());
+            CHECK_FALSE(rail->isChecked());
             continue;
         }
         REQUIRE(fly);

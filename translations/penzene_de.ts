@@ -1356,6 +1356,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Templates: ready-made structures to click into place — opens the library (Ctrl+Shift+T)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Import Theme…</source>
         <translation type="unfinished"></translation>
     </message>
