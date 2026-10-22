@@ -43,9 +43,11 @@ struct StyleSettings {
 // Dative is a coordinate bond drawn as an arrow from its donor (a) to its acceptor (b):
 // it takes none of the donor's hydrogens. A plain line to a metal is read as one too
 // where the donor has no bond to spare (PPh3, NMe3, pyridine; see chem::toRDKit).
-enum class BondStereo { None, Wedge, Hash, Bold, Dashed, Wavy, Interaction, Partial, Dative };
+// DoubleDashed draws two dashed lines either side of the bond, a mechanism's electron pair;
+// like Partial, it is drawing-only and stays a single bond to chemistry.
+enum class BondStereo { None, Wedge, Hash, Bold, Dashed, Wavy, Interaction, Partial, Dative, DoubleDashed };
 // Their names in .penz files and Python's set_bond_style, in enum order.
-inline constexpr const char* kBondStereoNames[] = {"none", "wedge", "hash", "bold", "dashed", "wavy", "interaction", "partial", "dative"};
+inline constexpr const char* kBondStereoNames[] = {"none", "wedge", "hash", "bold", "dashed", "wavy", "interaction", "partial", "dative", "double-dashed"};
 enum class BondPosition { Auto, Left, Centre, Right };  // double bond's second line, seen from a to b
 // Enhanced stereo (MDL/ChemDraw): a stereocentre as drawn (abs), or one of a group
 // whose centres are all as drawn or all inverted, as a mixture (&n) or unknown which (orn).

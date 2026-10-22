@@ -1268,9 +1268,13 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             ++bondCount[from], ++bondCount[to];
             if (const QColor c = ink(at); c.isValid() && !inLabel && nodePos.contains(from) && nodePos.contains(to))
                 inks.bonds.push_back({nodePos[from], nodePos[to], c});
-            if (const auto order = at.value("Order"); (order == u"dative" || order == u"hydrogen") && !inLabel &&
-                                                      nodePos.contains(from) && nodePos.contains(to))
-                inks.styles.push_back({nodePos[from], nodePos[to], order == u"dative" ? BondStereo::Dative : BondStereo::Interaction});
+            const auto order = at.value("Order");
+            const bool doubleDashed = order == u"2" && at.value("Display") == u"Dash";
+            if ((order == u"dative" || order == u"hydrogen" || doubleDashed) && !inLabel &&
+                nodePos.contains(from) && nodePos.contains(to))
+                inks.styles.push_back({nodePos[from], nodePos[to], order == u"dative"  ? BondStereo::Dative
+                                                               : order == u"hydrogen" ? BondStereo::Interaction
+                                                                                      : BondStereo::DoubleDashed});
         } else if (tag == "n") {
             if (at.hasAttribute("Z")) moleculeZ = std::min(moleculeZ, at.value("Z").toDouble());
             const int id = at.value("id").toInt();
@@ -2222,7 +2226,7 @@ QByteArray toCdxml(const Document& doc) {
             w.writeEndElement();
             w.writeEndElement();
         }
-        static const char* display[] = {nullptr, "WedgeBegin", "WedgedHashBegin", "Bold", "Dash", "Wavy", nullptr, "Dash", "Dative"};
+        static const char* display[] = {nullptr, "WedgeBegin", "WedgedHashBegin", "Bold", "Dash", "Wavy", nullptr, "Dash", "Dative", "Dash"};
         static const char* side[] = {nullptr, "Left", "Center", "Right"};
         // A plain line that coordinates a ligand to a metal goes out as the dative bond it is, donor first,
         // so a reader doesn't take a hydrogen from NH3 for it.
@@ -2239,6 +2243,7 @@ QByteArray toCdxml(const Document& doc) {
             if (b.stereo == BondStereo::Interaction) w.writeAttribute("Order", "hydrogen");
             else if (dative) w.writeAttribute("Order", "dative");
             else if (b.stereo == BondStereo::Partial) w.writeAttribute("Order", b.order == 2 ? "1.5" : "0.5");
+            else if (b.stereo == BondStereo::DoubleDashed) w.writeAttribute("Order", "2");
             else if (b.order > 1) w.writeAttribute("Order", QString::number(b.order));
             if (display[int(b.stereo)]) w.writeAttribute("Display", display[int(b.stereo)]);
             if (side[int(b.position)]) w.writeAttribute("DoublePosition", side[int(b.position)]);
@@ -2793,7 +2798,7 @@ Document clean2D(const Document& doc, const std::vector<int>& only) {
             if (int o = doc.bondBetween(b.a, b.b); o >= 0) {
                 const Bond& was = doc.bonds[o];
                 const bool styled = was.stereo == BondStereo::Bold || was.stereo == BondStereo::Dashed ||
-                                    was.stereo == BondStereo::Partial;
+                                    was.stereo == BondStereo::Partial || was.stereo == BondStereo::DoubleDashed;
                 if (styled && b.stereo == BondStereo::None) b.stereo = was.stereo;
                 if (was.stereo == BondStereo::Dative) b.a = was.a, b.b = was.b, b.stereo = was.stereo;
                 if (b.order == 2 && was.order == 2) b.position = was.position;

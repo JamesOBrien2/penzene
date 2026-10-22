@@ -3254,6 +3254,7 @@ moves off, so you can keep typing.</p>
 <tr><td><b>v 4–8</b></td><td>fuse ring of that size (v = 3)</td></tr>
 <tr><td><b>9</b> / <b>0</b></td><td>fuse chair cyclohexane (two orientations)</td></tr>
 <tr><td><b>d b y</b></td><td>dashed, bold, wavy</td></tr>
+<tr><td><b>e</b></td><td>double dashed: a mechanism's electron pair, drawn but not a bond</td></tr>
 <tr><td><b>D</b> / <b>B</b></td><td>dashed double / bold double</td></tr>
 <tr><td><b>i</b></td><td>interaction: H-bond or contact, dotted, not a bond</td></tr>
 <tr><td><b>k</b></td><td>dative bond, an arrow to the acceptor (press again to flip)</td></tr>

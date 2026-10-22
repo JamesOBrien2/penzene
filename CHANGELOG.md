@@ -7,6 +7,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 ## Unreleased
 
 - Typing an element or label on a charged atom now replaces it with the neutral atom, e.g. `O` on O⁻ gives O (#669).
+- Bonds can be drawn double dashed (`e`), two dashed lines for a mechanism's electron pair, kept as a drawing-only single bond (#668).
 
 ## 2.0.0 (2026-10-22)
 
