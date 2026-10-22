@@ -434,6 +434,17 @@ void Canvas::selectAll() {
     setSelection(range(0, int(doc_.atoms.size())), range(0, int(doc_.arrows.size())), range(0, int(doc_.texts.size())));
 }
 
+void Canvas::joinSelection() {
+    if (selectedAtoms_.size() != 2) return;
+    const std::vector<int> atoms(selectedAtoms_.begin(), selectedAtoms_.end());
+    if (doc_.bondBetween(atoms[0], atoms[1]) >= 0) return;
+    const std::vector<int> fragment = moleculeOf(doc_, atoms[0]);
+    if (std::find(fragment.begin(), fragment.end(), atoms[1]) != fragment.end()) return;
+    Document next = doc_;
+    link(next, atoms[0], atoms[1]);
+    commit(next, tr("Join"));
+}
+
 // Drops every item not in the given sets.
 static Document keepOnly(const Document& doc, const QSet<int>& atoms, const QSet<int>& arrows, const QSet<int>& texts) {
     Document out = doc;

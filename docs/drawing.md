@@ -105,6 +105,8 @@ erases one object. Neighbours left without bonds are removed too, as with a clic
 
 - Drag to select, or Alt+drag from empty space to draw a loop round what you want; double-click selects a whole molecule. Drag a selection to move it, and drop an
   atom on another to merge them.
+- With one atom selected in each of two structures, **Structure → Join Fragments** (Ctrl/Cmd+J)
+  bonds them into one.
 - The arrow keys nudge a selection (Shift for 10 points). Ctrl+arrow duplicates it across the next
   reaction arrow.
 - **Rotate:** drag the round handle above a selection (Shift turns in 15° steps; Ctrl lands it square to the

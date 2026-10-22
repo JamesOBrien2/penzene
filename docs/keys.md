@@ -74,6 +74,7 @@ Generated from Help → Keyboard Shortcuts in the app. Point at an atom or bond 
 | Keys | |
 |---|---|
 | `Ctrl+F` | find a SMILES or SMARTS substructure on the current page |
+| `Ctrl+J` | join two selected atoms from different fragments with a bond |
 | `←↑→↓` | nudge 1 pt; with **Shift** 10 pt |
 | `Enter` | back to a hotspot on the selection |
 | `Drag onto an atom` | merge (Select tool)  •  **Shift+drag** move straight; draw a bond at any angle |
