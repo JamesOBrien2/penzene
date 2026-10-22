@@ -467,12 +467,13 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         p.drawPath(wave);
         return;
     }
-    // Bold styles the main line, Dashed and Partial the other one (or the only one).
+    // Bold styles the main line, Dashed, Partial and DoubleDashed the other one (or the only one).
     const QPen pen = p.pen();
     auto line = [&](QPointF x, QPointF y, bool main) {
         QPen q = pen;
         if (b.stereo == BondStereo::Bold && main) q.setWidthF(st.boldWidth), q.setCapStyle(Qt::FlatCap);
-        const bool dashed = b.stereo == BondStereo::Dashed || b.stereo == BondStereo::Partial;
+        const bool dashed = b.stereo == BondStereo::Dashed || b.stereo == BondStereo::Partial ||
+                            b.stereo == BondStereo::DoubleDashed;
         if (dashed && (!main || b.order == 1)) q.setDashPattern({st.hashSpacing / q.widthF(), st.hashSpacing / q.widthF()});
         p.setPen(q);
         // A bond drawn later (in front) crossing this one leaves a gap in it.
@@ -489,6 +490,13 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         if (from < 1) p.drawLine(x + (y - x) * from, y);
         p.setPen(pen);
     };
+
+    if (b.stereo == BondStereo::DoubleDashed) {
+        const QPointF o = n * gap / 2;
+        line(a + o, e + o, true);
+        line(a - o, e - o, true);
+        return;
+    }
 
     if (b.order == 1) {
         line(a, e, true);

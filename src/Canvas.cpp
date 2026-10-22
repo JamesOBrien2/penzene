@@ -2317,7 +2317,7 @@ QMenu* Canvas::contextMenuAt(QPointF at) {
             menu->addAction(text, this, keyOn(h, key, tr("Change bond")));
         auto* style = menu->addMenu(tr("Style"));
         for (auto [text, key] : {std::pair{tr("Wedge"), "w"}, {tr("Hash"), "h"}, {tr("Wavy"), "y"},
-                                 {tr("Bold"), "b"}, {tr("Dashed"), "d"}})
+                                 {tr("Bold"), "b"}, {tr("Dashed"), "d"}, {tr("Double Dashed"), "e"}})
             style->addAction(text, this, keyOn(h, key, tr("Bond style")));
         if (doc_.bonds[bond].order == 2) {
             auto* side = menu->addMenu(tr("Double Bond Position"));

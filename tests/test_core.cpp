@@ -1303,6 +1303,23 @@ TEST_CASE("a scheme wrapped onto two rows keeps the link between them (#388)") {
           canon("CCO") + ">>" + canon("CC=O") + "\n" + canon("CC=O") + ">>" + canon("CC(=O)O"));  // the aldehyde is both
 }
 
+TEST_CASE("double dashed bonds are drawing-only and survive a ChemDraw round trip (#668)") {
+    Document d;
+    d.atoms = {{{0, 0}}, {{kBondLength, 0}}};
+    d.bonds = {{0, 1, 1, BondStereo::DoubleDashed}};
+    CHECK(chem::toSmiles(d) == "CC");
+    auto json = Document::fromJson(d.toJson());
+    REQUIRE(json);
+    CHECK(json->bonds[0].stereo == BondStereo::DoubleDashed);
+    CHECK(json->bonds[0].order == 1);
+    auto back = chem::fromChemDraw(chem::toCdxml(d));
+    REQUIRE(back);
+    REQUIRE(back->bonds.size() == 1);
+    CHECK(back->bonds[0].stereo == BondStereo::DoubleDashed);
+    CHECK(back->bonds[0].order == 1);
+    CHECK(chem::toSmiles(*back) == "CC");
+}
+
 TEST_CASE("CDXML export reads back: molecules, wedges, arrows and text (#29)") {
     Document doc = *chem::fromSmiles("C[C@H](N)C(=O)O");  // L-alanine, wedged
     const std::string smiles = chem::toSmiles(doc);
