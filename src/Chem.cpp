@@ -3340,7 +3340,7 @@ static const std::vector<Shift>& predictAllShifts(const Document& drawn, std::ve
     const Document doc = expanded(drawn, &owner);
     std::vector<Shift> out;
     std::vector<int> classes;
-    const auto codes = hoseCodes(doc, 4, &classes);
+    const auto codes = hoseCodes(doc, 5, &classes);
     const auto info = atomInfo(doc);
     std::vector<int> hydrogens(codes.size());
     for (size_t i = 0; i < codes.size(); ++i) hydrogens[i] = info[i].hydrogens;
