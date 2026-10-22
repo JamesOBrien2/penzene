@@ -800,10 +800,12 @@ void Canvas::drawForeground(QPainter* p, const QRectF&) {
         for (const auto& b : ring.bonds)
             if (doc_.bondBetween(b.a, b.b) < 0 || b.a >= int(doc_.atoms.size()) || b.b >= int(doc_.atoms.size()))
                 p->drawLine(ring.atoms[b.a].pos, ring.atoms[b.b].pos);
-        QFont f = font();
-        f.setPixelSize(8);
-        p->setFont(f);
-        p->drawText(curPos_ + QPointF(6, -6), QString::number(draggedRingSize()));  // the size, by the cursor
+        if (expand_ && !(shift_ || ringAromatic_)) {  // sizing: the number by the cursor
+            QFont f = font();
+            f.setPixelSize(8);
+            p->setFont(f);
+            p->drawText(curPos_ + QPointF(6, -6), QString::number(draggedRingSize()));
+        }
     }
     if (rulers_) drawRulers(p);
 }
@@ -829,13 +831,14 @@ int Canvas::draggedRingSize() const {
 }
 
 // Fused onto the bond or attached to the atom where the drag began; on empty
-// space the ring hangs off the press point in the drag direction. Shift: aromatic.
+// space the ring hangs off the press point in the 15°-snapped drag direction.
+// Shift: aromatic. Ctrl: size the ring, except an aromatic one.
 void Canvas::addDraggedRing(Document& doc) const {
-    const int n = draggedRingSize();
-    const bool aromatic = shift_;
+    const bool aromatic = shift_ || ringAromatic_;
+    const int n = expand_ && !aromatic ? draggedRingSize() : ringSize_;
     if (pressAtom_ >= 0) ringOnAtom(doc, pressAtom_, n, aromatic);
     else if (int bond = bondAt(pressPos_); bond >= 0) ringOnBond(doc, bond, n, aromatic);
-    else addRing(doc, polygon(pressPos_ + unit(curPos_ - pressPos_) * circumradius(n), pressPos_, n), aromatic);
+    else addRing(doc, polygon(pressPos_ + snapped(pressPos_, curPos_, 15) * circumradius(n), pressPos_, n), aromatic);
 }
 
 // The arrow being dragged out: straight ones snap to 15°, curved ones bow left.
@@ -1065,6 +1068,7 @@ void Canvas::mouseMoveEvent(QMouseEvent* e) {
         if (eraseMoved_) collectErase(moved ? previous : pressRaw_, curPos_);
     }
     shift_ = e->modifiers() & Qt::ShiftModifier;
+    expand_ = e->modifiers() & Qt::ControlModifier;
     if (drag_ == Drag::Move && shift_) {  // Shift: along whichever axis the drag mostly follows
         QPointF d = curPos_ - pressPos_;
         curPos_ = pressPos_ + (std::abs(d.x()) >= std::abs(d.y()) ? QPointF(d.x(), 0) : QPointF(0, d.y()));
@@ -1176,6 +1180,7 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e) {
     const QPointF previous = curPos_;
     curPos_ = mapToScene(e->pos());
     shift_ = e->modifiers() & Qt::ShiftModifier;
+    expand_ = e->modifiers() & Qt::ControlModifier;
     const bool click = len(curPos_ - pressRaw_) < 3 / transform().m11();
     const int bond = pressAtom_ < 0 ? bondAt(pressPos_) : -1;
     const Drag drag = std::exchange(drag_, Drag::None);

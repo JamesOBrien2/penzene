@@ -2575,8 +2575,10 @@ void MainWindow::buildTools() {
     auto ring = [this](int n, bool arom) {
         return [this, n, arom] { canvas_->setTool(T::Ring), canvas_->setRing(n, arom); };
     };
-    keys["j"] = add(docIcon(ringDoc(6, true)), tr("Benzene — j: click empty space for a ring, an atom to attach one, or a bond to fuse one"), ring(6, true));
-    for (int n = 3; n <= 8; ++n) add(docIcon(ringDoc(n, false)), tr("%1-membered ring: click empty space, an atom (spiro/attached) or a bond (fused)").arg(n), ring(n, false));
+    keys["j"] = add(docIcon(ringDoc(6, true)), tr("Benzene — j: click empty space for a ring, an atom to attach one, or a bond to fuse one; drag to orient it at 15° steps"), ring(6, true));
+    for (int n = 3; n <= 8; ++n)
+        add(docIcon(ringDoc(n, false)), tr("%1-membered ring: click empty space, an atom (spiro/attached) or a bond (fused); drag to orient it at 15° steps, Ctrl to size it").arg(n),
+            ring(n, false));
     // Ring fill: the icon shows the current fill colour; the arrow picks it.
     auto fill = std::make_shared<QColor>(canvas_->fillColor());
     const IconMaker fillIcon = [fill] {
