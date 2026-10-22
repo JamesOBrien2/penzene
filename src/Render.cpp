@@ -210,19 +210,25 @@ static void drawCharge(QPainter& p, const QString& text, QPointF at, const Drawi
     if (!shape.circle.isEmpty()) p.drawEllipse(shape.circle.translated(at));
 }
 
-static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const DrawingStyle& st, bool circled, QRectF* chargeBounds = nullptr) {
+// An abbreviation's outlines around its atom, with the attaching letter centred on it.
+static QPainterPath abbreviationPath(const Atom& a, bool fromRight, const DrawingStyle& st) {
     QFontMetricsF fm(labelFont(st));
     const QString s = fromRight ? reversedLabel(a.label) : a.label;
-    const double base = a.pos.y() + fm.capHeight() / 2;
-    QPainterPath path = textPath({{0, base}, s}, st, false);
-    const double x = fromRight ? a.pos.x() + fm.horizontalAdvance(s.back()) / 2 - path.boundingRect().right()
-                               : a.pos.x() - fm.horizontalAdvance(s.front()) / 2;
-    p.fillPath(path.translated(x, 0), p.pen().color());
+    QPainterPath path = textPath({{0, fm.capHeight() / 2}, s}, st, false);
+    path.translate(fromRight ? fm.horizontalAdvance(s.back()) / 2 - path.boundingRect().right()
+                             : -fm.horizontalAdvance(s.front()) / 2, 0);
+    return path;
+}
+
+static void drawAbbreviation(QPainter& p, const Atom& a, bool fromRight, const DrawingStyle& st, bool circled, QRectF* chargeBounds = nullptr) {
+    QFontMetricsF fm(labelFont(st));
+    const QPainterPath path = abbreviationPath(a, fromRight, st).translated(a.pos);
+    p.fillPath(path, p.pen().color());
     // A charge beyond the group's own, as typed (N3-, #370), raised after the label like an element's.
     if (const int extra = labelCharge(a)) {
         QString c = QString(extra > 0 ? "+" : "−");
         if (std::abs(extra) > 1) c.prepend(QString::number(std::abs(extra)));
-        drawCharge(p, c, {x + path.boundingRect().right(), base - fm.capHeight() * st.superscriptOffset}, st, circled, chargeBounds);
+        drawCharge(p, c, {path.boundingRect().right(), a.pos.y() + fm.capHeight() / 2 - fm.capHeight() * st.superscriptOffset}, st, circled, chargeBounds);
     }
 }
 
@@ -354,17 +360,20 @@ static void drawAtomLabel(QPainter& p, const Document& doc, int i, int hydrogens
 
 constexpr double kWedgeReach = 1.3;  // how far a wedge's wide corner may stretch to meet a neighbouring bond
 static void drawBond(QPainter& p, const Document& doc, const Bond& b, const DrawingStyle& st, const std::vector<int>& degree,
-                     const std::vector<bool>& labeled, const BondsAt& at, const std::vector<QPointF>& gaps = {}, const std::vector<QRectF>& chargeBoxes = {}) {
+                     const std::vector<bool>& labeled, const std::vector<bool>& reversedLabels, const BondsAt& at,
+                     const std::vector<QPointF>& gaps = {}, const std::vector<QRectF>& chargeBoxes = {}) {
     QPointF pa = doc.atoms[b.a].pos, pb = doc.atoms[b.b].pos;
     QPointF d = unit(pb - pa), n = perp(d);
     const double gap = st.bondSpacingAbsolute > 0 ? st.bondSpacingAbsolute : st.bondSpacing * len(pb - pa);  // relative to the untrimmed bond
     // Keep a point of margin beyond the symbol in the bond's direction, and at least the style's radius.
-    // Abbreviations attach at one letter rather than their whole label's centre, so keep their usual clearance.
+    // An abbreviation's whole text is clear of the bond that attaches it, as a wide atom label's is.
     // A bond crossing an isotope's raised mass number (¹³C) also stops beyond it; a level one passes beneath.
     auto trim = [&](int atom, QPointF toward) {
         const Atom& a = doc.atoms[atom];
         double clear = labeled[atom] ? st.labelRadius : 0;
-        if (labeled[atom] && !abbreviated(a)) {
+        if (labeled[atom] && abbreviated(a))
+            clear = std::max(clear, st.labelMargin + exitAlong(abbreviationPath(a, reversedLabels[atom], st).boundingRect(), toward));
+        else if (labeled[atom]) {
             const QFont font = labelFont(st);
             QFontMetricsF fm(font);
             const QString sym = atomSymbol(a);
@@ -874,6 +883,8 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         }
         return left && right ? (up ? HSide::Below : HSide::Above) : dx > 0.1 ? HSide::Left : HSide::Right;
     };
+    std::vector<bool> reversedLabels(doc.atoms.size());
+    for (size_t i = 0; i < doc.atoms.size(); ++i) reversedLabels[i] = hSide(int(i)) == HSide::Left;
     std::vector<QRectF> chargeBoxes;
     if (doc.circledCharges) {
         chargeBoxes.resize(doc.atoms.size());
@@ -961,9 +972,9 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         if (inCircle.contains(bi) && b.order == 2 && b.stereo == BondStereo::None) {
             Bond single = b;
             single.order = 1;
-            drawBond(p, doc, single, st, degree, labeled, bondsAt, gaps[bi], chargeBoxes);
+            drawBond(p, doc, single, st, degree, labeled, reversedLabels, bondsAt, gaps[bi], chargeBoxes);
         } else {
-            drawBond(p, doc, b, st, degree, labeled, bondsAt, gaps[bi], chargeBoxes);
+            drawBond(p, doc, b, st, degree, labeled, reversedLabels, bondsAt, gaps[bi], chargeBoxes);
         }
     }
     p.setPen(QPen(style.ink, lineWidth));
