@@ -111,12 +111,12 @@ struct Fixture : App {
     }
     QPoint at(QPointF scene) { return canvas.mapFromScene(scene); }
     void click(QPointF scene) { QTest::mouseClick(canvas.viewport(), Qt::LeftButton, {}, at(scene)); }
-    void drag(QPointF from, QPointF to) {
-        QTest::mousePress(canvas.viewport(), Qt::LeftButton, {}, at(from));
+    void drag(QPointF from, QPointF to, Qt::KeyboardModifiers mods = {}) {
+        QTest::mousePress(canvas.viewport(), Qt::LeftButton, mods, at(from));
         QMouseEvent move(QEvent::MouseMove, at(to), canvas.viewport()->mapToGlobal(at(to)), Qt::NoButton,
-                         Qt::LeftButton, {});
+                         Qt::LeftButton, mods);
         QApplication::sendEvent(canvas.viewport(), &move);
-        QTest::mouseRelease(canvas.viewport(), Qt::LeftButton, {}, at(to));
+        QTest::mouseRelease(canvas.viewport(), Qt::LeftButton, mods, at(to));
     }
     void hover(QPointF scene) {
         QMouseEvent move(QEvent::MouseMove, at(scene), canvas.viewport()->mapToGlobal(at(scene)), Qt::NoButton,
@@ -418,6 +418,30 @@ TEST_CASE("insert centres the fragment and selects it") {
     CHECK(f.canvas.document().atoms.size() == 6);
     CHECK(f.canvas.document().bonds[2].a == 3);
     CHECK(f.canvas.selection() == QSet<int>{3, 4, 5});
+}
+
+TEST_CASE("ring drag orients at 15° steps; Ctrl sizes a non-aromatic ring (#671)") {
+    Fixture f;
+    f.canvas.setTool(Canvas::Tool::Ring);
+    f.canvas.setRing(5, false);
+    f.drag({0, 0}, {40, 10});  // 14°: snaps to 15°
+    REQUIRE(f.doc().atoms.size() == 5);
+    CHECK(f.doc().bonds.size() == 5);
+    QPointF centre;
+    for (const auto& a : f.doc().atoms) centre += a.pos / 5;
+    const double angle = qRadiansToDegrees(std::atan2(centre.y(), centre.x()));
+    CHECK(std::abs(angle - 15) < 0.5);  // the ring hangs off the press point on the snapped direction
+
+    f.canvas.setDocumentSilently({});
+    f.canvas.setRing(5, false);
+    f.drag({0, 0}, {40, 0}, Qt::ControlModifier);  // Ctrl: grows with the drag
+    CHECK(f.doc().atoms.size() > 5);
+
+    f.canvas.setDocumentSilently({});
+    f.canvas.setRing(5, true);  // aromatic: never grows
+    f.drag({0, 0}, {40, 0}, Qt::ControlModifier);
+    CHECK(f.doc().atoms.size() == 5);
+    CHECK(f.doubles() == 2);
 }
 
 TEST_CASE("Find Substructure selects all matches, preserves edits and seeds from selection (#485)") {
@@ -1641,25 +1665,29 @@ TEST_CASE("drop an atom on another to merge; Shift for free angles and straight 
     CHECK(std::abs(std::atan2(v.y(), v.x()) * 180 / M_PI - 45) < 2);
 }
 
-TEST_CASE("drag the ring tool to size a ring (#127)") {
+TEST_CASE("Ctrl + drag the ring tool to size a ring (#127, #671)") {
     Fixture f;
     f.canvas.setTool(Canvas::Tool::Ring);
     f.canvas.setRing(6, false);
     // One atom per half bond length of drag, from 3.
     Document none;
     f.canvas.setDocumentSilently(none);
-    f.drag({0, 0}, {5.2 * kBondLength / 2, 0});  // 5 steps: an 8-membered ring
+    f.drag({0, 0}, {5.2 * kBondLength / 2, 0}, Qt::ControlModifier);  // 5 steps: an 8-membered ring
     CHECK(f.doc().atoms.size() == 8);
     CHECK(f.doc().bonds.size() == 8);
     f.canvas.setDocumentSilently(none);
     f.drag({0, 0}, {0.5, 0});  // barely moved: a click, so the chosen 6-ring
     CHECK(f.doc().atoms.size() == 6);
+    f.canvas.setDocumentSilently(none);
+    f.drag({0, 0}, {5.2 * kBondLength / 2, 0});  // a plain drag orients the chosen 6-ring
+    CHECK(f.doc().atoms.size() == 6);
+    CHECK(f.doc().bonds.size() == 6);
     // Dragging from a bond fuses the sized ring onto it.
     Document bond;
     bond.atoms = {{{0, 0}}, {{kBondLength, 0}}};
     bond.bonds = {{0, 1}};
     f.canvas.setDocumentSilently(bond);
-    f.drag({kBondLength / 2, 0}, {kBondLength / 2, 2.2 * kBondLength / 2});  // 2 steps: a 5-ring
+    f.drag({kBondLength / 2, 0}, {kBondLength / 2, 2.2 * kBondLength / 2}, Qt::ControlModifier);  // 2 steps: a 5-ring
     CHECK(f.doc().atoms.size() == 5);  // 2 shared + 3 new
     CHECK(f.doc().bonds.size() == 5);
 }
