@@ -3059,6 +3059,40 @@ TEST_CASE("ChemDraw shortcut parity: y, W, g, ?, Space, Enter, nudging (#157)") 
     CHECK(QLineF(f.doc().atoms[3].pos, chem::fromSmiles("CCO.CC")->atoms[3].pos).length() < 1e-9);  // the other molecule stays
 }
 
+TEST_CASE("Structure → Join Fragments bonds two selected atoms from different fragments (#683)") {
+    App app;
+    MainWindow w;
+    w.resize(900, 600);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    auto* stack = w.findChild<QUndoGroup*>()->activeStack();
+    QAction* join = nullptr;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->text() == "&Join Fragments") join = a;
+    REQUIRE(join);
+    CHECK(join->shortcut() == QKeySequence(Qt::CTRL | Qt::Key_J));
+
+    canvas->setDocumentSilently(*chem::fromSmiles("C.C"));
+    REQUIRE(canvas->document().bonds.empty());
+    canvas->setSelection({0, 1});
+    join->trigger();
+    REQUIRE(canvas->document().bonds.size() == 1);
+    CHECK(canvas->document().bonds[0].order == 1);
+    CHECK(canvas->document().bondBetween(0, 1) >= 0);
+    CHECK(stack->undoText() == "Join");
+
+    const int steps = stack->index();
+    canvas->setSelection({0, 1});
+    join->trigger();
+    CHECK(canvas->document().bonds.size() == 1);  // already joined
+    CHECK(stack->index() == steps);
+
+    canvas->setDocumentSilently(*chem::fromSmiles("CCCC"));
+    canvas->setSelection({0, 3});
+    join->trigger();
+    CHECK(canvas->document().bonds.size() == 3);  // one fragment: nothing to join
+}
+
 TEST_CASE("keyboard: G picks atoms one by one, > draws a curved arrow, no mouse needed (#541)") {
     Fixture f;
     f.canvas.setDocumentSilently(*chem::fromSmiles("CC=O"));
