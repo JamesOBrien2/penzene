@@ -2754,6 +2754,53 @@ TEST_CASE("Added templates retain their chemical identities and bond geometry (#
     if (!preview.isEmpty()) REQUIRE(w.grab().save(preview + "/after.png"));
 }
 
+TEST_CASE("crown ethers sit in the ring's standard drawing (#680)") {
+    App app;
+    for (const auto& [n, name] : {std::pair{4, "12-Crown-4"}, std::pair{5, "15-Crown-5"}, std::pair{6, "18-Crown-6"}}) {
+        INFO(name);
+        const auto& templates = builtinTemplates();
+        const auto t = std::find_if(templates.begin(), templates.end(), [&](const Template& t) { return t.name == name; });
+        REQUIRE(t != templates.end());
+        const Document d = templateDocument(*t);
+        if (auto dir = qgetenv("PENZENE_CROWN_PREVIEW"); !dir.isEmpty())
+            REQUIRE(renderImage(d, {600, Qt::white}).save(QString::fromUtf8(dir) + "/" + name + ".png"));
+        CHECK(chem::toInchiKey(d) == chem::toInchiKey(*chem::fromSmiles(t->smiles.toStdString())));
+        std::vector<int> o, c;
+        for (int i = 0; i < int(d.atoms.size()); ++i) (d.atoms[i].z == 8 ? o : c).push_back(i);
+        REQUIRE(o.size() == size_t(n));
+        REQUIRE(c.size() == size_t(2 * n));
+        QPointF centre;
+        for (int i : o) centre += d.atoms[i].pos;
+        centre /= n;
+        auto angle = [&](int i) { return std::atan2(d.atoms[i].pos.y() - centre.y(), d.atoms[i].pos.x() - centre.x()); };
+        auto radius = [&](int i) { return QLineF(centre, d.atoms[i].pos).length(); };
+        std::sort(o.begin(), o.end(), [&](int a, int b) { return angle(a) < angle(b); });
+        // The oxygens are evenly spaced on one circle.
+        for (int i : o) CHECK(std::abs(radius(i) - radius(o.front())) < 1e-6);
+        for (size_t k = 0; k < o.size(); ++k) {
+            double gap = angle(o[(k + 1) % o.size()]) - angle(o[k]);
+            if (gap < 0) gap += 2 * M_PI;
+            CHECK(std::abs(gap - 2 * M_PI / n) < 1e-6);
+        }
+        // Each CH2CH2 bridge is two carbons outside the oxygens' circle, one O and one C
+        // neighbour each, and its C-O bonds turn inwards to meet the oxygen.
+        for (int i : c) {
+            std::vector<int> co, cc;
+            for (const Bond& b : d.bonds) {
+                const int j = b.a == i ? b.b : b.b == i ? b.a : -1;
+                if (j < 0) continue;
+                (d.atoms[j].z == 8 ? co : cc).push_back(j);
+            }
+            CHECK(co.size() == 1);
+            REQUIRE(cc.size() == 1);
+            CHECK(radius(i) > radius(o.front()));
+            CHECK(QLineF(centre, (d.atoms[i].pos + d.atoms[cc[0]].pos) / 2).length() > radius(o.front()));
+            const QPointF inward = centre - d.atoms[i].pos, toO = d.atoms[co[0]].pos - d.atoms[i].pos;
+            CHECK(QPointF::dotProduct(inward, toO) > 0);
+        }
+    }
+}
+
 TEST_CASE("Haworth and Fischer projections read with PubChem's stereo (#108)") {
     App app;
     int checked = 0;

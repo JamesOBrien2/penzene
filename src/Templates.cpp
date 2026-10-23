@@ -85,6 +85,25 @@ Document newman(double backTurn, const QStringList& front, const QStringList& ba
     return d;
 }
 
+// Crown ethers (#680): n oxygens evenly round the ring, each pair joined by a CH2CH2
+// bridge that turns in at the oxygens. Every bond is one bond length, as in the standard
+// drawing; the small radius difference comes from the ring closing on itself.
+Document crown(int n) {
+    Sketch s;
+    const double step = 2 * M_PI / n, half = step / 2, turn = half / 3;
+    const double rC = 0.5 / std::sin(turn);  // the C-C chord is one bond length
+    const double away = half - turn;        // oxygens sit on the smaller circle inside the bridges
+    const double rO = rC * std::cos(away) - std::sqrt(1 - std::pow(rC * std::sin(away), 2));
+    std::vector<int> ring;
+    for (int k = 0; k < n; ++k) {
+        const double a = k * step;
+        ring.push_back(s.atom(rO * std::cos(a), rO * std::sin(a), "O"));
+        for (double b : {a + 2 * turn, a + 4 * turn}) ring.push_back(s.atom(rC * std::cos(b), rC * std::sin(b)));
+    }
+    for (size_t i = 0; i < ring.size(); ++i) s.bond(ring[i], ring[(i + 1) % ring.size()]);
+    return s.d;
+}
+
 // A TLC plate (#506): starting material, co-spot and product lanes, its parts one group so it moves
 // as one (Ctrl/Cmd+click a spot or the front to move it alone, and its Rf follows).
 Document tlcPlate() {
@@ -180,7 +199,7 @@ const std::vector<Template>& builtinTemplates() {
         {"Rings and scaffolds", "Cubane", "C12C3C4C1C5C2C3C45"},
         {"Rings and scaffolds", "Steroid core (gonane)", "C1CCC2CC[C@H]3[C@@H]4CCC[C@H]4CC[C@@H]3[C@H]2C1"},
         {"Rings and scaffolds", "Porphine", "C1=CC2=CC3=CC=C(N3)C=C4C=CC(=N4)C=C5C=CC(=N5)C=C1N2"},
-        {"Rings and scaffolds", "18-Crown-6", "C1COCCOCCOCCOCCOCCO1"},
+        {"Rings and scaffolds", "18-Crown-6", "C1COCCOCCOCCOCCOCCO1", [] { return crown(6); }},
         {"Rings and scaffolds", "β-Lactam (azetidin-2-one)", "C1CNC1=O"},
         {"Heterocycles", "Pyrazole", "C1=CNN=C1"},
         {"Heterocycles", "Oxazole", "C1=COC=N1"},
@@ -192,8 +211,8 @@ const std::vector<Template>& builtinTemplates() {
         {"Heterocycles", "Benzofuran", "C1=CC=C2C(=C1)C=CO2"},
         {"Heterocycles", "Benzothiazole", "C1=CC=C2C(=C1)N=CS2"},
         {"Heterocycles", "Pyrrolidine", "C1CCNC1"},
-        {"Macrocycles", "12-Crown-4", "C1COCCOCCOCCO1"},
-        {"Macrocycles", "15-Crown-5", "C1COCCOCCOCCOCCO1"},
+        {"Macrocycles", "12-Crown-4", "C1COCCOCCOCCO1", [] { return crown(4); }},
+        {"Macrocycles", "15-Crown-5", "C1COCCOCCOCCOCCO1", [] { return crown(5); }},
         {"Macrocycles", "Cyclen", "C1CNCCNCCNCCN1"},
         {"Macrocycles", "Cyclam", "C1CNCCNCCCNCCNC1"},
         {"Ligands", "2,2'-Bipyridine", "C1=CC=NC(=C1)C2=CC=CC=N2"},
