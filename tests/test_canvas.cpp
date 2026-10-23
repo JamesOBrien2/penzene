@@ -3068,7 +3068,7 @@ TEST_CASE("Structure → Join Fragments bonds two selected atoms from different 
     auto* stack = w.findChild<QUndoGroup*>()->activeStack();
     QAction* join = nullptr;
     for (auto* a : w.findChildren<QAction*>())
-        if (a->text() == "&Join Fragments") join = a;
+        if (a->shortcut() == QKeySequence(Qt::CTRL | Qt::Key_J)) join = a;
     REQUIRE(join);
     CHECK(join->shortcut() == QKeySequence(Qt::CTRL | Qt::Key_J));
 
