@@ -2508,6 +2508,15 @@ void MainWindow::buildTools() {
     auto styled = [this](int order, BondStereo style) {
         return [this, order, style] { canvas_->setTool(T::Bond), canvas_->setBondOrder(order, style); };
     };
+    add(bondIcon(4), tr("Quadruple bond: four parallel lines, as in metal-metal bonds — Q on a bond"), bond(4));
+    add(bondIcon(2, BondStereo::Dashed),
+        tr("Dashed double bond: one solid and one dashed line — D on a bond"), styled(2, BondStereo::Dashed));
+    add(bondIcon(2, BondStereo::Bold),
+        tr("Bold double bond: one thin and one bold line — B on a bond"), styled(2, BondStereo::Bold));
+    add(bondIcon(1, BondStereo::DoubleDashed),
+        tr("Double dashed bond: two dashed lines, a mechanism's electron pair (on a double bond, both "
+           "its lines dashed) — e on a bond"),
+        styled(1, BondStereo::DoubleDashed));
     add(bondIcon(1, BondStereo::Interaction),
         tr("Interaction bond (H-bond, contact, coordination): dotted, not a covalent bond — i on a bond. "
            "Drag between atoms, also of different molecules"),
@@ -3248,12 +3257,13 @@ moves off, so you can keep typing.</p>
 <tr><td><b>/</b> or <b>?</b></td><td>atom properties</td></tr>
 <tr><td><b>Delete</b></td><td>remove label (C stays), or delete a carbon</td></tr>
 <tr><th colspan="2" align="left">Bond</th></tr>
-<tr><td><b>1 2 3</b></td><td>single, double, triple; <b>2</b> on a double bond swaps the side of its second line</td></tr>
+<tr><td><b>1 2 3</b> / <b>Q</b></td><td>single, double, triple, quadruple; <b>2</b> on a double bond swaps the side of its second line</td></tr>
 <tr><td><b>w</b> / <b>h</b>, <b>W</b>, <b>H</b></td><td>wedged / hashed (press again to flip)</td></tr>
 <tr><td><b>a z</b></td><td>fuse benzene / cyclopentadiene</td></tr>
 <tr><td><b>v 4–8</b></td><td>fuse ring of that size (v = 3)</td></tr>
 <tr><td><b>9</b> / <b>0</b></td><td>fuse chair cyclohexane (two orientations)</td></tr>
 <tr><td><b>d b y</b></td><td>dashed, bold, wavy</td></tr>
+<tr><td><b>e</b></td><td>double dashed: two dashed lines, a mechanism's electron pair (keeps a double bond's order)</td></tr>
 <tr><td><b>D</b> / <b>B</b></td><td>dashed double / bold double</td></tr>
 <tr><td><b>i</b></td><td>interaction: H-bond or contact, dotted, not a bond</td></tr>
 <tr><td><b>k</b></td><td>dative bond, an arrow to the acceptor (press again to flip)</td></tr>

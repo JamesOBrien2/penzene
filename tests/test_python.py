@@ -95,6 +95,12 @@ assert ed.atoms[4].symbol == "C" and ed.formula == "C3H6O2"
 double = next(i for i, b in enumerate(ed.bonds) if b.order == 2)
 ed.set_bond_order(double, 1)
 assert ed.bonds[double].order == 1 and ed.formula == "C3H8O2"
+styled = pz.from_smiles("C=C")
+styled.set_bond_style(0, "double-dashed")  # keeps the double bond's order, both lines dashed
+assert styled.bonds[0].order == 2 and "stroke-dasharray" in styled.to_svg()
+quad = pz.from_smiles("C=C")
+quad.set_bond_order(0, 4)
+assert quad.bonds[0].order == 4
 gone = pz.from_smiles("CC(=O)OC")
 gone.remove_atoms([3, 1, 3])  # indices from before the call; duplicates are fine
 assert [a.symbol for a in gone.atoms] == ["C", "O", "C"] and len(gone.bonds) == 0

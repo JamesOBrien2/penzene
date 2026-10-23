@@ -232,7 +232,7 @@ std::optional<Document> Document::fromJson(const QByteArray& data) {
         Bond b{o["a"].toInt(-1), o["b"].toInt(-1), o["order"].toInt(1)};
         // Untrusted file: reject dangling, self or duplicate bonds rather than crash later.
         if (b.a < 0 || b.a >= n || b.b < 0 || b.b >= n || b.a == b.b || doc.bondBetween(b.a, b.b) >= 0) return std::nullopt;
-        b.order = std::clamp(b.order, 1, 3);
+        b.order = std::clamp(b.order, 1, 4);
         auto index = [](const auto& names, const QString& s) {
             auto it = std::find(std::begin(names), std::end(names), s);
             return it == std::end(names) ? 0 : int(it - std::begin(names));  // unknown: default

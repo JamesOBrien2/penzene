@@ -7,6 +7,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 ## Unreleased
 
 - Typing an element or label on a charged atom now replaces it with the neutral atom, e.g. `O` on O⁻ gives O (#669).
+- The bond palette and Style menu offer double dashed (`e`, two dashed lines for a mechanism's electron pair), dashed double (`D`) and bold double (`B`); `Q` makes a quadruple bond, also `order=4` in Python (#668).
 
 ## 2.0.0 (2026-10-22)
 

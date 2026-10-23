@@ -111,7 +111,7 @@ NB_MODULE(_penzene, m) {
     nb::class_<Bond>(m, "Bond", "A bond of a Document (read-only). (since 0.4)")
         .def_ro("a", &Bond::a, "Index of the first atom (a wedge starts here) (since 0.4)")
         .def_ro("b", &Bond::b, "Index of the second atom (since 0.4)")
-        .def_ro("order", &Bond::order, "1, 2 or 3 (since 0.4)")
+        .def_ro("order", &Bond::order, "1, 2, 3 or 4 (since 0.4)")
         .def_prop_ro("style", [](const Bond& b) { return std::string(kBondStereoNames[int(b.stereo)]); },
                      "How it's drawn, as set_bond_style takes it: 'none', 'wedge', 'partial'… (since 2.0)")
         .def("__repr__", [](const Bond& b) {
@@ -153,10 +153,10 @@ NB_MODULE(_penzene, m) {
             [](Document& d, int a, int b, int order) {
                 const int n = int(d.atoms.size());
                 if (a < 0 || b < 0 || a >= n || b >= n || a == b) throw nb::index_error("no such atoms");
-                if (order < 1 || order > 3) throw nb::value_error("order must be 1, 2 or 3");
+                if (order < 1 || order > 4) throw nb::value_error("order must be 1, 2, 3 or 4");
                 edit::link(d, a, b, order);
             },
-            "a"_a, "b"_a, "order"_a = 1, "Bond atoms a and b (order 1, 2 or 3). (since 0.4)")
+            "a"_a, "b"_a, "order"_a = 1, "Bond atoms a and b (order 1, 2, 3 or 4). (since 0.4)")
         .def(
             "set_label",
             [](Document& d, int atom, const std::string& label, bool generic) {
@@ -174,12 +174,12 @@ NB_MODULE(_penzene, m) {
             "set_bond_order",
             [](Document& d, int bond, int order) {
                 if (bond < 0 || bond >= int(d.bonds.size())) throw nb::index_error("no such bond");
-                if (order < 1 || order > 3) throw nb::value_error("order must be 1, 2 or 3");
+                if (order < 1 || order > 4) throw nb::value_error("order must be 1, 2, 3 or 4");
                 Bond& b = d.bonds[bond];
                 b.order = order;
                 if (order != 1) b.stereo = BondStereo::None;  // a wedge or hash is a single bond's
             },
-            "bond"_a, "order"_a, "Make a bond single, double or triple (a wedge or hash goes with a single bond). (since 2.0)")
+            "bond"_a, "order"_a, "Make a bond single, double, triple or quadruple (a wedge or hash goes with a single bond). (since 2.0)")
         .def(
             "set_charge", [](Document& d, int atom, int charge) { inRange(charge, -8, 8, "charge"), atomAt(d, atom).charge = charge; },
             "atom"_a, "charge"_a, "Set an atom's formal charge, -8 to 8. (since 2.0)")
@@ -220,7 +220,8 @@ NB_MODULE(_penzene, m) {
             },
             "bond"_a, "style"_a,
             "Draw a bond as 'none' (plain), 'wedge', 'hash', 'bold', 'dashed', 'wavy', 'interaction' "
-            "(dotted, not chemistry), 'partial' (forming or breaking in a transition state) or 'dative'. "
+            "(dotted, not chemistry), 'partial' (forming or breaking in a transition state), 'dative' or "
+            "'double-dashed' (two dashed lines). "
             "A wedge, hash or wavy bond must be single. (since 2.0)")
         .def(
             "add_bracket",

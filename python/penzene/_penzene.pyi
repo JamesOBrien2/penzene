@@ -61,7 +61,7 @@ class Bond:
 
     @property
     def order(self) -> int:
-        """1, 2 or 3 (since 0.4)"""
+        """1, 2, 3 or 4 (since 0.4)"""
 
     @property
     def style(self) -> str:
@@ -104,7 +104,7 @@ class Document:
         """
 
     def add_bond(self, a: int, b: int, order: int = 1) -> None:
-        """Bond atoms a and b (order 1, 2 or 3). (since 0.4)"""
+        """Bond atoms a and b (order 1, 2, 3 or 4). (since 0.4)"""
 
     def set_label(self, atom: int, label: str, generic: bool = False) -> None:
         """
@@ -113,7 +113,7 @@ class Document:
 
     def set_bond_order(self, bond: int, order: int) -> None:
         """
-        Make a bond single, double or triple (a wedge or hash goes with a single bond). (since 2.0)
+        Make a bond single, double, triple or quadruple (a wedge or hash goes with a single bond). (since 2.0)
         """
 
     def set_charge(self, atom: int, charge: int) -> None:
@@ -136,7 +136,7 @@ class Document:
 
     def set_bond_style(self, bond: int, style: str) -> None:
         """
-        Draw a bond as 'none' (plain), 'wedge', 'hash', 'bold', 'dashed', 'wavy', 'interaction' (dotted, not chemistry), 'partial' (forming or breaking in a transition state) or 'dative'. A wedge, hash or wavy bond must be single. (since 2.0)
+        Draw a bond as 'none' (plain), 'wedge', 'hash', 'bold', 'dashed', 'wavy', 'interaction' (dotted, not chemistry), 'partial' (forming or breaking in a transition state), 'dative' or 'double-dashed' (two dashed lines). A wedge, hash or wavy bond must be single. (since 2.0)
         """
 
     def add_bracket(self, atoms: Sequence[int], round: bool = False, label: str = '', superscript: str = '') -> int:

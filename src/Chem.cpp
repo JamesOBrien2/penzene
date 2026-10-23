@@ -434,6 +434,7 @@ static std::unique_ptr<RWMol> drawingMol(const Document& in, bool expand = true,
         auto type = b.stereo == BondStereo::Dative ? RDKit::Bond::DATIVE
                     : order == 2                   ? RDKit::Bond::DOUBLE
                     : order == 3                   ? RDKit::Bond::TRIPLE
+                    : order == 4                   ? RDKit::Bond::QUADRUPLE
                                                    : RDKit::Bond::SINGLE;
         mol->addBond(b.a, b.b, type);
         if (b.stereo == BondStereo::Wedge || b.stereo == BondStereo::Hash || b.stereo == BondStereo::Wavy) {
@@ -918,9 +919,10 @@ static Document fromRDKit(RWMol& mol, double scale = 0) {
         if (!a.standsFor.isEmpty() && a.label.isEmpty()) a.label = freeVariableName(doc);
     for (const auto* b : mol.bonds()) {
         Bond out{int(b->getBeginAtomIdx()), int(b->getEndAtomIdx())};
-        out.order = b->getBondType() == RDKit::Bond::DOUBLE   ? 2
-                    : b->getBondType() == RDKit::Bond::TRIPLE ? 3
-                                                              : 1;
+        out.order = b->getBondType() == RDKit::Bond::DOUBLE    ? 2
+                    : b->getBondType() == RDKit::Bond::TRIPLE  ? 3
+                    : b->getBondType() == RDKit::Bond::QUADRUPLE ? 4
+                                                               : 1;
         out.stereo = b->getBondDir() == RDKit::Bond::BEGINWEDGE  ? BondStereo::Wedge
                      : b->getBondDir() == RDKit::Bond::BEGINDASH ? BondStereo::Hash
                      : b->getBondDir() == RDKit::Bond::UNKNOWN   ? BondStereo::Wavy
@@ -1268,9 +1270,19 @@ static std::vector<LabelNode> chemDrawGraphics(const QByteArray& xml, Document& 
             ++bondCount[from], ++bondCount[to];
             if (const QColor c = ink(at); c.isValid() && !inLabel && nodePos.contains(from) && nodePos.contains(to))
                 inks.bonds.push_back({nodePos[from], nodePos[to], c});
-            if (const auto order = at.value("Order"); (order == u"dative" || order == u"hydrogen") && !inLabel &&
-                                                      nodePos.contains(from) && nodePos.contains(to))
-                inks.styles.push_back({nodePos[from], nodePos[to], order == u"dative" ? BondStereo::Dative : BondStereo::Interaction});
+            const auto order = at.value("Order");
+            const auto display = at.value("Display"), display2 = at.value("Display2");
+            // ChemDraw marks a dashed line in Display and the second line of a double bond in
+            // Display2. Both dashed is the two-line style; one dashed is the ordinary dashed
+            // double (which older Penzene files wrote in Display alone, #668).
+            const bool dashed = display == u"Dash", dashed2 = display2 == u"Dash";
+            if ((order == u"dative" || order == u"hydrogen" || dashed || dashed2) && !inLabel &&
+                nodePos.contains(from) && nodePos.contains(to))
+                inks.styles.push_back({nodePos[from], nodePos[to],
+                                       order == u"dative"    ? BondStereo::Dative
+                                       : order == u"hydrogen" ? BondStereo::Interaction
+                                       : dashed && dashed2    ? BondStereo::DoubleDashed
+                                                              : BondStereo::Dashed});
         } else if (tag == "n") {
             if (at.hasAttribute("Z")) moleculeZ = std::min(moleculeZ, at.value("Z").toDouble());
             const int id = at.value("id").toInt();
@@ -1582,7 +1594,10 @@ std::optional<Document> fromChemDraw(const QByteArray& data) {
             int k = doc.bondBetween(a, b);
             if (k < 0) k = int(doc.bonds.size()), doc.bonds.push_back({a, b});
             const bool line = stereo == BondStereo::Dative && isMetal(doc.atoms[b].z);
-            doc.bonds[k].a = a, doc.bonds[k].b = b, doc.bonds[k].order = 1;
+            doc.bonds[k].a = a, doc.bonds[k].b = b;
+            // Dative and interaction lines are not chemical bonds; a dashed or double-dashed
+            // style keeps the order RDKit read, so a dashed double stays double (#668).
+            if (stereo == BondStereo::Dative || stereo == BondStereo::Interaction) doc.bonds[k].order = 1;
             doc.bonds[k].stereo = line ? BondStereo::None : stereo;
         }
         for (const auto& [p, ends] : inks.variable)  // RDKit reads the point as a carbon
@@ -2222,7 +2237,7 @@ QByteArray toCdxml(const Document& doc) {
             w.writeEndElement();
             w.writeEndElement();
         }
-        static const char* display[] = {nullptr, "WedgeBegin", "WedgedHashBegin", "Bold", "Dash", "Wavy", nullptr, "Dash", "Dative"};
+        static const char* display[] = {nullptr, "WedgeBegin", "WedgedHashBegin", "Bold", nullptr, "Wavy", nullptr, "Dash", "Dative", nullptr};
         static const char* side[] = {nullptr, "Left", "Center", "Right"};
         // A plain line that coordinates a ligand to a metal goes out as the dative bond it is, donor first,
         // so a reader doesn't take a hydrogen from NH3 for it.
@@ -2240,7 +2255,13 @@ QByteArray toCdxml(const Document& doc) {
             else if (dative) w.writeAttribute("Order", "dative");
             else if (b.stereo == BondStereo::Partial) w.writeAttribute("Order", b.order == 2 ? "1.5" : "0.5");
             else if (b.order > 1) w.writeAttribute("Order", QString::number(b.order));
-            if (display[int(b.stereo)]) w.writeAttribute("Display", display[int(b.stereo)]);
+            // Dashed singles mark Display; a dashed second line marks Display2. Two dashed
+            // lines mark both, which is how the import tells them apart (#668).
+            if (b.stereo == BondStereo::Dashed)
+                w.writeAttribute(b.order > 1 ? "Display2" : "Display", "Dash");
+            else if (b.stereo == BondStereo::DoubleDashed)
+                w.writeAttribute("Display", "Dash"), w.writeAttribute("Display2", "Dash");
+            else if (display[int(b.stereo)]) w.writeAttribute("Display", display[int(b.stereo)]);
             if (side[int(b.position)]) w.writeAttribute("DoublePosition", side[int(b.position)]);
             paint(b.color);
             w.writeEndElement();
@@ -2793,7 +2814,7 @@ Document clean2D(const Document& doc, const std::vector<int>& only) {
             if (int o = doc.bondBetween(b.a, b.b); o >= 0) {
                 const Bond& was = doc.bonds[o];
                 const bool styled = was.stereo == BondStereo::Bold || was.stereo == BondStereo::Dashed ||
-                                    was.stereo == BondStereo::Partial;
+                                    was.stereo == BondStereo::Partial || was.stereo == BondStereo::DoubleDashed;
                 if (styled && b.stereo == BondStereo::None) b.stereo = was.stereo;
                 if (was.stereo == BondStereo::Dative) b.a = was.a, b.b = was.b, b.stereo = was.stereo;
                 if (b.order == 2 && was.order == 2) b.position = was.position;
@@ -3137,7 +3158,7 @@ std::string hoseCode(const RDKit::ROMol& mol, int root, int spheres, const std::
         const auto* bond = mol.getBondBetweenAtoms(a, b);
         if (bond->getIsAromatic()) return 4;
         const auto t = bond->getBondType();
-        return t == RDKit::Bond::DOUBLE ? 2 : t == RDKit::Bond::TRIPLE ? 3 : 1;
+        return t == RDKit::Bond::DOUBLE ? 2 : (t == RDKit::Bond::TRIPLE || t == RDKit::Bond::QUADRUPLE) ? 3 : 1;
     };
     std::vector<HoseNode> nodes;
     auto atomOf = [&](int parent) { return parent < 0 ? root : nodes[parent].atom; };

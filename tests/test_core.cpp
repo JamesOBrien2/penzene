@@ -1303,6 +1303,61 @@ TEST_CASE("a scheme wrapped onto two rows keeps the link between them (#388)") {
           canon("CCO") + ">>" + canon("CC=O") + "\n" + canon("CC=O") + ">>" + canon("CC(=O)O"));  // the aldehyde is both
 }
 
+TEST_CASE("double dashed bonds keep their order through ChemDraw round trips (#668)") {
+    Document single;
+    single.atoms = {{{0, 0}}, {{kBondLength, 0}}};
+    single.bonds = {{0, 1, 1, BondStereo::DoubleDashed}};
+    CHECK(chem::toSmiles(single) == "CC");
+    auto json = Document::fromJson(single.toJson());
+    REQUIRE(json);
+    CHECK(json->bonds[0].stereo == BondStereo::DoubleDashed);
+    CHECK(json->bonds[0].order == 1);
+    auto back = chem::fromChemDraw(chem::toCdxml(single));
+    REQUIRE(back);
+    REQUIRE(back->bonds.size() == 1);
+    CHECK(back->bonds[0].stereo == BondStereo::DoubleDashed);
+    CHECK(back->bonds[0].order == 1);
+    CHECK(chem::toSmiles(*back) == "CC");
+    CHECK(renderSvg(single).contains("stroke-dasharray"));
+
+    Document doubleBond;
+    doubleBond.atoms = {{{0, 0}}, {{kBondLength, 0}}};
+    doubleBond.bonds = {{0, 1, 2, BondStereo::DoubleDashed}};
+    CHECK(chem::toSmiles(doubleBond) == "C=C");
+    CHECK(renderSvg(doubleBond).contains("stroke-dasharray"));
+    back = chem::fromChemDraw(chem::toCdxml(doubleBond));
+    REQUIRE(back);
+    REQUIRE(back->bonds.size() == 1);
+    CHECK(back->bonds[0].stereo == BondStereo::DoubleDashed);
+    CHECK(back->bonds[0].order == 2);
+    CHECK(chem::toSmiles(*back) == "C=C");
+
+    Document dashed = doubleBond;
+    dashed.bonds[0].stereo = BondStereo::Dashed;  // the existing dashed double is not the new style
+    back = chem::fromChemDraw(chem::toCdxml(dashed));
+    REQUIRE(back);
+    REQUIRE(back->bonds.size() == 1);
+    CHECK(back->bonds[0].stereo == BondStereo::Dashed);
+    CHECK(back->bonds[0].order == 2);
+    CHECK(chem::toSmiles(*back) == "C=C");
+}
+
+TEST_CASE("a quadruple bond is saved, drawn and survives ChemDraw") {
+    Document d;
+    d.atoms = {{{0, 0}}, {{kBondLength, 0}}};
+    d.bonds = {{0, 1, 4}};
+    CHECK(chem::toSmiles(d) == "C$C");
+    auto json = Document::fromJson(d.toJson());
+    REQUIRE(json);
+    CHECK(json->bonds[0].order == 4);
+    auto back = chem::fromChemDraw(chem::toCdxml(d));
+    REQUIRE(back);
+    REQUIRE(back->bonds.size() == 1);
+    CHECK(back->bonds[0].order == 4);
+    CHECK(chem::toSmiles(*back) == "C$C");
+    CHECK(renderSvg(d).count("<polyline") >= 4);
+}
+
 TEST_CASE("CDXML export reads back: molecules, wedges, arrows and text (#29)") {
     Document doc = *chem::fromSmiles("C[C@H](N)C(=O)O");  // L-alanine, wedged
     const std::string smiles = chem::toSmiles(doc);

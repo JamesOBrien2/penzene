@@ -43,9 +43,12 @@ struct StyleSettings {
 // Dative is a coordinate bond drawn as an arrow from its donor (a) to its acceptor (b):
 // it takes none of the donor's hydrogens. A plain line to a metal is read as one too
 // where the donor has no bond to spare (PPh3, NMe3, pyridine; see chem::toRDKit).
-enum class BondStereo { None, Wedge, Hash, Bold, Dashed, Wavy, Interaction, Partial, Dative };
+// DoubleDashed draws the bond's lines dashed on both sides (one line when single, two when
+// double): a mechanism's electron pair. It keeps the bond's order, so a double bond stays
+// chemically double and a single one stays single.
+enum class BondStereo { None, Wedge, Hash, Bold, Dashed, Wavy, Interaction, Partial, Dative, DoubleDashed };
 // Their names in .penz files and Python's set_bond_style, in enum order.
-inline constexpr const char* kBondStereoNames[] = {"none", "wedge", "hash", "bold", "dashed", "wavy", "interaction", "partial", "dative"};
+inline constexpr const char* kBondStereoNames[] = {"none", "wedge", "hash", "bold", "dashed", "wavy", "interaction", "partial", "dative", "double-dashed"};
 enum class BondPosition { Auto, Left, Centre, Right };  // double bond's second line, seen from a to b
 // Enhanced stereo (MDL/ChemDraw): a stereocentre as drawn (abs), or one of a group
 // whose centres are all as drawn or all inverted, as a mixture (&n) or unknown which (orn).
@@ -76,7 +79,7 @@ struct Atom {
 
 struct Bond {
     int a = 0, b = 0;  // atom indices; stereo points from a to b
-    int order = 1;     // 1..3 as drawn; see chemicalOrder()
+    int order = 1;     // 1..4 as drawn; see chemicalOrder()
     BondStereo stereo = BondStereo::None;
     BondPosition position = BondPosition::Auto;
     QColor color;

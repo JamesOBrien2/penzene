@@ -28,7 +28,7 @@ inline std::vector<int> neighbors(const Document& doc, const BondsAt& at, int at
 inline bool isSp(const Document& doc, int atom, const BondsAt& at) {
     int doubles = 0;
     for (int b : at[atom]) {
-        if (doc.bonds[b].order == 3) return true;
+        if (doc.bonds[b].order >= 3) return true;
         doubles += doc.bonds[b].order == 2;
     }
     return doubles >= 2;

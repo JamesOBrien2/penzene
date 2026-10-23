@@ -49,12 +49,13 @@ Generated from Help → Keyboard Shortcuts in the app. Point at an atom or bond 
 
 | Keys | |
 |---|---|
-| `1 2 3` | single, double, triple; **2** on a double bond swaps the side of its second line |
+| `1 2 3` / `Q` | single, double, triple, quadruple; **2** on a double bond swaps the side of its second line |
 | `w` / `h`, `W`, `H` | wedged / hashed (press again to flip) |
 | `a z` | fuse benzene / cyclopentadiene |
 | `v 4–8` | fuse ring of that size (v = 3) |
 | `9` / `0` | fuse chair cyclohexane (two orientations) |
 | `d b y` | dashed, bold, wavy |
+| `e` | double dashed: two dashed lines, a mechanism's electron pair (keeps a double bond's order) |
 | `D` / `B` | dashed double / bold double |
 | `i` | interaction: H-bond or contact, dotted, not a bond |
 | `k` | dative bond, an arrow to the acceptor (press again to flip) |
