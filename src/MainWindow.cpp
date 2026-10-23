@@ -3268,7 +3268,7 @@ moves off, so you can keep typing.</p>
 <tr><td><b>Alt+↑</b> / <b>Alt+↓</b></td><td>bend the selected curved arrow more / less (Arrange → Flip Curved Arrow turns it over)</td></tr>
 <tr><td><b>Esc</b></td><td>clear hotspot and selection</td></tr>
 <tr><th colspan="2" align="left">Atom: sprout</th></tr>
-<tr><td><b>1</b> / <b>0</b></td><td>single bond, linear / cyclic mode (0 is longer on 2°/3° carbons)</td></tr>
+<tr><td><b>1</b> / <b>0</b></td><td>extend the chain / close it into a ring (0 is longer on 2°/3° carbons)</td></tr>
 <tr><td><b>2</b></td><td>acetyl (1°), C=O (2°), CH<sub>2</sub>-acetyl (3°/aromatic)</td></tr>
 <tr><td><b>3</b> or <b>a</b></td><td>phenyl</td></tr>
 <tr><td><b>4</b> / <b>5</b></td><td>wedged / hashed methyl</td></tr>

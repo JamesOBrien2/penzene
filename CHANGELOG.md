@@ -11,6 +11,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - What's New shows the major changes as icon tiles, keeps the rest in a scroll and fits on screen (#691).
 - Colour and ring fill menus draw their swatches again, instead of empty boxes (#674).
 - Deleting the atom or bond under the cursor returns it to the previous atom, so drawing carries on without moving the mouse (#675).
+- The `1` hotkey keeps a chain straight instead of kinking, and `0` closes it into a regular ring (#676).
 
 ## 2.0.0 (2026-10-22)
 

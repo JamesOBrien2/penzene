@@ -12,8 +12,8 @@ beside those already open, and Penzene reopens them where you left them; **View 
 picks the tool you last used from it. Hover over a tool to see its key.
 
 Point at an atom or bond and it becomes the **hotspot**, marked in green. It stays put when the mouse
-moves off, so you can keep typing. Keys act on the hotspot: `1` sprouts a bond, `2`
-a carbonyl, `a` a phenyl, `O` an OMe, and `+`/`−` change the charge. The arrow keys walk the
+moves off, so you can keep typing. Keys act on the hotspot: `1` extends a chain, `0` closes it into a
+ring, `2` a carbonyl, `a` a phenyl, `O` an OMe, and `+`/`−` change the charge. The arrow keys walk the
 molecule atom → bond → atom. Every key is listed in [Keyboard shortcuts](keys.md) and under
 **Help → Keyboard Shortcuts** (F1).
 
