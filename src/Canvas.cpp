@@ -2126,20 +2126,42 @@ void Canvas::keyPressEvent(QKeyEvent* e) {
         if (!selectedAtoms_.isEmpty() || !selectedArrows_.isEmpty() || !selectedTexts_.isEmpty())
             return deleteSelection();
         Document next = doc_;
+        int back = -1;  // the atom the cursor returns to, in the old numbering
+        std::vector<int> dropped;
         if (hoverAtom_ >= 0) {
             Atom& a = next.atoms[hoverAtom_];
             // ChemDraw: removes a label first; a plain carbon (or a bare attachment point) is deleted.
             const bool bare = a.z == 0 && a.label.isEmpty();
             if (!bare && (a.z != 6 || a.charge || !a.label.isEmpty() || a.isotope))
                 a.z = 6, a.charge = 0, a.label.clear(), a.isotope = 0, a.hydrogens = -1;
-            else next.removeAtom(hoverAtom_), hoverAtom_ = -1;
+            else {
+                const auto nbs = next.neighbors(hoverAtom_);
+                dropped.push_back(hoverAtom_);
+                for (int n : nbs)
+                    if (next.neighbors(n).size() == 1) dropped.push_back(n);
+                for (int n : nbs)
+                    if (std::find(dropped.begin(), dropped.end(), n) == dropped.end()) { back = n; break; }
+                next.removeAtom(hoverAtom_);
+            }
         } else if (hoverBond_ >= 0) {
+            const Bond b = next.bonds[hoverBond_];
+            const int na = int(next.neighbors(b.a).size()), nb = int(next.neighbors(b.b).size());
+            if (na == 1) dropped.push_back(b.a);
+            if (nb == 1) dropped.push_back(b.b);
+            if (na == 1 && nb > 1) back = b.b;
+            else if (nb == 1 && na > 1) back = b.a;
+            else if (na > 1 && nb > 1)
+                back = len(next.atoms[b.a].pos - curPos_) <= len(next.atoms[b.b].pos - curPos_) ? b.a : b.b;
             next.removeBond(hoverBond_);
-            hoverBond_ = -1;
         } else {
             return;
         }
-        return commit(next, tr("Delete"));
+        commit(next, tr("Delete"));
+        if (back >= 0) {  // carry on at the previous atom without moving the mouse
+            const int shift = int(std::count_if(dropped.begin(), dropped.end(), [back](int d) { return d < back; }));
+            setHotspot(back - shift);
+        }
+        return;
     }
     if (e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier)) return QGraphicsView::keyPressEvent(e);
 
