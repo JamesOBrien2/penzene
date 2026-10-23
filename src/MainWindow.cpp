@@ -1535,7 +1535,7 @@ void MainWindow::showPreferences() {
     marginBox->setSuffix(tr(" pt"));
     marginBox->setValue(int(exportOptions().margin));
     form->addRow(tr("Export and copy scale:"), scaleBox);
-    form->addRow(tr("Margin around exports:"), marginBox);
+    form->addRow(tr("Margin around exports and copies:"), marginBox);
     auto* checkBefore = new QCheckBox(tr("Check structures before export and copy"));
     checkBefore->setObjectName("checkBeforeExport");
     checkBefore->setChecked(QSettings().value("checkBeforeExport", false).toBool());

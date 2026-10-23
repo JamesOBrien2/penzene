@@ -1200,10 +1200,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Margin around exports:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Check structures before export and copy</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1697,6 +1693,10 @@ moves off, so you can keep typing.&lt;/p&gt;
     </message>
     <message>
         <source>Colour: click the swatch to pick a colour, then click atoms, bonds, arrows or text to paint them (again to clear)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Margin around exports and copies:</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

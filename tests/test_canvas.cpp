@@ -1343,7 +1343,7 @@ TEST_CASE("exports come out at the drawing style's own bond length (#92)") {
     const QImage rsc = renderImage(*d, {72});
     CHECK(std::abs(exportScale(*d) - 12.2 / 14.4) < 1e-12);
     // Same drawing, same model bounds (RSC's labels are smaller, so compare against its own bounds).
-    const QRectF model = documentBounds(*d);
+    const QRectF model = outputBounds(*d);
     CHECK(std::abs(rsc.width() - model.width() * 12.2 / 14.4) <= 1);
     CHECK(rsc.width() < acs.width());
 }
@@ -2454,6 +2454,44 @@ TEST_CASE("copied PNG keeps the embedded drawing and pastes back (#399)") {
     }
 }
 
+TEST_CASE("copied pictures measure what is painted, not the label room (#681)") {
+    App app;
+    QSettings settings;
+    settings.setValue("exportMargin", 0);
+    settings.setValue("exportBackground", "clear");
+    settings.setValue("checkBeforeExport", false);
+    MainWindow w;
+    auto* canvas = w.findChild<Canvas*>();
+    canvas->setDocumentSilently(*chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O"));
+    canvas->selectAll();
+    auto copied = [&] {
+        for (auto* a : w.findChildren<QAction*>())
+            if (a->shortcut() == QKeySequence::Copy) a->trigger();
+        return QImage::fromData(QApplication::clipboard()->mimeData()->data("image/png")).convertToFormat(QImage::Format_ARGB32);
+    };
+    const QImage tight = copied();
+    REQUIRE(!tight.isNull());
+    const double dpi = tight.dotsPerMeterX() * 0.0254;
+    int l = tight.width(), t = tight.height(), r = -1, b = -1;
+    for (int y = 0; y < tight.height(); ++y)
+        for (int x = 0; x < tight.width(); ++x)
+            if (qAlpha(tight.pixel(x, y))) l = std::min(l, x), r = std::max(r, x), t = std::min(t, y), b = std::max(b, y);
+    REQUIRE(r >= 0);
+    const int slack = int(std::ceil(2 * dpi / 72));  // the painted box is whole model units, padded by one
+    CHECK(l <= slack);
+    CHECK(t <= slack);
+    CHECK(tight.width() - 1 - r <= slack);
+    CHECK(tight.height() - 1 - b <= slack);
+    settings.setValue("exportMargin", 10);
+    const QImage padded = copied();
+    const int add = int(20 * dpi / 72);
+    CHECK(std::abs(padded.width() - tight.width() - add) <= 1);  // the setting still adds its margin
+    CHECK(std::abs(padded.height() - tight.height() - add) <= 1);
+    settings.remove("exportMargin");
+    settings.remove("exportBackground");
+    settings.remove("checkBeforeExport");
+}
+
 TEST_CASE("paste from ChemDraw: CDX/CDXML clipboard formats (#104)") {
     App app;
     const QString path = QString(PENZENE_TEST_DATA) + "/scheme.cdxml";
@@ -2949,7 +2987,7 @@ TEST_CASE("a triple bond is gapped where a bond in front crosses it (#429)") {
     cross.bonds[0].order = 3;
     auto inked = [&](QPointF at) {
         const QImage img = renderImage(cross, {300, Qt::white});
-        const QPoint px = ((at - documentBounds(cross).topLeft()) * exportScale(cross) * 300 / 72).toPoint();
+        const QPoint px = ((at - outputBounds(cross).topLeft()) * exportScale(cross) * 300 / 72).toPoint();
         return img.pixelColor(px).lightness() < 160;
     };
     CHECK_FALSE(inked({1.6, 0}));  // beside the crossing, on the middle line
@@ -2973,7 +3011,7 @@ TEST_CASE("attachment points, π-ligands, bring to front and atom properties (#6
     cross.bonds = {{0, 1}, {2, 3}};
     auto inked = [](const Document& doc, QPointF at) {
         const QImage img = renderImage(doc, {300, Qt::white});
-        const QRectF r = documentBounds(doc);
+        const QRectF r = outputBounds(doc);
         const QPoint px = ((at - r.topLeft()) * exportScale(doc) * 300 / 72).toPoint();
         return img.pixelColor(px).lightness() < 160;
     };
