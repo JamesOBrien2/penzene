@@ -855,11 +855,12 @@ void MainWindow::buildWelcome() {
         row->addWidget(b);
     }
     layout->addLayout(row);
-    auto* links = new QLabel(QString("<a href='keys'>%1</a> &nbsp;·&nbsp; <a href='%2'>%3</a>")
-                                 .arg(tr("Keyboard shortcuts"), kDocsUrl, tr("Documentation")));
+    auto* links = new QLabel(QString("<a href='keys'>%1</a> &nbsp;·&nbsp; <a href='templates'>%2</a> &nbsp;·&nbsp; <a href='%3'>%4</a>")
+                                 .arg(tr("Keyboard shortcuts"), tr("Templates"), kDocsUrl, tr("Documentation")));
     links->setObjectName("welcomeLinks");
     connect(links, &QLabel::linkActivated, this, [this](const QString& link) {
         if (link == "keys") shortcutsAction_->trigger();
+        else if (link == "templates") templateDock_->show();
         else QDesktopServices::openUrl(QUrl(link));
     });
     layout->addWidget(links);
@@ -2699,6 +2700,32 @@ void MainWindow::buildTools() {
             add(docIcon(orbitalDoc(kind, look)), name + ", " + lookName + orbital,
                 [this, kind, look] { canvas_->setTool(T::Arrow), canvas_->setArrow(kind, false, false, look); });
     keys["t"] = add(docIcon(textDoc("T")), tr("Text (click to add or edit; H2O is set as H₂O) — t"), tool(T::Text), true);
+    // The template library is a panel, not a tool: below the tools with a button of its own,
+    // so it's seen without opening the View menu (#679).
+    auto* library = new QAction(tr("Templates"), this);
+    library->setCheckable(true);
+    library->setToolTip(tr("Templates: ready-made structures to click into place — opens the library (Ctrl+Shift+T)"));
+    const IconMaker libraryIcon = paintedIcon([](QPainter& p, QColor ink) {
+        p.setPen(QPen(ink, 1.2));
+        p.drawRoundedRect(QRectF(4, 4.5, 7, 7), 1.5, 1.5);
+        p.drawRoundedRect(QRectF(13, 4.5, 7, 7), 1.5, 1.5);
+        p.drawRoundedRect(QRectF(4, 13.5, 7, 7), 1.5, 1.5);
+        p.drawRoundedRect(QRectF(13, 13.5, 7, 7), 1.5, 1.5);
+    });
+    library->setIcon(libraryIcon());
+    icons_.push_back({library, libraryIcon});
+    rail->addSpacing(8);
+    auto* libraryButton = new QToolButton;
+    pressable(libraryButton);
+    libraryButton->setObjectName("railButton");
+    libraryButton->setDefaultAction(library);
+    libraryButton->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+    libraryButton->setIconSize({24, 24});
+    libraryButton->setFocusPolicy(Qt::StrongFocus);
+    libraryButton->setAccessibleName(tr("Templates"));
+    rail->addWidget(libraryButton);
+    connect(library, &QAction::triggered, templateDock_, &QDockWidget::setVisible);
+    connect(templateDock_, &QDockWidget::visibilityChanged, library, [library](bool shown) { library->setChecked(shown); });
     (*groups)[1].railButton->defaultAction()->setChecked(true);  // the single bond, chosen at start
     connect(canvas_, &Canvas::toolKey, this, [keys](const QString& k) {
         if (auto* a = keys.value(k)) a->trigger();

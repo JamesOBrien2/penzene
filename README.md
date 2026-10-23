@@ -28,6 +28,8 @@ The installers aren't signed with a paid certificate, so the first time you open
   and pastes from ChemDraw.
 - **Reaction schemes and mechanisms**: reaction, equilibrium and retrosynthesis arrows, curved and
   fishhook arrows, lone pairs, radicals and partial charges.
+- **Templates**: ready-made rings, amino acids, sugars, protecting groups, ligands and projections
+  to click into place, from the **Templates** button on the left rail.
 - **Chemistry built in**: formula, mass, cLogP, TPSA and drug-likeness checks as you draw, stereo
   labels, name ↔ structure, and descriptor tables for whole datasets.
 - **Figures that stay editable**: SVG, PNG and PDF exports carry the drawing, so they open or paste
