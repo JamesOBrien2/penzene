@@ -2,6 +2,7 @@
 class QString;
 class QWidget;
 
-// What's New in Penzene <version>: the logo, the release's highlights as cards with an
-// icon, the smaller changes as text (from that version's section of CHANGELOG.md).
+// What's New in Penzene <version>: the release's highlights as large icon tiles, with the
+// smaller changes in a scroll below (from that version's section of CHANGELOG.md). The window
+// stays within the screen so its close button and Continue stay reachable.
 void showWhatsNewDialog(QWidget* parent, const QString& changelog, const QString& version);

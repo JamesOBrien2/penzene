@@ -8,58 +8,43 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 - Typing an element or label on a charged atom now replaces it with the neutral atom, e.g. `O` on O⁻ gives O (#669).
 - The bond palette and Style menu offer double dashed (`e`, two dashed lines for a mechanism's electron pair), dashed double (`D`) and bold double (`B`); `Q` makes a quadruple bond, also `order=4` in Python (#668).
+- What's New shows the major changes as icon tiles, keeps the rest in a scroll and fits on screen (#691).
 
 ## 2.0.0 (2026-10-22)
 
-- Lists, tables and measurement controls use consistent themed surfaces, focus states and step buttons.
+- **Drawing styles**: journal presets, editable JSON, true physical size (#473, #625). <!-- icon: palette -->
+- **Templates**: 24 heterocycles, macrocycles, ligands and reagents (#474). <!-- icon: hexagons -->
+- **Stoichiometry**: amounts from limiting reagent, mmol and equivalents (#486). <!-- icon: table -->
+- **NMR panel**: predicted spectra with ¹H and ¹³C JCAMP-DX overlays (#553). <!-- icon: nmr-spectrum -->
+- **Find Substructure**: selects every SMILES or SMARTS match (#485). <!-- icon: database -->
+- **Drag Erase**: atoms, bonds, arrows and text in one undo step (#487). <!-- icon: bolt -->
+- **Python mechanisms**: charges, radicals, partial bonds, brackets and text (#659). <!-- icon: file-import -->
+- **Tutorials**: seven new guides from first molecule to journal export (#602–#608). <!-- icon: books -->
 
-- Style editing now separates bonds, labels, captions and layout, keeps fractional print sizes and shows presets at a matching physical scale.
-- Journal drawing styles now include Nature, Angewandte and SYNLETT/SYNTHESIS, with publisher measurements and sources (#473).
-
-- Format → Circled Charges draws circles around single +/− charge signs, including bare carbons; multiple charges use ordinary superscripts. The setting is saved with the drawing (#623).
-
-- Drawing styles can be duplicated, edited, saved and shared as JSON; custom styles travel with the drawing and work from the command line and Python (#625).
-
-- The Format toolbar sets colours, separate shape fills and text fonts, sizes, bold and italic, on selections or the next object drawn (#621).
-- Text has its own button on the tool rail, with the same `t` shortcut (#622).
-- A tutorial covers figures in Word, PowerPoint and LaTeX, with vector examples and the Windows drawing-object workflow (#607).
-- Predicted NMR names quintets, sextets and septets when one equivalent set of neighbouring hydrogens splits a signal; mixed sets stay multiplets (#574).
-- Peptide import accepts N-acetyl (`Ac-`) and C-terminal amide (`-NH2`) caps, including `Ac-Gly-Phe-NH2` (#572).
-- Groups containing whole molecules, arrows and text survive ChemDraw CDXML and CDX round trips (#579).
-- View → Theme imports and exports versioned JSON theme files; imported themes remain available after restarting (#475).
-- Edit → Find Substructure (Ctrl/Cmd+F) selects every SMILES or SMARTS match on the current page, including groups inside abbreviations (#485).
-- Drag the Erase tool across atoms, bonds, arrows and text to preview their removal, then release to erase them in one undo step; Escape cancels (#487).
-- View → Stoichiometry calculates reactant and reagent quantities from a limiting reagent, mmol scale, equivalents and optional densities; Copy as Text keeps the table for a lab notebook (#486).
-- The NMR panel imports processed ¹H and ¹³C JCAMP-DX spectra as a normalized experimental trace beneath the prediction (#553).
-- The Templates library adds 24 heterocycles, macrocycles, ligands and reagents, including cyclen, bipyridine, dppe, DMAP and CDI (#474).
-- A five-minute first-molecule tutorial walks through installing Penzene, drawing ethanol, saving it and exporting a figure (#602).
-- A tutorial for users moving from another editor covers hotspot shortcuts, drawing styles and CDXML editing (#603).
-- A Newman and Fischer tutorial explains editing projections and reading Fischer stereochemistry as SMILES; the anti-butane Newman template now places its methyl groups opposite one another (#604).
-- A supporting-information tutorial covers calculated properties, descriptor CSVs and predicted NMR SI lines, with reproducible sample outputs (#605).
-- A journal-export tutorial covers physical sizes, fonts, DPI and final figure checks, with vector and 600 dpi examples (#606).
-- A Jupyter tutorial ships an executable notebook for displaying, editing, saving and exporting Penzene documents (#608).
-
-- Drawing styles show their physical bond length on the canvas and keep it through ChemDraw export and import (#624).
-
-- View → Mark Valence Errors can turn off red error colouring on screen and in exports; structure checks are unchanged (#620).
-
-- Metal complexes use coordination geometry with clear ligand labels; Clean keeps metal interaction bonds connected and preserves the donor arrangement (#618).
-
-- Metal ligands keep their hydrogens and valence, including typed ammine and aqua labels; dative arrows and ligand abbreviations round-trip through chemistry formats (#616).
-- Python draws mechanisms without editing JSON: `set_charge`, `set_radicals`, `set_partial`, `set_bond_style` (partial, interaction, wedge…), `show_symbol`, `add_bracket` (with a ‡ or charge superscript) and `add_text`; `add_atom` and `set_label` take `generic=True` for R, X and other generic labels; atoms report `label`, `radicals` and `partial`, bonds their `style` (#659).
-
-- Bonds keep clear of wide element labels such as Pt and Fe, on screen and in exports (#617).
-- A carbon shown with its own label (C) is drawn like any element: its charge keeps clear of its bonds instead of sitting on a triple bond (⁻C≡N), and it shows its hydrogens (#656).
-- Ferrocene and other η-bound rings report formula and mass without their drawing centroids; Clean keeps each centroid at its ring centre (#619).
-- Brackets take a superscript at the top right as well as their subscript: ‡ for a transition state, or a charge such as •+ (#658).
-
-- A MOL query atom list marked NOT ("NOT [N,O]") stays an exclusion, shown as "not N, O", instead of turning into its opposite (#610).
-- An atom shown with its own element (a terminal C, an O) keeps its charge and isotope in SMILES, formula and mass: cyanide drawn as C≡N is no longer HCN (#654).
-- The predicted NMR spectrum and its SI line count the atoms inside an abbreviation such as tBu, as if it were drawn out (#611).
-- Opening an SDF or SMILES library with records Penzene can't read names them instead of leaving them out silently; Python's `read` warns (#584).
-- Atoms on partial bonds count them as half bonds when filling hydrogens, so a drawn transition state keeps its reactants' formula instead of gaining an H on each atom whose bond is breaking (#655).
-- Lettered compound numbers shared across pages (2a, 2b) keep one number when a step is inserted, undone or redone (#583).
-- Brackets enclose everything their atoms draw around them (δ marks, charges, radical dots, lone pairs), so a transition state's δ+ is no longer left outside (#657).
+- Lists, tables and measurement controls share themed surfaces and focus states.
+- Style editing separates bonds, labels, captions and layout at true print scale.
+- Format toolbar sets colours, shape fills, fonts and text styles (#621).
+- Circled charges ring single +/− signs and save with the drawing (#623).
+- Text has its own tool-rail button and the same t shortcut (#622).
+- Predicted NMR names quintets, sextets and septets from equivalent neighbours (#574).
+- Peptide import accepts N-acetyl and C-terminal amide caps (#572).
+- Whole-molecule groups survive ChemDraw CDXML and CDX round trips (#579).
+- Themes import and export as versioned JSON files (#475).
+- Drawing styles show physical bond length and keep it in ChemDraw (#624).
+- Mark Valence Errors can turn off red error colouring (#620).
+- Metal complexes use coordination geometry, clear labels and connected bonds (#618).
+- Metal ligands keep hydrogens, valence, dative arrows and abbreviations (#616).
+- Bonds keep clear of wide labels such as Pt and Fe (#617).
+- A labelled C keeps its charge clear and shows its hydrogens (#656).
+- η-bound rings count once in formula and mass; centroids stay centred (#619).
+- Brackets take a superscript: ‡ for transition states, or a charge (#658).
+- MOL NOT atom lists stay exclusions, shown as not N, O (#610).
+- Labelled atoms keep charge and isotope; C≡N is no longer HCN (#654).
+- NMR and SI lines count abbreviation atoms such as tBu (#611).
+- Unreadable library records are named; Python read warns (#584).
+- Partial bonds count as half bonds when filling hydrogens (#655).
+- Lettered compound numbers (2a, 2b) keep one number across pages (#583).
+- Brackets enclose δ marks, charges, radicals and lone pairs (#657).
 
 ## 1.9.0 (2026-09-29)
 
