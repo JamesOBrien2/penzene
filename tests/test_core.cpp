@@ -342,6 +342,25 @@ TEST_CASE("circled charges preserve visible bonds around a crowded metal centre 
     }
 }
 
+TEST_CASE("a bond stops at an abbreviation's text, not inside it (#677)") {
+    for (const char* text : {"CF3", "Me", "Fmoc", "MgBr"}) {
+        for (double side : {-1.0, 1.0}) {
+            INFO(text << " bond on the " << (side > 0 ? "right" : "left"));
+            Document d;
+            const int label = d.addAtom({0, 0}, 6);
+            REQUIRE(edit::applyLabel(d, label, text));
+            const int carbon = d.addAtom({side * kBondLength, 0});
+            d.bonds.push_back({label, carbon});
+            auto matches = QRegularExpression(R"re(<polyline[^>]*points="([^"]+)")re").globalMatch(renderSvg(d));
+            REQUIRE(matches.hasNext());
+            const QStringList points = matches.next().captured(1).trimmed().split(' ');
+            REQUIRE(points.size() == 2);
+            const double begin = points.front().section(',', 0, 0).toDouble();  // at the label atom
+            CHECK(side * begin > 1);  // clear of the attaching letter, not through it
+        }
+    }
+}
+
 TEST_CASE("journal presets match publisher measurements and ChemDraw physical sizes (#473)") {
     for (const auto& [name, bond, font, line, bold, margin, hash] : {
         std::tuple{"Nature", 10.8, 6.0, 0.5952755906, 1.5590551181, 1.1905511811, 1.7007874016},
