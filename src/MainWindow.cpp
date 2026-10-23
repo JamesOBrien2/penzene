@@ -2992,6 +2992,8 @@ void MainWindow::buildMenus() {
     });
     structure->addAction(tr("&Expand Abbreviations"), QKeySequence(tr("Ctrl+Shift+E")), canvas_,
                          &Canvas::expandAbbreviations);
+    structure->addAction(tr("&Join Fragments"), QKeySequence(tr("Ctrl+J")), canvas_, &Canvas::joinSelection)
+        ->setStatusTip(tr("Bond the two selected atoms, joining their fragments"));
     structure->addAction(tr("&Invert Stereochemistry"), this, [this] { canvas_->invertStereo(); });
     structure->addSeparator();
     auto* brackets = structure->addMenu(tr("&Brackets"));
@@ -3334,6 +3336,7 @@ moves off, so you can keep typing.</p>
 <tr><td><b>x X j e t Space</b></td><td>bond, chain, benzene, arrow, text, select tool</td></tr>
 <tr><th colspan="2" align="left">Selection</th></tr>
 <tr><td><b>Ctrl+F</b></td><td>find a SMILES or SMARTS substructure on the current page</td></tr>
+<tr><td><b>Ctrl+J</b></td><td>join two selected atoms from different fragments with a bond</td></tr>
 <tr><td><b>←↑→↓</b></td><td>nudge 1 pt; with <b>Shift</b> 10 pt</td></tr>
 <tr><td><b>Enter</b></td><td>back to a hotspot on the selection</td></tr>
 <tr><td><b>Drag onto an atom</b></td><td>merge (Select tool) &nbsp;•&nbsp; <b>Shift+drag</b> move straight; draw a bond at any angle</td></tr>
