@@ -5553,6 +5553,36 @@ TEST_CASE("format toolbar: mixed selections, undo and enabled controls (#621)") 
     }
 }
 
+TEST_CASE("colour and fill menus draw their swatches (#674)") {
+    MainWindow w;
+    w.resize(1100, 750);
+    w.show();
+    auto* colour = w.findChild<QToolButton*>("formatColour");
+    auto* fill = w.findChild<QToolButton*>("formatFill");
+    REQUIRE(colour);
+    REQUIRE(fill);
+    colour->menu()->show();
+    QApplication::processEvents();
+    auto* holder = colour->menu()->findChild<QWidgetAction*>()->defaultWidget();
+    REQUIRE(holder);
+    const QImage image = holder->grab().toImage();
+    const QList<QColor> expected{Qt::black, QColor(0x30, 0x50, 0xF8), QColor(0xFF, 0x0D, 0x0D), QColor(0, 0x90, 0x30)};
+    const auto buttons = holder->findChildren<QToolButton*>();
+    REQUIRE(buttons.size() == expected.size() + 1);  // swatches and Custom…
+    for (int i = 0; i < expected.size(); ++i)
+        CHECK(image.pixelColor(buttons[i]->geometry().center()) == expected[i]);
+    colour->menu()->close();
+    fill->menu()->show();
+    QApplication::processEvents();
+    holder = fill->menu()->findChild<QWidgetAction*>()->defaultWidget();
+    REQUIRE(holder);
+    const QImage fillImage = holder->grab().toImage();
+    const auto fillButtons = holder->findChildren<QToolButton*>();
+    REQUIRE(fillButtons.size() == expected.size() + 1);
+    CHECK(fillImage.pixelColor(fillButtons[0]->geometry().center()) == QColor(207, 227, 255));
+    fill->menu()->close();
+}
+
 TEST_CASE("format defaults reach new shapes, text, bonds and ring fills (#621)") {
     Fixture f;
     f.canvas.setColour(Qt::blue);

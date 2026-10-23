@@ -2031,6 +2031,45 @@ static void pressable(QAbstractButton* b) {
     b->setProperty("pressable", true);
 }
 
+// A swatch painted by hand: a themed stylesheet stops QToolButton drawing an
+// icon inside a menu's widget action, which left these as empty boxes.
+class SwatchButton : public QToolButton {
+public:
+    explicit SwatchButton(const QColor& colour) : colour_(colour) {
+        setFixedSize(24, 24);
+        setCheckable(true);
+        setAutoRaise(true);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        if (underMouse()) {
+            QColor hover = palette().color(QPalette::WindowText);
+            hover.setAlpha(20);
+            p.setPen(Qt::NoPen);
+            p.setBrush(hover);
+            p.drawRoundedRect(rect(), 5, 5);
+        }
+        QRectF square(0, 0, std::min(width(), height()) - 7, std::min(width(), height()) - 7);
+        square.moveCenter(QRectF(rect()).center());
+        QColor edge = palette().color(QPalette::WindowText);
+        edge.setAlpha(60);
+        p.setPen(QPen(edge, 1));
+        p.setBrush(colour_);
+        p.drawRoundedRect(square, 4, 4);
+        if (isChecked() || hasFocus()) {
+            p.setPen(QPen(palette().color(QPalette::Highlight), 2));
+            p.setBrush(Qt::NoBrush);
+            p.drawRoundedRect(QRectF(rect()).adjusted(1, 1, -1, -1), 5, 5);
+        }
+    }
+
+private:
+    QColor colour_;
+};
+
 // Periodic table: main block by group and period, lanthanides and actinides
 // underneath. Organic elements are bold, since they're the ones drawn most.
 // A drop-down of colour swatches plus "Custom…", for the colour and ring fill tools.
@@ -2043,16 +2082,10 @@ static QMenu* colourMenu(QWidget* parent, const QList<QColor>& presets, std::fun
     grid->setSpacing(3);
     grid->setContentsMargins(6, 6, 6, 6);
     for (int i = 0; i < presets.size(); ++i) {
-        auto* b = new QToolButton;
+        auto* b = new SwatchButton(presets[i]);
         pressable(b);
-        b->setFixedSize(24, 24);
-        b->setAutoRaise(true);
         b->setToolTip(names.value(i, presets[i].name()));
         b->setAccessibleName(b->toolTip());
-        b->setCheckable(true);
-        QPixmap swatch(16, 16);
-        swatch.fill(presets[i]);
-        b->setIcon(QIcon(swatch));
         QObject::connect(b, &QToolButton::clicked, menu, [=] { picked(presets[i]), menu->close(); });
         QObject::connect(menu, &QMenu::aboutToShow, b, [=] { b->setChecked(presets[i] == current()); });
         grid->addWidget(b, i / 4, i % 4);
