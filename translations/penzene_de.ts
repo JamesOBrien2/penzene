@@ -168,6 +168,10 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Join</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Colour</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1396,6 +1400,18 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>&amp;Join Fragments</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Ctrl+J</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bond the two selected atoms, joining their fragments</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>e.g. ‡, •+, 3−</source>
         <translation type="unfinished"></translation>
     </message>
@@ -1513,6 +1529,7 @@ moves off, so you can keep typing.&lt;/p&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;x X j e t Space&lt;/b&gt;&lt;/td&gt;&lt;td&gt;bond, chain, benzene, arrow, text, select tool&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;th colspan=&quot;2&quot; align=&quot;left&quot;&gt;Selection&lt;/th&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+F&lt;/b&gt;&lt;/td&gt;&lt;td&gt;find a SMILES or SMARTS substructure on the current page&lt;/td&gt;&lt;/tr&gt;
+&lt;tr&gt;&lt;td&gt;&lt;b&gt;Ctrl+J&lt;/b&gt;&lt;/td&gt;&lt;td&gt;join two selected atoms from different fragments with a bond&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;←↑→↓&lt;/b&gt;&lt;/td&gt;&lt;td&gt;nudge 1 pt; with &lt;b&gt;Shift&lt;/b&gt; 10 pt&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Enter&lt;/b&gt;&lt;/td&gt;&lt;td&gt;back to a hotspot on the selection&lt;/td&gt;&lt;/tr&gt;
 &lt;tr&gt;&lt;td&gt;&lt;b&gt;Drag onto an atom&lt;/b&gt;&lt;/td&gt;&lt;td&gt;merge (Select tool) &amp;nbsp;•&amp;nbsp; &lt;b&gt;Shift+drag&lt;/b&gt; move straight; draw a bond at any angle&lt;/td&gt;&lt;/tr&gt;

@@ -2457,8 +2457,13 @@ TEST_CASE("copied PNG keeps the embedded drawing and pastes back (#399)") {
 TEST_CASE("copied pictures measure what is painted, not the label room (#681)") {
     App app;
     QSettings settings;
+    const QVariant oldMargin = settings.value("exportMargin");
+    const QVariant oldBackground = settings.value("exportBackground");
+    const QVariant oldScale = settings.value("exportScale");
+    const QVariant oldCheck = settings.value("checkBeforeExport");
     settings.setValue("exportMargin", 0);
     settings.setValue("exportBackground", "clear");
+    settings.setValue("exportScale", 100);
     settings.setValue("checkBeforeExport", false);
     MainWindow w;
     auto* canvas = w.findChild<Canvas*>();
@@ -2487,9 +2492,14 @@ TEST_CASE("copied pictures measure what is painted, not the label room (#681)") 
     const int add = int(20 * dpi / 72);
     CHECK(std::abs(padded.width() - tight.width() - add) <= 1);  // the setting still adds its margin
     CHECK(std::abs(padded.height() - tight.height() - add) <= 1);
-    settings.remove("exportMargin");
-    settings.remove("exportBackground");
-    settings.remove("checkBeforeExport");
+    auto restore = [&](const char* key, const QVariant& value) {
+        if (value.isValid()) settings.setValue(key, value);
+        else settings.remove(key);
+    };
+    restore("exportMargin", oldMargin);
+    restore("exportBackground", oldBackground);
+    restore("exportScale", oldScale);
+    restore("checkBeforeExport", oldCheck);
 }
 
 TEST_CASE("paste from ChemDraw: CDX/CDXML clipboard formats (#104)") {
@@ -3057,6 +3067,40 @@ TEST_CASE("ChemDraw shortcut parity: y, W, g, ?, Space, Enter, nudging (#157)") 
     QTest::keyClick(f.canvas.viewport(), Qt::Key_Down);                      // nudge 1
     CHECK(QLineF(f.doc().atoms[0].pos, before + QPointF(10, 1)).length() < 1e-9);
     CHECK(QLineF(f.doc().atoms[3].pos, chem::fromSmiles("CCO.CC")->atoms[3].pos).length() < 1e-9);  // the other molecule stays
+}
+
+TEST_CASE("Structure → Join Fragments bonds two selected atoms from different fragments (#683)") {
+    App app;
+    MainWindow w;
+    w.resize(900, 600);
+    w.show();
+    auto* canvas = w.findChild<Canvas*>();
+    auto* stack = w.findChild<QUndoGroup*>()->activeStack();
+    QAction* join = nullptr;
+    for (auto* a : w.findChildren<QAction*>())
+        if (a->shortcut() == QKeySequence(Qt::CTRL | Qt::Key_J)) join = a;
+    REQUIRE(join);
+    CHECK(join->shortcut() == QKeySequence(Qt::CTRL | Qt::Key_J));
+
+    canvas->setDocumentSilently(*chem::fromSmiles("C.C"));
+    REQUIRE(canvas->document().bonds.empty());
+    canvas->setSelection({0, 1});
+    join->trigger();
+    REQUIRE(canvas->document().bonds.size() == 1);
+    CHECK(canvas->document().bonds[0].order == 1);
+    CHECK(canvas->document().bondBetween(0, 1) >= 0);
+    CHECK(stack->undoText() == "Join");
+
+    const int steps = stack->index();
+    canvas->setSelection({0, 1});
+    join->trigger();
+    CHECK(canvas->document().bonds.size() == 1);  // already joined
+    CHECK(stack->index() == steps);
+
+    canvas->setDocumentSilently(*chem::fromSmiles("CCCC"));
+    canvas->setSelection({0, 3});
+    join->trigger();
+    CHECK(canvas->document().bonds.size() == 3);  // one fragment: nothing to join
 }
 
 TEST_CASE("keyboard: G picks atoms one by one, > draws a curved arrow, no mouse needed (#541)") {

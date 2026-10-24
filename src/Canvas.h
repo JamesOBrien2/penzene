@@ -42,6 +42,7 @@ public:
     void setCompoundStart(edit::CompoundCount from) { compoundStart_ = std::move(from); }  // the pages before's numbers (#569)
     void insert(Document fragment, const QString& text);  // centred in view, selected
     void selectAll();
+    void joinSelection();  // a bond between the two selected atoms, when they are in different fragments
     void rotateSelection(double degrees);
     // The round handle above the selection box that turns it (Shift: 15° steps; Ctrl: square to
     // the page or 45° from it).
