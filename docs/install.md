@@ -1,8 +1,8 @@
 # Installing
 
-Choose your system to download the latest stable installer directly:
+Choose the supported route for your platform:
 
-| System | File |
+| Platform | Recommended route |
 |---|---|
 | macOS, Apple silicon | [Download DMG](https://github.com/JamesOBrien2/penzene/releases/latest/download/penzene-macos-arm64.dmg) |
 | macOS, Intel | [Download DMG](https://github.com/JamesOBrien2/penzene/releases/latest/download/penzene-macos-x86_64.dmg) |
@@ -15,6 +15,14 @@ The distributed dependencies and their notices are listed in
 [`THIRD_PARTY_LICENSES.md`](https://github.com/JamesOBrien2/penzene/blob/main/THIRD_PARTY_LICENSES.md).
 Universities may deploy the installers through their usual software distribution tools; consult
 your institution's software licensing process when redistributing copies.
+
+## Package managers
+
+There are currently no supported Homebrew, winget or Flathub packages. Use the release
+installers above; package-manager submissions are tracked in issues
+[#153](https://github.com/JamesOBrien2/penzene/issues/153),
+[#392](https://github.com/JamesOBrien2/penzene/issues/392) and
+[#111](https://github.com/JamesOBrien2/penzene/issues/111).
 
 ## Opening it the first time
 
