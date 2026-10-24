@@ -5879,6 +5879,7 @@ TEST_CASE("pending inline text is dirty, autosaved, saved and kept on its page (
         QFile file(MainWindow::autosavePath());
         REQUIRE(file.open(QIODevice::ReadOnly));
         const auto recovered = sheetsFromJson(file.readAll());
+        file.close();
         REQUIRE(recovered.size() == 1);
         CHECK(recovered[0].doc.texts[0].text == "draft");
         CHECK(box->isVisible());
