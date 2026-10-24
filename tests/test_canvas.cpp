@@ -2457,8 +2457,13 @@ TEST_CASE("copied PNG keeps the embedded drawing and pastes back (#399)") {
 TEST_CASE("copied pictures measure what is painted, not the label room (#681)") {
     App app;
     QSettings settings;
+    const QVariant oldMargin = settings.value("exportMargin");
+    const QVariant oldBackground = settings.value("exportBackground");
+    const QVariant oldScale = settings.value("exportScale");
+    const QVariant oldCheck = settings.value("checkBeforeExport");
     settings.setValue("exportMargin", 0);
     settings.setValue("exportBackground", "clear");
+    settings.setValue("exportScale", 100);
     settings.setValue("checkBeforeExport", false);
     MainWindow w;
     auto* canvas = w.findChild<Canvas*>();
@@ -2487,9 +2492,14 @@ TEST_CASE("copied pictures measure what is painted, not the label room (#681)") 
     const int add = int(20 * dpi / 72);
     CHECK(std::abs(padded.width() - tight.width() - add) <= 1);  // the setting still adds its margin
     CHECK(std::abs(padded.height() - tight.height() - add) <= 1);
-    settings.remove("exportMargin");
-    settings.remove("exportBackground");
-    settings.remove("checkBeforeExport");
+    auto restore = [&](const char* key, const QVariant& value) {
+        if (value.isValid()) settings.setValue(key, value);
+        else settings.remove(key);
+    };
+    restore("exportMargin", oldMargin);
+    restore("exportBackground", oldBackground);
+    restore("exportScale", oldScale);
+    restore("checkBeforeExport", oldCheck);
 }
 
 TEST_CASE("paste from ChemDraw: CDX/CDXML clipboard formats (#104)") {
