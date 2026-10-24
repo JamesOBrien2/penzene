@@ -1258,7 +1258,7 @@ QRectF outputBounds(const Document& doc) {
         paintDocument(p, doc);
     }
     const QRect r = painted.boundingRect();
-    return r.isEmpty() ? documentBounds(doc) : documentBounds(doc).united(QRectF(r).adjusted(-1, -1, 1, 1));
+    return r.isEmpty() ? documentBounds(doc) : QRectF(r).adjusted(-1, -1, 1, 1);
 }
 
 const std::vector<PageSize>& pageSizes() {
