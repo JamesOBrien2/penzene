@@ -5851,6 +5851,83 @@ TEST_CASE("text is typed in place, where the canvas was clicked (#678)") {
     CHECK(f.doc().texts[0].text == "line\ntwo");
 }
 
+TEST_CASE("pending inline text is dirty, autosaved, saved and kept on its page (#678)") {
+    App app;
+    QTemporaryDir dir;
+    Document doc;
+    doc.texts.push_back({{0, 0}, "before"});
+    const QString path = dir.filePath("text.penz");
+    REQUIRE(writeWhole(path, doc.toJson()));
+    MainWindow w;
+    w.resize(900, 600);
+    w.show();
+    REQUIRE(w.openFile(path));
+    auto* canvas = w.findChild<Canvas*>();
+    auto edit = [&](const char* text) {
+        canvas->editText(0);
+        auto* box = canvas->findChild<QPlainTextEdit*>("textEditor");
+        REQUIRE(box);
+        QTest::keyClicks(box, text);
+        CHECK_FALSE(w.isClean());
+        CHECK(w.isWindowModified());
+        if (auto out = qgetenv("PENZENE_INLINE_SHOT"); !out.isEmpty()) w.grab().save(out);
+        return box;
+    };
+    SECTION("autosave includes typing, Escape restores the clean document") {
+        auto* box = edit("draft");
+        w.autosave();
+        QFile file(MainWindow::autosavePath());
+        REQUIRE(file.open(QIODevice::ReadOnly));
+        const auto recovered = sheetsFromJson(file.readAll());
+        REQUIRE(recovered.size() == 1);
+        CHECK(recovered[0].doc.texts[0].text == "draft");
+        CHECK(box->isVisible());
+        QTest::keyClick(box, Qt::Key_Escape);
+        CHECK(w.isClean());
+        CHECK_FALSE(w.isWindowModified());
+        w.autosave();
+        CHECK_FALSE(QFile::exists(MainWindow::autosavePath()));
+    }
+    SECTION("Save keeps the active edit in one undo step") {
+        edit("saved");
+        REQUIRE(w.save());
+        CHECK(w.isClean());
+        QFile file(path);
+        REQUIRE(file.open(QIODevice::ReadOnly));
+        const auto saved = sheetsFromJson(file.readAll());
+        REQUIRE(saved.size() == 1);
+        CHECK(saved[0].doc.texts[0].text == "saved");
+        auto* undo = w.findChild<QUndoGroup*>()->activeStack();
+        REQUIRE(undo->count() == 1);
+        undo->undo();
+        CHECK(canvas->document().texts[0].text == "before");
+    }
+    SECTION("switching pages keeps the edit in the original page history") {
+        edit("page one");
+        w.findChild<QToolButton*>("addPage")->click();
+        REQUIRE(w.sheets().size() == 2);
+        CHECK(w.sheets()[0].doc.texts[0].text == "page one");
+        CHECK(canvas->document().texts.empty());
+        w.findChild<QTabBar*>("pageTabs")->setCurrentIndex(0);
+        CHECK(canvas->document().texts[0].text == "page one");
+        w.findChild<QUndoGroup*>()->activeStack()->undo();
+        CHECK(canvas->document().texts[0].text == "before");
+    }
+    SECTION("closing prompts for an unfinished edit") {
+        edit("unsaved");
+        bool prompted = false;
+        QTimer::singleShot(0, &w, [&] {
+            if (auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+                prompted = true;
+                box->button(QMessageBox::Cancel)->click();
+            }
+        });
+        CHECK_FALSE(w.close());
+        CHECK(prompted);
+        CHECK(canvas->document().texts[0].text == "unsaved");
+    }
+}
+
 TEST_CASE("format defaults reach new shapes, text, bonds and ring fills (#621)") {
     Fixture f;
     f.canvas.setColour(Qt::blue);

@@ -801,6 +801,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     buildFormatToolbar();
     buildMenus();
     connect(undoGroup_, &QUndoGroup::cleanChanged, this, &MainWindow::updateTitle);
+    connect(canvas_, &Canvas::textEditingChanged, this, &MainWindow::updateTitle);
     updateTitle();
     info_ = new QLabel;
     info_->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -1093,17 +1094,18 @@ void MainWindow::updateTitle() {
 }
 
 bool MainWindow::isClean() const {
-    return !pagesEdited_ && std::all_of(pages_.begin(), pages_.end(), [](const PageState& p) { return p.undo->isClean(); });
+    return canvas_->documentWithTextEdit() == canvas_->document() && !pagesEdited_ && std::all_of(pages_.begin(), pages_.end(), [](const PageState& p) { return p.undo->isClean(); });
 }
 
 std::vector<Sheet> MainWindow::sheets() const {
     std::vector<Sheet> out;
     for (int i = 0; i < int(pages_.size()); ++i)
-        out.push_back({pages_[i].name, i == page_ ? canvas_->document() : pages_[i].doc});
+        out.push_back({pages_[i].name, i == page_ ? canvas_->documentWithTextEdit() : pages_[i].doc});
     return out;
 }
 
 void MainWindow::setPages(const std::vector<Sheet>& sheets) {
+    canvas_->commitTextEditor();
     stoichiometry_->reset();
     nmr_->experimental.reset();
     experimentalFile_.clear();
@@ -1156,6 +1158,7 @@ void MainWindow::renumberPages() {
 
 void MainWindow::showPage(int i) {
     if (i < 0 || i >= int(pages_.size())) return;
+    canvas_->commitTextEditor();
     pages_[page_].doc = canvas_->document();
     page_ = i;
     undo_ = pages_[i].undo;
@@ -1200,6 +1203,7 @@ void MainWindow::renamePage(int i) {
 }
 
 void MainWindow::deletePage(int i) {
+    canvas_->commitTextEditor();
     if (pages_.size() < 2 || i < 0 || i >= int(pages_.size())) return;
     const Document& doc = i == page_ ? canvas_->document() : pages_[i].doc;
     if (!doc.empty() && QMessageBox::question(this, tr("Delete Page"),
@@ -1326,6 +1330,7 @@ void MainWindow::offerRecovery() {
 }
 
 bool MainWindow::saveTo(const QString& path, bool v3000) {
+    canvas_->commitTextEditor();
     const auto& doc = canvas_->document();
     QByteArray data;
     if (path.endsWith(".penz", Qt::CaseInsensitive)) {
@@ -1390,6 +1395,7 @@ bool MainWindow::saveTo(const QString& path, bool v3000) {
 }
 
 bool MainWindow::save() {
+    canvas_->commitTextEditor();
 #ifdef Q_OS_WIN
     if (embeddedSave_) {  // back into the Word or PowerPoint document (#229)
         if (!embeddedSave_()) return false;
@@ -1418,6 +1424,7 @@ bool MainWindow::saveAs() {
 }
 
 bool MainWindow::maybeSave() {
+    canvas_->commitTextEditor();
     if (isClean()) return true;
     auto r = QMessageBox::question(this, tr("Unsaved changes"), tr("Save changes to this document?"),
                                    QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);

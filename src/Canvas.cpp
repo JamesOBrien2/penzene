@@ -2139,6 +2139,7 @@ void Canvas::editText(int i, QPointF pos) {
         editor->setGeometry(QRect(origin - QPoint(6, int(std::ceil(fm.ascent())) + 5), QSize(width, height)));
     };
     QObject::connect(editor, &QPlainTextEdit::textChanged, editor, fit);
+    QObject::connect(editor, &QPlainTextEdit::textChanged, this, &Canvas::textEditingChanged);
     editor->commit = [this, editor] { if (textEditor_ == editor) commitTextEditor(); };
     editor->cancel = [this, editor] { if (textEditor_ == editor) cancelTextEditor(); };
     fit();
@@ -2149,23 +2150,29 @@ void Canvas::editText(int i, QPointF pos) {
     refresh();  // hide the text it is over
 }
 
+Document Canvas::documentWithTextEdit() const {
+    Document next = doc_;
+    if (!textEditor_) return next;
+    QString s = textEditor_->toPlainText();
+    s.remove(QRegularExpression("\\s+$"));  // keep deliberate leading spaces and tabs
+    const int i = editingText_;
+    if (i < 0 && !s.isEmpty()) next.texts.push_back({editTextPos_, s});
+    else if (i >= 0 && s.isEmpty()) next.texts.erase(next.texts.begin() + i);
+    else if (i >= 0 && s != doc_.texts[i].text) next.texts[i].text = s, next.texts[i].series = 0;
+    styleNewObjects(next);
+    return next;
+}
+
 void Canvas::commitTextEditor() {
     auto* editor = static_cast<InlineTextEditor*>(textEditor_);
     if (!editor) return;
-    const int i = editingText_;
+    const Document next = documentWithTextEdit();
     textEditor_ = nullptr, editingText_ = -1;
-    // Keep leading spaces and tabs; they are deliberate indentation.
-    QString s = editor->toPlainText();
-    s.remove(QRegularExpression("\\s+$"));
     editor->hide();
     editor->deleteLater();
-    Document next = doc_;
-    if (i < 0 && !s.isEmpty()) next.texts.push_back({editTextPos_, s});
-    else if (i >= 0 && s.isEmpty()) next.texts.erase(next.texts.begin() + i);
-    else if (i >= 0 && s != doc_.texts[i].text) next.texts[i].text = s, next.texts[i].series = 0;  // retyped: joins what it now reads as
-    styleNewObjects(next);
     if (!(next == doc_)) commit(next, tr("Text"));
     else refresh();
+    emit textEditingChanged();
     if (QApplication::focusWidget() == editor || !QApplication::focusWidget()) setFocus(Qt::OtherFocusReason);
 }
 
@@ -2176,6 +2183,7 @@ void Canvas::cancelTextEditor() {
     editor->hide();
     editor->deleteLater();
     refresh();
+    emit textEditingChanged();
     if (QApplication::focusWidget() == editor || !QApplication::focusWidget()) setFocus(Qt::OtherFocusReason);
 }
 
