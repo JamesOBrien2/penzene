@@ -1025,10 +1025,6 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Predicted; ~ in a stick&apos;s label marks a weaker match.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Import Experimental…</source>
         <translation type="unfinished"></translation>
     </message>

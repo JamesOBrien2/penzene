@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Predicted NMR shifts use a fifth HOSE sphere, telling a primary amine's ring carbons from those next to a ring nitrogen; the NMR panel keeps just the nmrshiftdb2 licence notice (#682).
 - Rings can be oriented by dragging, with Ctrl to resize them (#671).
 - Rotate in 3D now transforms only the selected atoms and bonds (#672).
 - Typing an element or label on a charged atom now replaces it with the neutral atom, e.g. `O` on O⁻ gives O (#669).

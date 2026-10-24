@@ -735,7 +735,7 @@ MainWindow::MainWindow() : undo_(new QUndoStack(this)), canvas_(new Canvas(undo_
     nmr_->setAccessibleName(tr("Predicted spectrum"));
     nmr_->setToolTip(tr("Point at a stick, or press Left and Right, to light its atoms"));
     nmr_->light = [this](const std::vector<int>& atoms) { canvas_->setHighlight(QSet<int>(atoms.begin(), atoms.end())); };
-    auto* notice = new QLabel(tr("Predicted; ~ in a stick's label marks a weaker match.") + " " + nmrshiftdbNotice().join(" "));
+    auto* notice = new QLabel(nmrshiftdbNotice().join(" "));
     notice->setWordWrap(true);
     notice->setTextInteractionFlags(Qt::TextSelectableByMouse);
     notice->setStyleSheet("font-size: 10px;");

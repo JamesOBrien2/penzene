@@ -171,7 +171,7 @@ Document projectionsAsWedges(const Document& doc);
 std::vector<std::vector<std::string>> hoseCodes(const std::string& molBlock, int maxSpheres = 4);
 std::vector<std::vector<std::string>> hoseCodes(const Document& doc, int maxSpheres = 4);
 // Predicted 13C (carbons) and 1H (H-bearing atoms) shifts in ppm, looked up by HOSE code in a table built
-// from nmrshiftdb2 (resources/nmr). spheres: how many spheres matched (4 best, 1 worst); 0 = no prediction.
+// from nmrshiftdb2 (resources/nmr). spheres: how many spheres matched (5 best, 1 worst); 0 = no prediction.
 struct Shift {
     int atom = -1;
     double carbon = 0, proton = 0;

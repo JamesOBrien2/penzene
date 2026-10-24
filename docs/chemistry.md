@@ -146,8 +146,8 @@ values; it does not derive shifts or assignments from the experimental trace.
 
 Shifts are looked up by HOSE code in a table built from [nmrshiftdb2](https://nmrshiftdb.nmr.uni-koeln.de),
 an open database of assigned spectra. A HOSE code describes an atom's surroundings sphere by sphere
-(Bremser's scheme, written as the CDK writes it). Penzene uses up to four spheres. When the table has
-no match at four, it tries three, then two, then one. The shift given is the median of every shift
+(Bremser's scheme, written as the CDK writes it). Penzene uses up to five spheres. When the table has
+no match at five, it tries four, three, two, then one. The shift given is the median of every shift
 recorded for that code. A `~` marks a match of two spheres or fewer.
 
 ¹H shifts are averaged over an atom's hydrogens, so diastereotopic CH₂ protons show as one value.
@@ -161,7 +161,8 @@ On one compound in ten held out of the table (by InChIKey), the mean absolute er
 
 | Spheres matched | ¹³C (ppm) | ¹H (ppm) | Share of ¹³C shifts |
 |---|---|---|---|
-| 4 | 1.1 | 0.15 | 54% |
+| 5 | 0.8 | 0.12 | 35% |
+| 4 | 1.4 | 0.22 | 19% |
 | 3 | 2.5 | 0.31 | 24% |
 | 2 | 4.9 | 0.53 | 19% |
 | 1 | 10.8 | 0.94 | 3% |
