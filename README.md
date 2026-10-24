@@ -12,6 +12,7 @@ Runs on macOS, Linux and Windows. Built with C++20, Qt 6 and [RDKit](https://www
 
 Download the installer for your system from the [latest release](https://github.com/JamesOBrien2/penzene/releases/latest)
 (macOS `.dmg`, Windows `setup.exe` or `.zip`, Linux `.AppImage`), or `pip install penzene` for the Python package.
+Homebrew, winget and Flathub packages are not yet supported.
 
 The installers aren't signed with a paid certificate, so the first time you open Penzene:
 - **macOS:** if it "can't be opened", go to System Settings → Privacy & Security and click **Open Anyway**.
