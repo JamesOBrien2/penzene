@@ -1049,7 +1049,11 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             taken.push_back(std::atan2(d.y(), d.x()));
         }
         std::vector<QPointF> dirs;
-        if (taken.empty()) dirs.push_back({0, -1}), taken.push_back(-std::numbers::pi / 2);  // a lone atom: on top first
+        if (taken.empty()) {
+            const QPointF d = labeled[i] ? QPointF(1, -1) : QPointF(0, -1);
+            dirs.push_back(d);
+            taken.push_back(std::atan2(d.y(), d.x()));
+        }
         std::vector<std::pair<double, double>> gaps;  // (start, width)
         std::sort(taken.begin(), taken.end());
         for (size_t k = 0; k < taken.size(); ++k) {
