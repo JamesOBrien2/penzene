@@ -15,6 +15,7 @@
 
 class QPainter;
 class QMenu;
+class QPlainTextEdit;
 class QUndoStack;
 
 class Canvas : public QGraphicsView {
@@ -71,6 +72,8 @@ public:
     void editAtomProperties(int atom);  // label, charge, map number, lone pairs, radicals, δ
     void expandAbbreviations();  // selection, else hotspot atom, else everything
     void editText(int text, QPointF pos = {});  // text < 0: new text at pos
+    Document documentWithTextEdit() const;  // snapshot for dirty tracking and autosave while typing
+    void commitTextEditor();
     int hotspotAtom() const { return hoverAtom_; }
     int hotspotBond() const { return hoverBond_; }
     void setHotspot(int atom, int bond = -1);
@@ -120,6 +123,7 @@ public:
     void ungroupSelection();  // the groups the selection touches split up  // a bold number under each selected molecule (or every one) that has none (#504)
 
 signals:
+    void textEditingChanged();
     void formattingChanged();
     void documentChanged();
     void selectionChanged();
@@ -154,6 +158,7 @@ private:
     void fit(const Document& part);
     std::vector<QPointF> dragPath() const;
     void collectErase(QPointF from, QPointF to);
+    void cancelTextEditor();
 
     Document doc_;
     bool fitOnShow_ = false;
@@ -164,6 +169,9 @@ private:
     bool markValenceErrors_ = true;
     bool grid_ = false, rulers_ = false;
     std::vector<QPointF> preview_;
+    QPlainTextEdit* textEditor_ = nullptr;  // in place over the canvas while text is typed
+    int editingText_ = -1;                  // the text it edits; -1 for new text
+    QPointF editTextPos_;                   // where new text's baseline starts
     QUndoStack* undo_;
     edit::CompoundCount compoundStart_;
     void selectGroups();  // a click or marquee on one member takes its whole group

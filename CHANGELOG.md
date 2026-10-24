@@ -17,6 +17,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 - Crown ether templates use the standard drawing, with the oxygens evenly spaced on an inner ring and the CH2CH2 bridges between them (#680).
 - Copy and export crop to the drawing plus the margin in Preferences, with no hidden space (#681).
 - Structure → Join Fragments (Ctrl/Cmd+J) bonds two selected atoms from different fragments into one structure (#683).
+- Text is typed in place on the canvas; Return or clicking away keeps it, Shift+Return adds a line and Esc drops it; Save and autosave keep unfinished edits (#678).
 
 ## 2.0.0 (2026-10-22)
 
