@@ -1620,6 +1620,38 @@ TEST_CASE("radicals are chemistry; lone pairs and δ are drawn (#106)") {
     CHECK(*back == water);
 }
 
+TEST_CASE("a lone labelled radical sits at the label's upper right (#666)") {
+    Document radical;
+    Atom atom;
+    atom.pos = {0, 0};
+    atom.z = 0;
+    atom.label = "R";
+    atom.radicals = 1;
+    radical.atoms.push_back(atom);
+    Document plain = radical;
+    plain.atoms[0].radicals = 0;
+    auto render = [](const Document& doc) {
+        QImage image(800, 800, QImage::Format_ARGB32);
+        image.fill(Qt::white);
+        QPainter painter(&image);
+        painter.translate(400, 400);
+        painter.scale(20, 20);
+        paintDocument(painter, doc, {Qt::black, Qt::black, 0.6});
+        return image;
+    };
+    const QImage with = render(radical), without = render(plain);
+    QPointF sum;
+    int n = 0;
+    for (int y = 0; y < with.height(); ++y)
+        for (int x = 0; x < with.width(); ++x)
+            if (qGray(with.pixel(x, y)) < 128 && qGray(without.pixel(x, y)) >= 128)
+                sum += QPointF(x, y), ++n;
+    REQUIRE(n > 0);
+    const QPointF centre = sum / n - QPointF(with.width(), with.height()) / 2;
+    CHECK(centre.x() > std::abs(centre.y()) * 0.4);
+    CHECK(centre.y() < 0);
+}
+
 TEST_CASE("shapes and lines: saved, exported and read from CDXML (#107)") {
     Document doc = *chem::fromSmiles("CC(=O)Oc1ccccc1C(=O)O");
     doc.arrows.push_back({{-40, -40}, {40, 40}, ArrowKind::RoundedBox, 0, {}, true});  // a dashed box around it
