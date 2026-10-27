@@ -6,6 +6,9 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Ctrl/Cmd+scroll keeps the current view centred while zooming (#704).
+- Shift+scroll moves the canvas horizontally (#703).
+
 - Installation docs now identify the supported release installers and package-manager routes that are not yet available (#406).
 - Lone labelled atom radicals are drawn at the label's upper right, alongside charges (#666).
 - Predicted NMR shifts use a fifth HOSE sphere, telling a primary amine's ring carbons from those next to a ring nitrogen; the NMR panel keeps just the nmrshiftdb2 licence notice (#682).
