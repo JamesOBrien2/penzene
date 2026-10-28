@@ -6,8 +6,11 @@ installer's sha256 (from GitHub's asset digest, or by downloading it), in the di
 microsoft/winget-pkgs uses:
 
 ```sh
-python3 packaging/winget/render.py 1.4.0 out   # writes out/manifests/j/JamesOBrien2/Penzene/1.4.0/
+python3 packaging/winget/render.py 2.1.0 out   # writes out/manifests/j/JamesOBrien2/Penzene/2.1.0/
 ```
+
+Run this after the v2.1.0 GitHub release is published with its Windows installer: the renderer
+uses the release's publication date and the installer's actual SHA-256.
 
 Installer details, from `cmake/penzene.iss`: there's no explicit `AppId`, so Inno registers the
 uninstaller as `Penzene_is1` (the `ProductCode`). The installer can run per user
@@ -27,13 +30,13 @@ Defender warn about them more often.
    --enable LocalManifestFiles` once, as administrator):
 
    ```powershell
-   winget validate --manifest out\manifests\j\JamesOBrien2\Penzene\1.4.0
-   winget install --manifest out\manifests\j\JamesOBrien2\Penzene\1.4.0
-   winget uninstall --manifest out\manifests\j\JamesOBrien2\Penzene\1.4.0
+   winget validate --manifest out\manifests\j\JamesOBrien2\Penzene\2.1.0
+   winget install --manifest out\manifests\j\JamesOBrien2\Penzene\2.1.0
+   winget uninstall --manifest out\manifests\j\JamesOBrien2\Penzene\2.1.0
    ```
 
 2. Submit, either:
-   - `wingetcreate submit out\manifests\j\JamesOBrien2\Penzene\1.4.0` (it asks for a GitHub
+   - `wingetcreate submit out\manifests\j\JamesOBrien2\Penzene\2.1.0` (it asks for a GitHub
      token, forks microsoft/winget-pkgs and opens the pull request), or
    - by hand: fork [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs), copy the
      `manifests/` tree into it, and open a pull request.

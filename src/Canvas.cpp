@@ -2539,7 +2539,13 @@ void Canvas::contextMenuEvent(QContextMenuEvent* e) {
 
 void Canvas::wheelEvent(QWheelEvent* e) {
     if (e->modifiers() & (Qt::ControlModifier | Qt::MetaModifier)) {
+        setTransformationAnchor(AnchorViewCenter);
         zoomBy(std::pow(1.0015, e->angleDelta().y()));
+        setTransformationAnchor(AnchorUnderMouse);
+        return;
+    }
+    if (e->modifiers() & Qt::ShiftModifier) {
+        QApplication::sendEvent(horizontalScrollBar(), e);
         return;
     }
     QGraphicsView::wheelEvent(e);

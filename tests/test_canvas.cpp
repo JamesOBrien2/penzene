@@ -4611,6 +4611,29 @@ TEST_CASE("A trackpad pinch zooms the canvas: spread in, pinch out (#452)") {
     CHECK(f.canvas.transform().m11() < before * 1.2);
 }
 
+TEST_CASE("Wheel zoom keeps the current view and Shift scrolls horizontally (#704, #703)") {
+    Fixture f;
+    f.canvas.centerOn(400, 300);
+    const QPoint center = f.canvas.viewport()->rect().center();
+    const QPointF before = f.canvas.mapToScene(center);
+    auto wheel = [&](Qt::KeyboardModifiers modifiers, int delta) {
+        QWheelEvent e(QPointF(10, 10), QPointF(f.canvas.viewport()->mapToGlobal(QPoint(10, 10))), {}, {0, delta},
+                      Qt::NoButton, modifiers, Qt::NoScrollPhase, false);
+        QApplication::sendEvent(f.canvas.viewport(), &e);
+    };
+    const double zoom = f.canvas.transform().m11();
+    wheel(Qt::ControlModifier, 120);
+    CHECK(f.canvas.transform().m11() > zoom);
+    CHECK(QLineF(before, f.canvas.mapToScene(center)).length() < 1);
+    wheel(Qt::ControlModifier, -120);
+    CHECK(QLineF(before, f.canvas.mapToScene(center)).length() < 1);
+    const int horizontal = f.canvas.horizontalScrollBar()->value();
+    const int vertical = f.canvas.verticalScrollBar()->value();
+    wheel(Qt::ShiftModifier, -120);
+    CHECK(f.canvas.horizontalScrollBar()->value() > horizontal);
+    CHECK(f.canvas.verticalScrollBar()->value() == vertical);
+}
+
 TEST_CASE("Center on Page moves the whole drawing, or just the selection, keeping spacing (#454)") {
     Fixture f;
     Document doc = *chem::fromSmiles("CC.O");
