@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Assigning to a read-only Python Atom or Bond field now names the field and points to Document editing methods (#716).
 - Ctrl/Cmd+scroll keeps the current view centred while zooming (#704).
 - Shift+scroll moves the canvas horizontally (#703).
 

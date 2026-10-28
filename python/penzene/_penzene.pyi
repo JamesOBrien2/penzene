@@ -8,6 +8,8 @@ class Atom:
     An atom of a Document (read-only; edit through Document: set_label, remove_atoms). (since 0.4)
     """
 
+    def __setattr__(self, name: str, value: object | None) -> None: ...
+
     @property
     def symbol(self) -> str:
         """
@@ -50,6 +52,8 @@ class Atom:
 
 class Bond:
     """A bond of a Document (read-only). (since 0.4)"""
+
+    def __setattr__(self, name: str, value: object | None) -> None: ...
 
     @property
     def a(self) -> int:

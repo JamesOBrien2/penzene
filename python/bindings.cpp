@@ -89,6 +89,10 @@ void inRange(int value, int lo, int hi, const char* what) {
         throw nb::value_error((std::string(what) + " must be " + std::to_string(lo) + " to " + std::to_string(hi)).c_str());
 }
 
+[[noreturn]] void readOnly(const char* type, const std::string& field, const char* hint) {
+    throw nb::attribute_error((std::string(type) + "." + field + " is read-only; " + hint).c_str());
+}
+
 }  // namespace
 
 NB_MODULE(_penzene, m) {
@@ -97,6 +101,16 @@ NB_MODULE(_penzene, m) {
     m.attr("__version__") = PENZENE_VERSION;
 
     nb::class_<Atom>(m, "Atom", "An atom of a Document (read-only; edit through Document: set_label, remove_atoms). (since 0.4)")
+        .def("__setattr__", [](const Atom&, const std::string& field, nb::handle) {
+            const std::map<std::string, const char*> hints = {
+                {"symbol", "use Document.set_label(atom, label)"},
+                {"label", "use Document.set_label(atom, label)"},
+                {"charge", "use Document.set_charge(atom, charge)"},
+                {"radicals", "use Document.set_radicals(atom, radicals)"},
+                {"partial", "use Document.set_partial(atom, partial)"}};
+            auto hint = hints.find(field);
+            readOnly("Atom", field, hint == hints.end() ? "edit through Document; atoms are snapshots" : hint->second);
+        }, "name"_a, "value"_a.none())
         .def_prop_ro("symbol", &symbol, "Element symbol, or the abbreviation (Boc, OMe…) if it has one (since 0.4)")
         .def_prop_ro("x", [](const Atom& a) { return a.pos.x(); }, "Points, x right (since 0.4)")
         .def_prop_ro("y", [](const Atom& a) { return a.pos.y(); }, "Points, y down (since 0.4)")
@@ -109,6 +123,12 @@ NB_MODULE(_penzene, m) {
         .def("__repr__", [](const Atom& a) { return "<Atom " + symbol(a) + ">"; });
 
     nb::class_<Bond>(m, "Bond", "A bond of a Document (read-only). (since 0.4)")
+        .def("__setattr__", [](const Bond&, const std::string& field, nb::handle) {
+            const char* hint = field == "order" ? "use Document.set_bond_order(bond, order)"
+                             : field == "style" ? "use Document.set_bond_style(bond, style)"
+                                                : "use Document.add_bond(a, b) to connect atoms";
+            readOnly("Bond", field, hint);
+        }, "name"_a, "value"_a.none())
         .def_ro("a", &Bond::a, "Index of the first atom (a wedge starts here) (since 0.4)")
         .def_ro("b", &Bond::b, "Index of the second atom (since 0.4)")
         .def_ro("order", &Bond::order, "1, 2, 3 or 4 (since 0.4)")
