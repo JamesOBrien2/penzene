@@ -22,6 +22,26 @@ assert doc.formula == "C9H8O4" and abs(doc.mw - 180.16) < 0.01
 assert doc.to_inchikey() == "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"
 assert len(doc.atoms) == 13 and doc.atoms[0].symbol == "C"
 
+# Atom and Bond snapshots stay read-only, with a useful route to editing (#716).
+before = doc.to_json()
+for obj, fields in (
+    (doc.atoms[0], dict(symbol="set_label", x="Document", y="Document", charge="set_charge",
+                        isotope="Document", label="set_label", radicals="set_radicals", partial="set_partial")),
+    (doc.bonds[0], dict(a="add_bond", b="add_bond", order="set_bond_order", style="set_bond_style")),
+):
+    for field, hint in fields.items():
+        original = getattr(obj, field)
+        for value in (original, None):
+            try:
+                setattr(obj, field, value)
+            except AttributeError as error:
+                assert f"{type(obj).__name__}.{field} is read-only" in str(error), str(error)
+                assert hint in str(error), str(error)
+            else:
+                raise AssertionError(f"{field} should be read-only")
+        assert getattr(obj, field) == original
+assert doc.to_json() == before
+
 again = pz.read(os.path.join(out, "aspirin.penz"))
 assert again.to_smiles() == doc.to_smiles()
 assert pz.from_json(doc.to_json()).to_smiles() == doc.to_smiles()
