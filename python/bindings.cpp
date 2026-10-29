@@ -4,15 +4,14 @@
 #include "Render.h"
 #include "Styles.h"
 
-#include <QBuffer>
 #include <QFileInfo>
 #include <QGuiApplication>
-#include <QImage>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/pair.h>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <map>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
@@ -97,6 +96,25 @@ void inRange(int value, int lo, int hi, const char* what) {
 
 void requireFinite(double value) {
     if (!std::isfinite(value)) throw nb::value_error("coordinates and angles must be finite");
+}
+
+ExportOptions pythonExportOptions(const Document& d, double margin, const std::optional<std::string>& background,
+                                  double scale, double dpi = 300) {
+    for (double value : {margin, scale, dpi}) requireFinite(value);
+    if (margin < 0 || scale <= 0 || dpi <= 0) throw nb::value_error("margin must be non-negative; scale and dpi must be positive");
+    QColor color = Qt::transparent;
+    if (background) {
+        color = QColor(qs(*background));
+        if (!color.isValid()) throw nb::value_error("background must be None or a colour name or hex string");
+    }
+    const double s = exportScale(d) * scale;
+    const QRectF page = pageRect(d);
+    const QSizeF size = page.isEmpty() ? outputBounds(d).size() * s + QSizeF(2 * margin, 2 * margin) : page.size() * s;
+    const double pixels = std::max(size.width(), size.height()) * dpi / 72;
+    if (!std::isfinite(s) || s <= 0 || !std::isfinite(pixels) || pixels >= std::numeric_limits<int>::max()
+        || dpi / 0.0254 >= std::numeric_limits<int>::max())
+        throw nb::value_error("export dimensions or resolution are too large");
+    return {dpi, color, scale, margin};
 }
 
 std::vector<int> selectedAtoms(Document& d, std::vector<int> atoms) {
@@ -442,17 +460,45 @@ NB_MODULE(_penzene, m) {
         .def("to_inchi", [](const Document& d) { return chem::toInchi(d); }, "Standard InChI. (since 0.4)")
         .def("to_inchikey", [](const Document& d) { return chem::toInchiKey(d); }, "Standard InChIKey. (since 0.4)")
         .def("to_json", [](const Document& d) { return d.toJson().toStdString(); }, "The .penz document (JSON). (since 0.4)")
-        .def("to_svg", [](const Document& d) { return renderSvg(d).toStdString(); }, "SVG, as the app exports it (the drawing embedded, so it reopens editable). (since 0.4)")
+        .def(
+            "bounds",
+            [](Document& d, std::vector<int> atoms) {
+                Document part = d;
+                if (!atoms.empty()) {
+                    atoms = selectedAtoms(d, std::move(atoms));
+                    std::vector<int> drop;
+                    for (int i = 0; i < int(d.atoms.size()); ++i)
+                        if (!std::binary_search(atoms.begin(), atoms.end(), i)) drop.push_back(i);
+                    part.arrows.clear(), part.texts.clear();
+                    part.removeAtoms(drop);
+                }
+                const QRectF r = outputBounds(part);
+                const double s = exportScale(d);
+                return std::make_tuple(r.left() * s, r.top() * s, r.right() * s, r.bottom() * s);
+            },
+            "atoms"_a = std::vector<int>{},
+            "Painted bounds (x0, y0, x1, y1) in drawing-style points, without export margin or scale. "
+            "Includes labels, charges, radicals and the renderer's small antialiasing allowance. [] measures the "
+            "whole drawing; otherwise measures the selected atoms as a standalone subdrawing, without free text "
+            "or arrows. Empty drawings return (0, 0, 0, 0). (since 2.1)")
+        .def(
+            "to_svg",
+            [](const Document& d, double margin, std::optional<std::string> background, double scale) {
+                return renderSvg(d, pythonExportOptions(d, margin, background, scale)).toStdString();
+            },
+            nb::kw_only(), "margin"_a = 0.0, "background"_a = nb::none(), "scale"_a = 1.0,
+            "SVG with the drawing embedded. Options (since 2.1): margin in points (0), background None for transparent "
+            "or a colour name/hex string, and positive scale (1). As in the app, a set page keeps its full frame. (since 0.4)")
         .def(
             "to_png",
-            [](const Document& d, double dpi) {
-                QByteArray png;
-                QBuffer buf(&png);
-                buf.open(QIODevice::WriteOnly);
-                renderImage(d, {dpi}).save(&buf, "PNG");
+            [](const Document& d, double dpi, double margin, std::optional<std::string> background, double scale) {
+                const QByteArray png = renderPng(d, pythonExportOptions(d, margin, background, scale, dpi));
+                if (png.isEmpty()) throw nb::value_error("cannot render PNG at these dimensions");
                 return nb::bytes(png.constData(), png.size());
             },
-            "dpi"_a = 300, "PNG bytes at this resolution. (since 0.4)")
+            "dpi"_a = 300, nb::kw_only(), "margin"_a = 0.0, "background"_a = nb::none(), "scale"_a = 1.0,
+            "PNG bytes at positive dpi (300). Options (since 2.1): margin in points (0), background None for transparent "
+            "or a colour name/hex string, and positive scale (1). A set page keeps its full frame. (since 0.4)")
         .def_prop_ro("formula", [](const Document& d) { auto p = chem::properties(d); return p ? p->formula : ""; },
                      "Molecular formula, Hill order, all molecules together (since 0.4)")
         .def_prop_ro("mw", [](const Document& d) { auto p = chem::properties(d); return p ? p->mw : 0.0; }, "Molecular weight (since 0.4)")
@@ -461,10 +507,14 @@ NB_MODULE(_penzene, m) {
         .def("save", &save, "path"_a, "Write .penz (full fidelity), .mol, or ChemDraw .cdxml or .cdx; images go through export(). (since 0.4)")
         .def(
             "export",
-            [](const Document& d, const std::string& path) {
-                if (!exportDocument(d, qs(path))) throw nb::value_error(("cannot export " + path).c_str());
+            [](const Document& d, const std::string& path, double margin, std::optional<std::string> background, double scale, double dpi) {
+                if (!exportDocument(d, qs(path), pythonExportOptions(d, margin, background, scale, dpi)))
+                    throw nb::value_error(("cannot export " + path).c_str());
             },
-            "path"_a, "Write .svg, .png or .pdf, exactly as the app exports. (since 0.4)")
+            "path"_a, nb::kw_only(), "margin"_a = 0.0, "background"_a = nb::none(), "scale"_a = 1.0, "dpi"_a = 300,
+            "Write .svg, .png or .pdf as the app exports. Options (since 2.1): margin in points (0), background None "
+            "for transparent or a colour name/hex string, positive scale (1), and PNG dpi (300). "
+            "A set page keeps its full frame. (since 0.4)")
         .def("_repr_svg_", [](const Document& d) { return renderSvg(d).toStdString(); })
         .def("__repr__", [](const Document& d) {
             auto p = chem::properties(d);
