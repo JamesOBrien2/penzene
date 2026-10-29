@@ -289,17 +289,14 @@ static std::optional<QPointF> chargeDirection(const Document& doc, int i, int hy
     return QPointF(std::cos(best), std::sin(best));
 }
 
-// Where a charge `c` in font `sub` is drawn from, its glyph centred just past `clear` along `dir`.
-static QPointF chargeAt(QPointF pos, QPointF dir, double clear, const QString& c, const DrawingStyle& st, bool circled) {
-    if (circleCharge(c, circled)) {
-        const QRectF box = chargeShape(c, st, true).bounds();
-        const QRectF centered = box.translated(-box.center());
-        return pos + dir * (clear + exitAlong(centered, dir) + 0.8 + st.lineWidth / 2) - box.center();
-    }
-    const QFont sub = labelFont(st, st.scriptScale);
-    const QFontMetricsF sm(sub);
-    const QRectF glyph(-sm.horizontalAdvance(c) / 2, -sm.capHeight() / 2, sm.horizontalAdvance(c), sm.capHeight());
-    return pos + dir * (clear + exitAlong(glyph, dir) + 0.8) + QPointF(glyph.left(), -glyph.top());
+// The charge's centre leaves the label expanded by its actual ink and circle stroke.
+static QPointF chargeAt(QPointF pos, QPointF dir, const QRectF& label, const QString& c, const DrawingStyle& st, bool circled) {
+    const QRectF box = chargeShape(c, st, circled).bounds();
+    const QRectF centered = box.translated(-box.center());
+    const double pad = 0.8 + (circleCharge(c, circled) ? st.lineWidth / 2 : 0);
+    const QRectF blocked = label.adjusted(-centered.right() - pad, -centered.bottom() - pad,
+                                         -centered.left() + pad, -centered.top() + pad);
+    return pos + dir * exitAlong(blocked, dir) - box.center();
 }
 
 static void drawAbbreviation(QPainter& p, const Document& doc, int i, bool fromRight, const DrawingStyle& st, QRectF* chargeBounds) {
@@ -309,7 +306,7 @@ static void drawAbbreviation(QPainter& p, const Document& doc, int i, bool fromR
     if (const int extra = labelCharge(a)) {
         const QString c = chargeText(a, extra);
         const QPointF d = chargeDirection(doc, i, 0, fromRight ? HSide::Left : HSide::Right).value_or(unit(QPointF(1, -1)));
-        drawCharge(p, c, chargeAt(a.pos, d, exitAlong(path.boundingRect(), d), c, st, doc.circledCharges), st, doc.circledCharges, chargeBounds);
+        drawCharge(p, c, chargeAt(a.pos, d, path.boundingRect(), c, st, doc.circledCharges), st, doc.circledCharges, chargeBounds);
     }
 }
 
@@ -352,7 +349,7 @@ static void drawLabel(QPainter& p, const Document& doc, int i, int hydrogens, HS
     if (a.charge && !chargeBeforeH) {
         const QString c = chargeText(a, a.charge);
         if (const auto d = chargeDirection(doc, i, hydrogens, side))
-            drawCharge(p, c, chargeAt(a.pos, *d, exitAlong(QRectF(-w / 2, -fm.capHeight() / 2, w, fm.capHeight()), *d), c, st, doc.circledCharges), st, doc.circledCharges, chargeBounds);
+            drawCharge(p, c, chargeAt(a.pos, *d, QRectF(-w / 2, -fm.capHeight() / 2, w, fm.capHeight()), c, st, doc.circledCharges), st, doc.circledCharges, chargeBounds);
         else drawCharge(p, c, {right, base - fm.capHeight() * st.superscriptOffset}, st, doc.circledCharges, chargeBounds);  // after any H
     }
 }
@@ -364,7 +361,7 @@ static void drawAtomLabel(QPainter& p, const Document& doc, int i, int hydrogens
     if (!a.charge) return;
     const QString c = chargeText(a, a.charge);
     const auto d = chargeDirection(doc, i, 0, HSide::Right);
-    const QPointF at = (d || circleCharge(c, doc.circledCharges)) ? chargeAt(a.pos, d.value_or(unit(QPointF(1, -1))), 2.5, c, st, doc.circledCharges)
+    const QPointF at = (d || circleCharge(c, doc.circledCharges)) ? chargeAt(a.pos, d.value_or(unit(QPointF(1, -1))), QRectF(-2.5, -2.5, 5, 5), c, st, doc.circledCharges)
                                                : a.pos + QPointF(2, -3);
     drawCharge(p, c, at, st, doc.circledCharges, chargeBounds);
 }

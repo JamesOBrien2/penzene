@@ -1621,12 +1621,15 @@ TEST_CASE("radicals are chemistry; lone pairs and δ are drawn (#106)") {
 }
 
 TEST_CASE("labelled charges and radicals share the free upper corner (#721)") {
-    for (const QString label : {QString("R"), QString("Ar")})
+    for (const QString font : {QString("Arial"), QString("Courier New")})
+      for (const QString label : {QString("R"), QString("Ar")})
         for (const auto [charge, radicals] : {std::pair{-1, 0}, std::pair{0, 1}, std::pair{-1, 1}, std::pair{1, 1}})
             for (bool circled : {false, true})
                 for (double direction : {-1.0, 1.0}) {
-                    CAPTURE(label, charge, radicals, circled, direction);
+                    CAPTURE(font, label, charge, radicals, circled, direction);
                     Document doc;
+                    doc.styleSettings = StyleSettings{};
+                    doc.styleSettings->font = font;
                     doc.atoms = {{{0, 0}, 0, charge, label}, {{direction * kBondLength, 0}, 7}};
                     doc.atoms[0].radicals = radicals;
                     doc.bonds = {{0, 1}};
