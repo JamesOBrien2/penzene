@@ -110,6 +110,11 @@ class Document:
     def add_bond(self, a: int, b: int, order: int = 1) -> None:
         """Bond atoms a and b (order 1, 2, 3 or 4). (since 0.4)"""
 
+    def bond_between(self, a: int, b: int) -> int | None:
+        """
+        Index of the bond joining atoms a and b in either order, or None if unbonded (including a == b). Invalid atom indices raise IndexError. Look up again after removing atoms or bonds, which reindexes them. (since 2.1)
+        """
+
     def set_label(self, atom: int, label: str, generic: bool = False) -> None:
         """
         Relabel an atom, as add_atom takes a label: an element ("C" undoes a label; show_symbol shows it), an abbreviation or a SMILES fragment (drawn out from it, its new atoms added at the end), or with generic=True any other text (R, X). (since 2.0)
