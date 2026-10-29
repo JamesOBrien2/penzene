@@ -10,7 +10,9 @@
 #include <QImage>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/optional.h>
+#include <nanobind/stl/pair.h>
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/tuple.h>
@@ -93,6 +95,28 @@ void inRange(int value, int lo, int hi, const char* what) {
     throw nb::attribute_error((std::string(type) + "." + field + " is read-only; " + hint).c_str());
 }
 
+void requireFinite(double value) {
+    if (!std::isfinite(value)) throw nb::value_error("coordinates and angles must be finite");
+}
+
+std::vector<int> selectedAtoms(Document& d, std::vector<int> atoms) {
+    if (atoms.empty())
+        for (int i = 0; i < int(d.atoms.size()); ++i) atoms.push_back(i);
+    for (int i : atoms) atomAt(d, i);
+    std::sort(atoms.begin(), atoms.end());
+    atoms.erase(std::unique(atoms.begin(), atoms.end()), atoms.end());
+    return atoms;
+}
+
+void transformAtoms(Document& d, const std::vector<int>& atoms, const QTransform& transform) {
+    Document next = d;
+    edit::transformAtoms(next, atoms, transform);
+    for (int i : atoms) requireFinite(next.atoms[i].pos.x()), requireFinite(next.atoms[i].pos.y());
+    edit::followAnchors(d, next);
+    edit::followNumbers(d, next);
+    d = std::move(next);
+}
+
 }  // namespace
 
 NB_MODULE(_penzene, m) {
@@ -103,6 +127,8 @@ NB_MODULE(_penzene, m) {
     nb::class_<Atom>(m, "Atom", "An atom of a Document (read-only; edit through Document: set_label, remove_atoms). (since 0.4)")
         .def("__setattr__", [](const Atom&, const std::string& field, nb::handle) {
             const std::map<std::string, const char*> hints = {
+                {"x", "use Document.set_position(atom, x, y)"},
+                {"y", "use Document.set_position(atom, x, y)"},
                 {"symbol", "use Document.set_label(atom, label)"},
                 {"label", "use Document.set_label(atom, label)"},
                 {"charge", "use Document.set_charge(atom, charge)"},
@@ -266,6 +292,57 @@ NB_MODULE(_penzene, m) {
             "x"_a, "y"_a, "text"_a,
             "Add free text, (x, y) the left end of its first baseline; formulas get subscripts (H2O). "
             "Returns its index. (since 2.0)")
+        .def(
+            "move_atoms",
+            [](Document& d, std::vector<int> atoms, double dx, double dy) {
+                requireFinite(dx), requireFinite(dy);
+                transformAtoms(d, selectedAtoms(d, std::move(atoms)), QTransform::fromTranslate(dx, dy));
+            },
+            "atoms"_a, "dx"_a, "dy"_a,
+            "Move atoms by (dx, dy) points; [] moves all atoms. Duplicate indices move once. (since 2.1)")
+        .def(
+            "set_position",
+            [](Document& d, int atom, double x, double y) {
+                requireFinite(x), requireFinite(y);
+                const QPointF by = QPointF(x, y) - atomAt(d, atom).pos;
+                transformAtoms(d, {atom}, QTransform::fromTranslate(by.x(), by.y()));
+            },
+            "atom"_a, "x"_a, "y"_a, "Place an atom at (x, y) in points. (since 2.1)")
+        .def(
+            "flip",
+            [](Document& d, std::vector<int> atoms, bool horizontal) {
+                atoms = selectedAtoms(d, std::move(atoms));
+                if (atoms.empty()) return;
+                Document part;
+                for (int i : atoms) part.atoms.push_back(d.atoms[i]);
+                part.style = d.style, part.styleSettings = d.styleSettings;
+                part.labelRatio = d.labelRatio, part.circledCharges = d.circledCharges;
+                const QPointF c = documentBounds(part).center();
+                transformAtoms(d, atoms, QTransform::fromTranslate(-c.x(), -c.y())
+                               * QTransform::fromScale(horizontal ? -1 : 1, horizontal ? 1 : -1)
+                               * QTransform::fromTranslate(c.x(), c.y()));
+            },
+            "atoms"_a = std::vector<int>{}, "horizontal"_a = true,
+            "Mirror atoms about their drawn centre, horizontally or vertically; [] means all atoms. "
+            "As in the app, wedges stay wedges (a mirror reverses chirality) and explicit double-bond sides flip. (since 2.1)")
+        .def(
+            "rotate",
+            [](Document& d, std::vector<int> atoms, double degrees, std::optional<std::pair<double, double>> about) {
+                requireFinite(degrees);
+                atoms = selectedAtoms(d, std::move(atoms));
+                QPointF c;
+                if (about) {
+                    requireFinite(about->first), requireFinite(about->second);
+                    c = {about->first, about->second};
+                } else {
+                    for (int i : atoms) c += d.atoms[i].pos / double(atoms.size());
+                }
+                transformAtoms(d, atoms, QTransform::fromTranslate(-c.x(), -c.y())
+                               * QTransform().rotate(degrees) * QTransform::fromTranslate(c.x(), c.y()));
+            },
+            "atoms"_a = std::vector<int>{}, nb::kw_only(), "degrees"_a, "about"_a = nb::none(),
+            "Rotate atoms clockwise by degrees (y points down), about (x, y) in points or their mean position. "
+            "[] means all atoms; bonds and wedges stay attached. (since 2.1)")
         .def(
             "remove_atoms",
             [](Document& d, std::vector<int> atoms) {

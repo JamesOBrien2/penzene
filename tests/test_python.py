@@ -25,7 +25,7 @@ assert len(doc.atoms) == 13 and doc.atoms[0].symbol == "C"
 # Atom and Bond snapshots stay read-only, with a useful route to editing (#716).
 before = doc.to_json()
 for obj, fields in (
-    (doc.atoms[0], dict(symbol="set_label", x="Document", y="Document", charge="set_charge",
+    (doc.atoms[0], dict(symbol="set_label", x="set_position", y="set_position", charge="set_charge",
                         isotope="Document", label="set_label", radicals="set_radicals", partial="set_partial")),
     (doc.bonds[0], dict(a="add_bond", b="add_bond", order="set_bond_order", style="set_bond_style")),
 ):
@@ -140,6 +140,56 @@ try:
     raise AssertionError("an unknown label must raise")
 except ValueError:
     assert ed.atoms[0].symbol == "C"  # and leave the atom as it was
+
+# Atom transforms (#717): selected atoms move once, with bonds and stereo intact.
+moved = pz.Document()
+for x, y in ((0, 0), (10, 0), (20, 10)):
+    moved.add_atom("C", x, y)
+moved.add_bond(0, 1, 2), moved.add_bond(1, 2)
+moved.move_atoms([0, 1, 0], 2, 3)
+assert [(a.x, a.y) for a in moved.atoms] == [(2, 3), (12, 3), (20, 10)]
+moved.set_position(2, 22, 3)
+moved.rotate(degrees=90, about=(2, 3))
+for a, expected in zip(moved.atoms, ((2, 3), (2, 13), (2, 23))):
+    assert abs(a.x - expected[0]) < 1e-8 and abs(a.y - expected[1]) < 1e-8
+assert [(b.a, b.b, b.order) for b in moved.bonds] == [(0, 1, 2), (1, 2, 1)]
+moved.rotate([0, 1], degrees=180)  # default pivot is this selection's mean
+assert abs(moved.atoms[0].y - 13) < 1e-8 and abs(moved.atoms[1].y - 3) < 1e-8
+assert abs(moved.atoms[2].y - 23) < 1e-8
+mirror_data = json.loads(moved.to_json())
+(mirror_data.get("pages") or [mirror_data])[0]["bonds"][0]["position"] = "left"
+mirrored = pz.from_json(json.dumps(mirror_data))
+mirrored.flip([0, 0, 1])
+mirror_page = json.loads(mirrored.to_json())
+assert (mirror_page.get("pages") or [mirror_page])[0]["bonds"][0]["position"] == "right"
+mirrored.flip([0])  # moving just one end does not swap the explicit side
+mirror_page = json.loads(mirrored.to_json())
+assert (mirror_page.get("pages") or [mirror_page])[0]["bonds"][0]["position"] == "right"
+chiral_move = pz.from_smiles("C[C@H](N)C(=O)O")
+original_smiles = chiral_move.to_smiles()
+chiral_move.rotate(degrees=37)
+assert chiral_move.to_smiles() == original_smiles
+chiral_move.flip()
+assert chiral_move.to_smiles() == pz.from_smiles("C[C@@H](N)C(=O)O").to_smiles()
+chiral_move.flip(horizontal=False)
+assert chiral_move.to_smiles() == original_smiles
+for bad, kind in ((lambda: moved.move_atoms([0, 99], 1, 2), IndexError),
+                  (lambda: moved.set_position(-1, 0, 0), IndexError),
+                  (lambda: moved.flip([99]), IndexError),
+                  (lambda: moved.rotate([0, 99], degrees=90), IndexError),
+                  (lambda: moved.move_atoms([], float("nan"), 0), ValueError),
+                  (lambda: moved.set_position(0, float("inf"), 0), ValueError),
+                  (lambda: moved.rotate(degrees=float("inf")), ValueError),
+                  (lambda: moved.rotate(degrees=1, about=(0, float("nan"))), ValueError)):
+    before = moved.to_json()
+    try:
+        bad()
+    except kind:
+        assert moved.to_json() == before
+    else:
+        raise AssertionError("invalid transform must fail without changing the drawing")
+empty = pz.Document()
+empty.move_atoms([], 1, 2), empty.flip(), empty.rotate(degrees=90)
 
 # Mechanism marks from Python (#659): a three-centre TS for R-NC to R-CN, with no JSON editing.
 ts = pz.Document()

@@ -78,6 +78,10 @@ Monoisotopic mass (since 0.4)
 
 Write .svg, .png or .pdf, exactly as the app exports. (since 0.4)
 
+### `flip(self, atoms: collections.abc.Sequence[int] = [], horizontal: bool = True) -> None`
+
+Mirror atoms about their drawn centre, horizontally or vertically; [] means all atoms. As in the app, wedges stay wedges (a mirror reverses chirality) and explicit double-bond sides flip. (since 2.1)
+
 ### `Document.formula`
 
 Molecular formula, Hill order, all molecules together (since 0.4)
@@ -85,6 +89,10 @@ Molecular formula, Hill order, all molecules together (since 0.4)
 ### `hotkeys(self, atom: int, keys: str, bond: int | None = None) -> tuple[int, int]`
 
 Type hotkeys with this atom as the hotspot (or atom=-1, bond=i for a bond). Returns the final (atom, bond) hotspot. (since 0.4)
+
+### `move_atoms(self, atoms: collections.abc.Sequence[int], dx: float, dy: float) -> None`
+
+Move atoms by (dx, dy) points; [] moves all atoms. Duplicate indices move once. (since 2.1)
 
 ### `Document.mw`
 
@@ -101,6 +109,10 @@ Remove atoms and their bonds. The atoms after each one removed move down to fill
 ### `remove_bonds(self, bonds: collections.abc.Sequence[int]) -> None`
 
 Remove bonds; their atoms stay. Later bonds move down as in remove_atoms, and atom indices don't change. (since 2.0)
+
+### `rotate(self, atoms: collections.abc.Sequence[int] = [], *, degrees: float, about: tuple[float, float] | None = None) -> None`
+
+Rotate atoms clockwise by degrees (y points down), about (x, y) in points or their mean position. [] means all atoms; bonds and wedges stay attached. (since 2.1)
 
 ### `save(self, path: str) -> None`
 
@@ -125,6 +137,10 @@ Relabel an atom, as add_atom takes a label: an element ("C" undoes a label; show
 ### `set_partial(self, atom: int, partial: int) -> None`
 
 Mark an atom δ+ (1) or δ− (-1), or neither (0); drawn only, not chemistry. (since 2.0)
+
+### `set_position(self, atom: int, x: float, y: float) -> None`
+
+Place an atom at (x, y) in points. (since 2.1)
 
 ### `set_radicals(self, atom: int, radicals: int) -> None`
 

@@ -153,6 +153,24 @@ class Document:
         Add free text, (x, y) the left end of its first baseline; formulas get subscripts (H2O). Returns its index. (since 2.0)
         """
 
+    def move_atoms(self, atoms: Sequence[int], dx: float, dy: float) -> None:
+        """
+        Move atoms by (dx, dy) points; [] moves all atoms. Duplicate indices move once. (since 2.1)
+        """
+
+    def set_position(self, atom: int, x: float, y: float) -> None:
+        """Place an atom at (x, y) in points. (since 2.1)"""
+
+    def flip(self, atoms: Sequence[int] = [], horizontal: bool = True) -> None:
+        """
+        Mirror atoms about their drawn centre, horizontally or vertically; [] means all atoms. As in the app, wedges stay wedges (a mirror reverses chirality) and explicit double-bond sides flip. (since 2.1)
+        """
+
+    def rotate(self, atoms: Sequence[int] = [], *, degrees: float, about: tuple[float, float] | None = None) -> None:
+        """
+        Rotate atoms clockwise by degrees (y points down), about (x, y) in points or their mean position. [] means all atoms; bonds and wedges stay attached. (since 2.1)
+        """
+
     def remove_atoms(self, atoms: Sequence[int]) -> None:
         """
         Remove atoms and their bonds. The atoms after each one removed move down to fill its place, so indices taken before are stale: remove everything in one call. (since 2.0)
