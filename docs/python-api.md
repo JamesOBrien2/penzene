@@ -42,6 +42,10 @@ A drawing: molecules, arrows and text, as the app holds it. (since 0.4)
 
 An empty drawing. (since 0.4)
 
+### `add_arrow(self, x0: float, y0: float, x1: float, y1: float, kind: str = 'reaction', text_above: str = '', text_below: str = '') -> int`
+
+Add an arrow from (x0, y0) to (x1, y1) in points: reaction, resonance, equilibrium or retro. Returns its arrow index. Condition text is placed horizontally, centred above/below the arrow as ordinary editable text; it is not attached to later endpoint edits. (since 2.1)
+
 ### `add_atom(self, label: str = 'C', x: float = 0.0, y: float = 0.0, generic: bool = False) -> int`
 
 Add an atom: an element, an abbreviation (OMe, Boc…) or a SMILES fragment. Returns its index. With generic=True (since 2.0), any other text is a generic atom as the app takes a typed label (R, R1, X, Ar). (since 0.4)

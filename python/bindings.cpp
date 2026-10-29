@@ -293,6 +293,39 @@ NB_MODULE(_penzene, m) {
             "Add free text, (x, y) the left end of its first baseline; formulas get subscripts (H2O). "
             "Returns its index. (since 2.0)")
         .def(
+            "add_arrow",
+            [](Document& d, double x0, double y0, double x1, double y1, const std::string& kind,
+               const std::string& above, const std::string& below) {
+                for (double value : {x0, y0, x1, y1}) requireFinite(value);
+                const std::map<std::string, ArrowKind> kinds = {
+                    {"reaction", ArrowKind::Reaction}, {"resonance", ArrowKind::Resonance},
+                    {"equilibrium", ArrowKind::Equilibrium}, {"retro", ArrowKind::Retro}};
+                const auto found = kinds.find(kind);
+                if (found == kinds.end()) throw nb::value_error("kind must be reaction, resonance, equilibrium or retro");
+                if (x0 == x1 && y0 == y1) throw nb::value_error("an arrow needs different endpoints");
+                Arrow arrow{{x0, y0}, {x1, y1}, found->second};
+                const QRectF box = arrowPath(arrow).boundingRect();
+                std::vector<Text> texts;
+                for (const auto& [label, top] : {std::pair{above, true}, std::pair{below, false}}) {
+                    if (label.empty()) continue;
+                    Text text{{0, 0}, qs(label)};
+                    const QRectF ink = textPath(text, documentStyle(d)).boundingRect();
+                    text.pos = {box.center().x() - ink.center().x(),
+                                top ? box.top() - 0.3 * kBondLength - ink.bottom()
+                                    : box.bottom() + 0.3 * kBondLength - ink.top()};
+                    requireFinite(text.pos.x()), requireFinite(text.pos.y());
+                    texts.push_back(text);
+                }
+                const int index = int(d.arrows.size());
+                d.arrows.push_back(arrow);
+                d.texts.insert(d.texts.end(), texts.begin(), texts.end());
+                return index;
+            },
+            "x0"_a, "y0"_a, "x1"_a, "y1"_a, "kind"_a = "reaction", "text_above"_a = "", "text_below"_a = "",
+            "Add an arrow from (x0, y0) to (x1, y1) in points: reaction, resonance, equilibrium or retro. "
+            "Returns its arrow index. Condition text is placed horizontally, centred above/below the arrow as "
+            "ordinary editable text; it is not attached to later endpoint edits. (since 2.1)")
+        .def(
             "move_atoms",
             [](Document& d, std::vector<int> atoms, double dx, double dy) {
                 requireFinite(dx), requireFinite(dy);

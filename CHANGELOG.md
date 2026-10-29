@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Python can add reaction, resonance, equilibrium and retrosynthesis arrows with condition text (#718).
 - Python drawings can move atoms, set their positions, mirror selections and rotate around a chosen point (#717).
 - Assigning to a read-only Python Atom or Bond field now names the field and points to Document editing methods (#716).
 - Ctrl/Cmd+scroll keeps the current view centred while zooming (#704).
