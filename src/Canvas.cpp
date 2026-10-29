@@ -425,7 +425,7 @@ static QSet<int> range(int from, int to) {
 // their curve's shape (its bend scales with the drawing, and flips with a mirror).
 static void applyTransform(Document& d, const QSet<int>& atoms, const QSet<int>& arrows, const QSet<int>& texts,
                            const QTransform& t) {
-    for (int i : atoms) d.atoms[i].pos = t.map(d.atoms[i].pos);
+    edit::transformAtoms(d, {atoms.begin(), atoms.end()}, t);
     for (int i : arrows) {
         Arrow& a = d.arrows[i];
         const double oldLen = len(a.to - a.from);
@@ -1513,12 +1513,10 @@ void Canvas::flipSelection(bool horizontal) {
         return horizontal ? QPointF(2 * c.x() - q.x(), q.y()) : QPointF(q.x(), 2 * c.y() - q.y());
     };
     Document next = doc_;
-    for (int i : all.atoms) next.atoms[i].pos = mirror(doc_.atoms[i].pos);
-    for (auto& b : next.bonds)  // a mirror swaps which side a double bond's second line is on
-        if (all.atoms.contains(b.a) && all.atoms.contains(b.b))
-            b.position = b.position == BondPosition::Left    ? BondPosition::Right
-                         : b.position == BondPosition::Right ? BondPosition::Left
-                                                             : b.position;
+    edit::transformAtoms(next, {all.atoms.begin(), all.atoms.end()},
+                         QTransform::fromTranslate(-c.x(), -c.y())
+                         * QTransform::fromScale(horizontal ? -1 : 1, horizontal ? 1 : -1)
+                         * QTransform::fromTranslate(c.x(), c.y()));
     for (int i : all.arrows) {
         Arrow& a = next.arrows[i];
         a.from = mirror(a.from), a.to = mirror(a.to), a.bend = -a.bend;

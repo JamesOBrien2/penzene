@@ -15,6 +15,15 @@
 
 namespace edit {
 
+void transformAtoms(Document& doc, const std::vector<int>& atoms, const QTransform& transform) {
+    for (int i : atoms) doc.atoms[i].pos = transform.map(doc.atoms[i].pos);
+    if (transform.determinant() >= 0) return;
+    const std::set<int> selected(atoms.begin(), atoms.end());
+    for (auto& b : doc.bonds)
+        if (selected.contains(b.a) && selected.contains(b.b))
+            b.position = b.position == BondPosition::Left ? BondPosition::Right
+                         : b.position == BondPosition::Right ? BondPosition::Left : b.position;
+}
 
 // Direction for a new bond from `atom` that avoids existing bonds.
 // `newOrder` is the order of the bond about to be added: it makes the atom sp

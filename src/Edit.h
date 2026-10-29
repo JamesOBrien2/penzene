@@ -4,10 +4,13 @@
 #include "Document.h"
 
 #include <QString>
+#include <QTransform>
 #include <map>
 #include <vector>
 
 namespace edit {
+// Move atom positions; a reflection also swaps explicit double-bond sides.
+void transformAtoms(Document& doc, const std::vector<int>& atoms, const QTransform& transform);
 constexpr double kMergeRadius = 0.3 * kBondLength;  // closer than this is the same atom
 
 // Direction for a new bond from `atom` that avoids existing bonds; `newOrder`
