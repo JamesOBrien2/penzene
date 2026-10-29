@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Documented the dependency work and browser limitations for a possible WebAssembly preview (#713).
 - Charges and radical dots on labels avoid bonds, and radical ions stay together as one superscript group (#721).
 - Python's bond_between(a, b) finds the bond index for an atom pair in either order (#720).
 - Python exports accept margin, background and scale, and bounds() measures painted labels and marks without parsing SVG (#719).
