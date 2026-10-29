@@ -153,6 +153,11 @@ class Document:
         Add free text, (x, y) the left end of its first baseline; formulas get subscripts (H2O). Returns its index. (since 2.0)
         """
 
+    def add_arrow(self, x0: float, y0: float, x1: float, y1: float, kind: str = 'reaction', text_above: str = '', text_below: str = '') -> int:
+        """
+        Add an arrow from (x0, y0) to (x1, y1) in points: reaction, resonance, equilibrium or retro. Returns its arrow index. Condition text is placed horizontally, centred above/below the arrow as ordinary editable text; it is not attached to later endpoint edits. (since 2.1)
+        """
+
     def move_atoms(self, atoms: Sequence[int], dx: float, dy: float) -> None:
         """
         Move atoms by (dx, dy) points; [] moves all atoms. Duplicate indices move once. (since 2.1)

@@ -141,6 +141,36 @@ try:
 except ValueError:
     assert ed.atoms[0].symbol == "C"  # and leave the atom as it was
 
+# Reaction schemes from Python use the app's arrow kinds and editable text (#718).
+scheme = pz.Document()
+for i, kind in enumerate(("reaction", "resonance", "equilibrium", "retro")):
+    assert scheme.add_arrow(0, i * 50, 60, i * 50, kind=kind, text_above="H2O", text_below="heat") == i
+scheme_page = json.loads(scheme.to_json())
+scheme_page = (scheme_page.get("pages") or [scheme_page])[0]
+assert [a["kind"] for a in scheme_page["arrows"]] == ["reaction", "resonance", "equilibrium", "retro"]
+assert len(scheme_page["texts"]) == 8
+for i in range(4):
+    above, below = scheme_page["texts"][2 * i:2 * i + 2]
+    assert above["text"] == "H2O" and above["y"] < i * 50
+    assert below["text"] == "heat" and below["y"] > i * 50
+assert pz.from_json(scheme.to_json()).to_svg() == scheme.to_svg()
+assert "<path" in scheme.to_svg() and scheme.to_png().startswith(b"\x89PNG")
+assert scheme.add_arrow(100, 0, 0, 50) == 4  # leftward, diagonal, and default kind
+page = json.loads(scheme.to_json())
+page = (page.get("pages") or [page])[0]
+assert page["arrows"][-1]["kind"] == "reaction" and len(page["texts"]) == 8
+for bad in (lambda: scheme.add_arrow(0, 0, 0, 0),
+            lambda: scheme.add_arrow(0, 0, 20, 0, kind="unknown"),
+            lambda: scheme.add_arrow(float("nan"), 0, 20, 0),
+            lambda: scheme.add_arrow(0, 0, float("inf"), 0)):
+    before = scheme.to_json()
+    try:
+        bad()
+    except ValueError:
+        assert scheme.to_json() == before
+    else:
+        raise AssertionError("invalid arrow must fail without changing the drawing")
+
 # Atom transforms (#717): selected atoms move once, with bonds and stereo intact.
 moved = pz.Document()
 for x, y in ((0, 0), (10, 0), (20, 10)):
