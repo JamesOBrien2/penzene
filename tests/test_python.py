@@ -216,6 +216,24 @@ try:
 except ValueError:
     assert ed.atoms[0].symbol == "C"  # and leave the atom as it was
 
+# Atom-pair bond lookup always uses current indices, including after removals (#720).
+lookup = pz.from_smiles("CCCO")
+assert lookup.bond_between(1, 2) == lookup.bond_between(2, 1) == 1
+assert lookup.bond_between(0, 3) is None and lookup.bond_between(0, 0) is None
+lookup.set_bond_order(lookup.bond_between(1, 2), 2)
+assert lookup.bonds[1].order == 2
+lookup.remove_atoms([0])
+assert lookup.bond_between(0, 1) == 0 and lookup.bonds[0].order == 2
+lookup.remove_bonds([0])
+assert lookup.bond_between(0, 1) is None and lookup.bond_between(1, 2) == 0
+for a, b in ((-1, 0), (0, -1), (3, 0), (0, 3)):
+    try:
+        lookup.bond_between(a, b)
+    except IndexError:
+        pass
+    else:
+        raise AssertionError("bond_between must validate both atom indices")
+
 # Reaction schemes from Python use the app's arrow kinds and editable text (#718).
 scheme = pz.Document()
 for i, kind in enumerate(("reaction", "resonance", "equilibrium", "retro")):

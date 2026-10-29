@@ -66,6 +66,10 @@ Add free text, (x, y) the left end of its first baseline; formulas get subscript
 
 The atoms, in order (their index is what add_bond and hotkeys take) (since 0.4)
 
+### `bond_between(self, a: int, b: int) -> int | None`
+
+Index of the bond joining atoms a and b in either order, or None if unbonded (including a == b). Invalid atom indices raise IndexError. Look up again after removing atoms or bonds, which reindexes them. (since 2.1)
+
 ### `Document.bonds`
 
 The bonds (since 0.4)

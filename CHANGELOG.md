@@ -6,6 +6,7 @@ a bullet with a **bold title** is a highlight (with an optional `<!-- icon: name
 
 ## Unreleased
 
+- Python's bond_between(a, b) finds the bond index for an atom pair in either order (#720).
 - Python exports accept margin, background and scale, and bounds() measures painted labels and marks without parsing SVG (#719).
 - Python can add reaction, resonance, equilibrium and retrosynthesis arrows with condition text (#718).
 - Python drawings can move atoms, set their positions, mirror selections and rotate around a chosen point (#717).

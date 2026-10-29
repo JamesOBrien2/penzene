@@ -222,6 +222,16 @@ NB_MODULE(_penzene, m) {
             },
             "a"_a, "b"_a, "order"_a = 1, "Bond atoms a and b (order 1, 2, 3 or 4). (since 0.4)")
         .def(
+            "bond_between",
+            [](Document& d, int a, int b) -> std::optional<int> {
+                atomAt(d, a), atomAt(d, b);
+                const int bond = d.bondBetween(a, b);
+                return bond < 0 ? std::nullopt : std::optional<int>(bond);
+            },
+            "a"_a, "b"_a,
+            "Index of the bond joining atoms a and b in either order, or None if unbonded (including a == b). "
+            "Invalid atom indices raise IndexError. Look up again after removing atoms or bonds, which reindexes them. (since 2.1)")
+        .def(
             "set_label",
             [](Document& d, int atom, const std::string& label, bool generic) {
                 if (atom < 0 || atom >= int(d.atoms.size())) throw nb::index_error("no such atom");
