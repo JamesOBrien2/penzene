@@ -1620,6 +1620,50 @@ TEST_CASE("radicals are chemistry; lone pairs and δ are drawn (#106)") {
     CHECK(*back == water);
 }
 
+TEST_CASE("labelled charges and radicals share the free upper corner (#721)") {
+    for (const QString label : {QString("R"), QString("Ar")})
+        for (const auto [charge, radicals] : {std::pair{-1, 0}, std::pair{0, 1}, std::pair{-1, 1}, std::pair{1, 1}})
+            for (bool circled : {false, true})
+                for (double direction : {-1.0, 1.0}) {
+                    CAPTURE(label, charge, radicals, circled, direction);
+                    Document doc;
+                    doc.atoms = {{{0, 0}, 0, charge, label}, {{direction * kBondLength, 0}, 7}};
+                    doc.atoms[0].radicals = radicals;
+                    doc.bonds = {{0, 1}};
+                    doc.circledCharges = circled;
+                    auto render = [](const Document& d) {
+                        QImage image(800, 800, QImage::Format_ARGB32);
+                        image.fill(Qt::white);
+                        QPainter painter(&image);
+                        painter.translate(400, 400);
+                        painter.scale(20, 20);
+                        paintDocument(painter, d, {Qt::black, Qt::black, 0.6});
+                        return image;
+                    };
+                    const QImage with = render(doc);
+                    doc.atoms[0].charge = doc.atoms[0].radicals = 0;
+                    const QImage without = render(doc);
+                    QRect marks;
+                    std::vector<QPoint> ink;
+                    for (int y = 0; y < with.height(); ++y)
+                        for (int x = 0; x < with.width(); ++x)
+                            if (qGray(with.pixel(x, y)) < 128 && qGray(without.pixel(x, y)) >= 128) {
+                                marks |= QRect(x, y, 1, 1);
+                                ink.push_back({x, y});
+                            }
+                    REQUIRE(marks.isValid());
+                    CHECK(marks.bottom() < 400);
+                    CHECK((marks.center().x() - 400) * direction < 0);
+                    int clash = 0;
+                    for (QPoint pixel : ink) {
+                        const QRect near = QRect(pixel, QSize(1, 1)).adjusted(-8, -8, 8, 8) & without.rect();
+                        for (int y = near.top(); y <= near.bottom(); ++y)
+                            for (int x = near.left(); x <= near.right(); ++x) clash += qGray(without.pixel(x, y)) < 128;
+                    }
+                    CHECK(clash == 0);
+                }
+}
+
 TEST_CASE("a lone labelled radical sits at the label's upper right (#666)") {
     Document radical;
     Atom atom;
