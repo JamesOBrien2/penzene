@@ -111,5 +111,6 @@ python-api
 :hidden:
 
 contributing
+webassembly
 Changelog <https://github.com/JamesOBrien2/penzene/blob/main/CHANGELOG.md>
 ```
