@@ -226,13 +226,20 @@ class Document:
     def to_json(self) -> str:
         """The .penz document (JSON). (since 0.4)"""
 
-    def to_svg(self) -> str:
+    def bounds(self, atoms: Sequence[int] = []) -> tuple[float, float, float, float]:
         """
-        SVG, as the app exports it (the drawing embedded, so it reopens editable). (since 0.4)
+        Painted bounds (x0, y0, x1, y1) in drawing-style points, without export margin or scale. Includes labels, charges, radicals and the renderer's small antialiasing allowance. [] measures the whole drawing; otherwise measures the selected atoms as a standalone subdrawing, without free text or arrows. Empty drawings return (0, 0, 0, 0). (since 2.1)
         """
 
-    def to_png(self, dpi: float = 300) -> bytes:
-        """PNG bytes at this resolution. (since 0.4)"""
+    def to_svg(self, *, margin: float = 0.0, background: str | None = None, scale: float = 1.0) -> str:
+        """
+        SVG with the drawing embedded. Options (since 2.1): margin in points (0), background None for transparent or a colour name/hex string, and positive scale (1). As in the app, a set page keeps its full frame. (since 0.4)
+        """
+
+    def to_png(self, dpi: float = 300, *, margin: float = 0.0, background: str | None = None, scale: float = 1.0) -> bytes:
+        """
+        PNG bytes at positive dpi (300). Options (since 2.1): margin in points (0), background None for transparent or a colour name/hex string, and positive scale (1). A set page keeps its full frame. (since 0.4)
+        """
 
     @property
     def formula(self) -> str:
@@ -251,8 +258,10 @@ class Document:
         Write .penz (full fidelity), .mol, or ChemDraw .cdxml or .cdx; images go through export(). (since 0.4)
         """
 
-    def export(self, path: str) -> None:
-        """Write .svg, .png or .pdf, exactly as the app exports. (since 0.4)"""
+    def export(self, path: str, *, margin: float = 0.0, background: str | None = None, scale: float = 1.0, dpi: float = 300) -> None:
+        """
+        Write .svg, .png or .pdf as the app exports. Options (since 2.1): margin in points (0), background None for transparent or a colour name/hex string, positive scale (1), and PNG dpi (300). A set page keeps its full frame. (since 0.4)
+        """
 
     def __repr__(self) -> str: ...
 

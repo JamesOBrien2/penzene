@@ -70,6 +70,10 @@ The atoms, in order (their index is what add_bond and hotkeys take) (since 0.4)
 
 The bonds (since 0.4)
 
+### `bounds(self, atoms: collections.abc.Sequence[int] = []) -> tuple[float, float, float, float]`
+
+Painted bounds (x0, y0, x1, y1) in drawing-style points, without export margin or scale. Includes labels, charges, radicals and the renderer's small antialiasing allowance. [] measures the whole drawing; otherwise measures the selected atoms as a standalone subdrawing, without free text or arrows. Empty drawings return (0, 0, 0, 0). (since 2.1)
+
 ### `clean(self, atoms: collections.abc.Sequence[int] = []) -> None`
 
 Lay out afresh with RDKit; with atoms, only the molecules containing them. (since 0.4)
@@ -78,9 +82,9 @@ Lay out afresh with RDKit; with atoms, only the molecules containing them. (sinc
 
 Monoisotopic mass (since 0.4)
 
-### `export(self, path: str) -> None`
+### `export(self, path: str, *, margin: float = 0.0, background: str | None = None, scale: float = 1.0, dpi: float = 300) -> None`
 
-Write .svg, .png or .pdf, exactly as the app exports. (since 0.4)
+Write .svg, .png or .pdf as the app exports. Options (since 2.1): margin in points (0), background None for transparent or a colour name/hex string, positive scale (1), and PNG dpi (300). A set page keeps its full frame. (since 0.4)
 
 ### `flip(self, atoms: collections.abc.Sequence[int] = [], horizontal: bool = True) -> None`
 
@@ -178,17 +182,17 @@ The .penz document (JSON). (since 0.4)
 
 MDL MOL, with the drawing's wedges; V3000 when coordinate bonds require it. (since 0.4)
 
-### `to_png(self, dpi: float = 300) -> bytes`
+### `to_png(self, dpi: float = 300, *, margin: float = 0.0, background: str | None = None, scale: float = 1.0) -> bytes`
 
-PNG bytes at this resolution. (since 0.4)
+PNG bytes at positive dpi (300). Options (since 2.1): margin in points (0), background None for transparent or a colour name/hex string, and positive scale (1). A set page keeps its full frame. (since 0.4)
 
 ### `to_smiles(self) -> str`
 
 Canonical SMILES ("" if the drawing isn't valid chemistry), as CXSMILES carrying only the stereo groups (&1, or1) when there are any. (since 0.4)
 
-### `to_svg(self) -> str`
+### `to_svg(self, *, margin: float = 0.0, background: str | None = None, scale: float = 1.0) -> str`
 
-SVG, as the app exports it (the drawing embedded, so it reopens editable). (since 0.4)
+SVG with the drawing embedded. Options (since 2.1): margin in points (0), background None for transparent or a colour name/hex string, and positive scale (1). As in the app, a set page keeps its full frame. (since 0.4)
 
 
 ## Atom

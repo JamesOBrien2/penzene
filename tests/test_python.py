@@ -5,6 +5,9 @@ import os
 import subprocess
 import sys
 import tempfile
+import struct
+import zlib
+import xml.etree.ElementTree as ET
 
 import penzene as pz
 
@@ -41,6 +44,78 @@ for obj, fields in (
                 raise AssertionError(f"{field} should be read-only")
         assert getattr(obj, field) == original
 assert doc.to_json() == before
+
+# Export options use the app's frame, while bounds exclude the requested margin (#719).
+def png_info(data):
+    width, height, depth, color = struct.unpack(">IIBB", data[16:26])
+    assert depth == 8 and color in (2, 6)
+    chunks = []
+    offset = 8
+    while offset < len(data):
+        size = struct.unpack(">I", data[offset:offset + 4])[0]
+        if data[offset + 4:offset + 8] == b"IDAT":
+            chunks.append(data[offset + 8:offset + 8 + size])
+        offset += size + 12
+    # Every PNG filter leaves the first pixel unchanged on the first row.
+    pixel = zlib.decompress(b"".join(chunks))[1:1 + (4 if color == 6 else 3)]
+    return (width, height), tuple(pixel)
+
+x0, y0, x1, y1 = doc.bounds()
+assert x0 < x1 and y0 < y1
+frame = [float(x) for x in ET.fromstring(doc.to_svg(margin=3, scale=2, background="white")).attrib["viewBox"].split()]
+assert abs(frame[2] - (2 * (x1 - x0) + 6)) < 1e-5
+assert abs(frame[3] - (2 * (y1 - y0) + 6)) < 1e-5
+png = doc.to_png(72, margin=3, background="#ffffff", scale=2)
+size, pixel = png_info(png)
+assert size == (round(frame[2]), round(frame[3])) and pixel in ((255, 255, 255), (255, 255, 255, 255))
+assert png_info(doc.to_png(72, margin=3))[1][-1] == 0
+assert doc.to_svg() == doc.to_svg(margin=0, background=None, scale=1)
+for ext in ("png", "svg", "pdf"):
+    path = os.path.join(out, "options." + ext)
+    doc.export(path, margin=3, background="white", scale=2, dpi=72)
+    with open(path, "rb") as f:
+        content = f.read()
+    if ext == "png":
+        assert content == png
+    elif ext == "svg":
+        assert content.decode() == doc.to_svg(margin=3, background="white", scale=2)
+    else:
+        assert content.startswith(b"%PDF")
+mark = pz.Document()
+mark.add_atom("R", generic=True), mark.set_charge(0, -1), mark.set_radicals(0, 1)
+mark_bounds = mark.bounds()
+mark.add_atom("O", x=200), mark.add_text(400, 0, "free text")
+assert mark.bounds([0, 0]) == mark_bounds and mark.bounds()[2] > 400
+assert pz.Document().bounds() == (0, 0, 0, 0)
+styled_bounds = pz.from_smiles("CO")
+styled_bounds.style = "RSC"
+bounds = styled_bounds.bounds()
+frame = [float(x) for x in ET.fromstring(styled_bounds.to_svg()).attrib["viewBox"].split()]
+assert abs(frame[2] - (bounds[2] - bounds[0])) < 1e-4  # style's physical points, not model coordinates
+for bad in (lambda: doc.bounds([0, 999]), lambda: doc.bounds([-1])):
+    try:
+        bad()
+    except IndexError:
+        pass
+    else:
+        raise AssertionError("bounds must validate atom indices")
+for options in ({"margin": -1}, {"margin": float("nan")}, {"scale": 0}, {"scale": float("inf")},
+                {"scale": 1e300}, {"background": "not-a-colour"}):
+    for render in (doc.to_svg, doc.to_png, lambda **opts: doc.export(os.path.join(out, "invalid.png"), **opts)):
+        try:
+            render(**options)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"invalid export options accepted: {options}")
+assert not os.path.exists(os.path.join(out, "invalid.png"))
+for dpi in (0, -1, float("inf"), 1e100):
+    try:
+        doc.to_png(dpi)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid dpi accepted")
 
 again = pz.read(os.path.join(out, "aspirin.penz"))
 assert again.to_smiles() == doc.to_smiles()
