@@ -3906,10 +3906,76 @@ TEST_CASE("bold bonds meet without a notch at a skeletal atom (#217)") {
         auto inked = [&](QPointF at) { return qAlpha(img.pixel((at * 40 + QPointF(200, 200)).toPoint())) > 128; };
         INFO((boldBoth ? "two bold bonds" : "bold and plain"));
         // Just past the bold bond's flat end, on the outside of the corner.
-        CHECK(inked({-0.25, -0.55}));
-        if (boldBoth) CHECK(inked({0, -0.7}));
+        if (boldBoth) {
+            CHECK(inked({-0.25, -0.55}));
+            CHECK(inked({0, -0.7}));
+        } else CHECK_FALSE(inked({-0.25, -0.55}));
         CHECK_FALSE(inked({0, -1.3}));  // and nothing sticks out beyond the bonds' width
     }
+}
+
+TEST_CASE("bold and plain bonds meet without an outer step (#736)") {
+    App app;
+    for (bool reversed : {false, true}) for (int mirror : {-1, 1}) {
+        Document doc;
+        doc.addAtom({0, 0});
+        doc.addAtom({0, kBondLength});
+        doc.addAtom({mirror * -kBondLength * std::sqrt(3.0) / 2, -kBondLength / 2});
+        doc.addAtom({mirror * -kBondLength * std::sqrt(3.0) / 2, 1.5 * kBondLength});
+        doc.bonds.push_back({reversed ? 1 : 0, reversed ? 0 : 1});
+        doc.bonds[0].stereo = BondStereo::Bold;
+        doc.bonds.push_back({0, 2});
+        doc.bonds.push_back({1, 3});
+        QImage img(900, 900, QImage::Format_ARGB32_Premultiplied);
+        img.fill(Qt::transparent);
+        QPainter p(&img);
+        p.translate(450, 200);
+        p.scale(40, 40);
+        paintDocument(p, doc);
+        p.end();
+        auto inked = [&](QPointF at) { return qAlpha(img.pixel((at * 40 + QPointF(450, 200)).toPoint())) > 128; };
+        INFO("reversed=" << reversed << " mirror=" << mirror);
+        CHECK_FALSE(inked({mirror * 0.9, 0.05}));
+        CHECK_FALSE(inked({mirror * 0.9, kBondLength - 0.05}));
+        CHECK(inked({mirror * 0.6, 0.1}));
+        CHECK(inked({mirror * 0.7, 0.8}));
+        CHECK(inked({mirror * 0.7, kBondLength - 0.8}));
+    }
+}
+
+TEST_CASE("bold joins retain crossing gaps and other bold joins (#736)") {
+    App app;
+    auto render = [](const Document& doc) {
+        QImage img(800, 800, QImage::Format_ARGB32_Premultiplied);
+        img.fill(Qt::transparent);
+        QPainter p(&img);
+        p.translate(400, 400);
+        p.scale(40, 40);
+        paintDocument(p, doc);
+        return img;
+    };
+    auto inked = [](const QImage& img, QPointF at) {
+        return qAlpha(img.pixel((at * 40 + QPointF(400, 400)).toPoint())) > 128;
+    };
+    Document crossing;
+    crossing.addAtom({0, 0}); crossing.addAtom({14.4, 0});
+    crossing.addAtom({-12.47, 7.2});
+    crossing.addAtom({3, -6}); crossing.addAtom({3, 6});
+    crossing.bonds.push_back({0, 1}); crossing.bonds[0].stereo = BondStereo::Bold;
+    crossing.bonds.push_back({0, 2}); crossing.bonds.push_back({3, 4});
+    auto img = render(crossing);
+    CHECK_FALSE(inked(img, {0.5, -0.8}));
+    CHECK_FALSE(inked(img, {0.75, -0.9}));
+
+    Document mixed;
+    mixed.addAtom({0, 0}); mixed.addAtom({14.4, 0}); mixed.addAtom({0, 14.4});
+    mixed.addAtom({-7.2, 12.47});
+    mixed.bonds.push_back({0, 1}); mixed.bonds[0].stereo = BondStereo::Bold;
+    mixed.bonds.push_back({0, 2}); mixed.bonds[1].stereo = BondStereo::Bold;
+    mixed.bonds.push_back({0, 3});
+    img = render(mixed);
+    CHECK(inked(img, {-0.6, -0.1}));
+    CHECK(inked(img, {-0.5, -0.3}));
 }
 
 TEST_CASE("the logo is the teal ring on a white tile (#273)") {
