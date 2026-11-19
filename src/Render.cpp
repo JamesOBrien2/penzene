@@ -996,7 +996,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
     std::vector<bool> bracketed(doc.atoms.size());
     for (const Bracket& b : doc.brackets)
         for (int i : b.atoms) bracketed[i] = true;
-    std::vector<QRectF> drawn(doc.atoms.size());
+    std::vector<QRectF> drawn(doc.atoms.size()), labelInk(doc.atoms.size());  // labelInk: the label alone, without dot or δ marks
     if (style.labels) style.labels->assign(doc.atoms.size(), {});
     for (size_t i = 0; i < doc.atoms.size(); ++i) {
         const auto& a = doc.atoms[i];
@@ -1008,7 +1008,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
             q.setPen(p.pen());
             drawAtomLabel(q, doc, int(i), info[i].hydrogens, hSide(int(i)), labeled[i], st);
             q.end();
-            drawn[i] = label.boundingRect();
+            drawn[i] = labelInk[i] = label.boundingRect();
             if (style.labels) (*style.labels)[i] = drawn[i];
         }
         if (info[i].valenceError && !labeled[i]) p.drawEllipse(a.pos, 3, 3);
@@ -1108,7 +1108,7 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
         const double padX = 0.55 * kBondLength, padY = 0.6 * kBondLength;
         QRectF box = pts.boundingRect().adjusted(-padX, -padY, padX, padY);
         for (int i : b.atoms)
-            if (!drawn[i].isNull()) box |= drawn[i].adjusted(-padX, -padY, padX, padY);
+            if (!drawn[i].isNull()) box |= drawn[i].adjusted(-1.5, -1.5, 1.5, 1.5) | labelInk[i].adjusted(-padX, -padY, padX, padY);
         const double lip = 0.2 * kBondLength;
         p.setPen(QPen(style.ink, lineWidth));
         p.setBrush(Qt::NoBrush);
