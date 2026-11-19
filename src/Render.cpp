@@ -484,6 +484,49 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         p.drawPath(wave);
         return;
     }
+    // Mitre a bold single bond against ordinary single bonds at bare junctions.
+    // Each side meets the corresponding edge of its nearest neighbour. Limit
+    // the intersection to avoid spikes at near-collinear or very short bonds.
+    QPointF ends[2][2] = {{a + n * st.boldWidth / 2, a - n * st.boldWidth / 2},
+                          {e + n * st.boldWidth / 2, e - n * st.boldWidth / 2}};
+    bool mitred[2] = {false, false};
+    QPointF join[2] = {a, e};
+    if (b.stereo == BondStereo::Bold && b.order == 1) {
+        for (int end = 0; end < 2; ++end) {
+            const int atom = end ? b.b : b.a;
+            const QPointF c = end ? pb : pa, tip = end ? e : a, out = end ? -d : d;
+            if (labeled[atom] || len(tip - c) > 1e-6) continue;
+            QPointF result[2];
+            bool ok = true;
+            for (int side = 0; side < 2; ++side) {
+                const QPointF edge = ends[end][side];
+                const double localSide = (side == 0 ? 1.0 : -1.0) * (end ? -1.0 : 1.0);
+                double best = -2;
+                bool found = false;
+                // Prefer a neighbour on this side; if there is none, use the
+                // neighbour on the other side, as at an ordinary ring corner.
+                for (int pass = 0; pass < 2 && !found; ++pass) {
+                    for (int k : at[atom]) {
+                        const Bond& o = doc.bonds[k];
+                        if (std::minmax(o.a, o.b) == std::minmax(b.a, b.b) || o.order != 1 || o.stereo != BondStereo::None) continue;
+                        const QPointF v = unit(doc.atoms[o.a == atom ? o.b : o.a].pos - c);
+                        const double cr = cross(out, v), alignment = QPointF::dotProduct(out, v);
+                        if (std::abs(cr) < 1e-5 || (pass == 0 && cr * localSide <= 0) || alignment <= best) continue;
+                        const QPointF neighborEdge = c - perp(v) * (localSide * p.pen().widthF() / 2);
+                        const double t = cross(neighborEdge - edge, v) / cr;
+                        if (std::abs(t) > std::min(2 * st.boldWidth, len(pb - pa) / 3)) continue;
+                        result[side] = edge + out * t;
+                        if (cr * localSide < 0)
+                            join[end] = c + out * (cross(neighborEdge - c, v) / cr);
+                        best = alignment;
+                        found = true;
+                    }
+                }
+                if (!found) { ok = false; break; }
+            }
+            if (ok) { ends[end][0] = result[0]; ends[end][1] = result[1]; mitred[end] = true; }
+        }
+    }
     // Bold styles the main line, Dashed, Partial and DoubleDashed the other one (or the only one).
     const QPen pen = p.pen();
     auto line = [&](QPointF x, QPointF y, bool main) {
@@ -500,12 +543,37 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         for (QPointF g : gaps) cuts.push_back(QPointF::dotProduct(g - x, y - x) / (length * length));
         std::sort(cuts.begin(), cuts.end());
         double from = 0;
+        auto segment = [&](double first, double last) {
+            if (b.stereo == BondStereo::Bold && b.order == 1 && main && (mitred[0] || mitred[1])) {
+                QPolygonF polygon{ends[0][0]};
+                if (mitred[0]) polygon << join[0];
+                polygon << ends[0][1] << ends[1][1];
+                if (mitred[1]) polygon << join[1];
+                polygon << ends[1][0];
+                // Clip the complete outline to each surviving crossing interval.
+                // Constructing a new polygon per interval can cross its edges
+                // when a mitre extends past a nearby gap.
+                const QPointF direction = unit(y - x);
+                const double lo = first == 0 ? -2 * st.boldWidth : first * length;
+                const double hi = last == 1 ? length + 2 * st.boldWidth : last * length;
+                const QPointF across = perp(direction) * (2 * st.boldWidth);
+                QPainterPath clip;
+                clip.addPolygon(QPolygonF{x + direction * lo + across, x + direction * hi + across,
+                                          x + direction * hi - across, x + direction * lo - across});
+                p.save();
+                p.setClipPath(clip, Qt::IntersectClip);
+                p.setPen(Qt::NoPen);
+                p.setBrush(q.color());
+                p.drawPolygon(polygon);
+                p.restore();
+            } else p.drawLine(x + (y - x) * first, x + (y - x) * last);
+        };
         for (double c : cuts) {
             const double to = c - half / length;
-            if (to > from) p.drawLine(x + (y - x) * from, x + (y - x) * to);
+            if (to > from) segment(from, std::min(to, 1.0));
             from = std::max(from, c + half / length);
         }
-        if (from < 1) p.drawLine(x + (y - x) * from, y);
+        if (from < 1) segment(from, 1);
         p.setPen(pen);
     };
 
@@ -553,6 +621,7 @@ static void drawBond(QPainter& p, const Document& doc, const Bond& b, const Draw
         for (int other : at[end]) {
             const Bond& o = doc.bonds[other];
             if (std::minmax(o.a, o.b) == std::minmax(b.a, b.b)) continue;  // this bond (b may be a copy)
+            if (b.order == 1 && mitred[end == b.a ? 0 : 1] && o.order == 1 && o.stereo == BondStereo::None) continue;
             const QPointF dir = unit(doc.atoms[o.a == end ? o.b : o.a].pos - c);
             const double w = st.boldWidth / 2, w2 = o.stereo == BondStereo::Bold ? w : pen.widthF() / 2;
             std::vector<QPointF> quad{c + perp(out) * w, c - perp(out) * w, c + perp(dir) * w2, c - perp(dir) * w2};
