@@ -1105,9 +1105,10 @@ void paintDocument(QPainter& p, const Document& doc, const RenderStyle& style) {
     for (const Bracket& b : doc.brackets) {
         QPolygonF pts;
         for (int i : b.atoms) pts << doc.atoms[i].pos;
-        QRectF box = pts.boundingRect().adjusted(-0.55 * kBondLength, -0.6 * kBondLength, 0.55 * kBondLength, 0.6 * kBondLength);
+        const double padX = 0.55 * kBondLength, padY = 0.6 * kBondLength;
+        QRectF box = pts.boundingRect().adjusted(-padX, -padY, padX, padY);
         for (int i : b.atoms)
-            if (!drawn[i].isNull()) box |= drawn[i].adjusted(-1.5, -1.5, 1.5, 1.5);
+            if (!drawn[i].isNull()) box |= drawn[i].adjusted(-padX, -padY, padX, padY);
         const double lip = 0.2 * kBondLength;
         p.setPen(QPen(style.ink, lineWidth));
         p.setBrush(Qt::NoBrush);
