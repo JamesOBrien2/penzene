@@ -410,3 +410,34 @@ if importlib.util.find_spec("jsonschema"):
         with open(path) as f:
             jsonschema.validate(json.load(f), schema)
         jsonschema.validate(json.loads(pz.read(path).to_json()), schema)
+
+# Labels created and changed through Python retain the renderer's bond clearance (#735).
+labels = pz.Document()
+centre = labels.add_atom("C", 0, 0)
+label_specs = [("OAc", 12.5, 7.2, False), ("OAc", 14.4, 0, False), ("R", 12.5, -7.2, True)]
+for name, x, y, generic in label_specs:
+    atom = labels.add_atom(name, x, y, generic=generic)
+    labels.add_bond(centre, atom)
+
+def label_bond_ends(d):
+    root = ET.fromstring(d.to_svg())
+    lines = [node.attrib["points"].split() for node in root.iter() if node.tag.endswith("}polyline")]
+    assert len(lines) == 3
+    return [tuple(map(float, line[-1].split(","))) for line in lines]
+
+for (name, x, y, _), (end_x, end_y) in zip(label_specs, label_bond_ends(labels)):
+    assert ((x - end_x) ** 2 + (y - end_y) ** 2) ** 0.5 > 3, name
+label_file = os.path.join(out, "labels.penz")
+for i in range(1, 4):
+    labels.set_label(i, "C")
+labels.save(label_file)
+reloaded_labels = pz.read(label_file)
+for i, (name, _, _, generic) in enumerate(label_specs, 1):
+    reloaded_labels.set_label(i, name, generic=generic)
+    assert reloaded_labels.atoms[i].label == name
+for (_, x, y, _), (end_x, end_y) in zip(label_specs, label_bond_ends(reloaded_labels)):
+    assert ((x - end_x) ** 2 + (y - end_y) ** 2) ** 0.5 > 3
+reloaded_labels.set_label(3, "L", generic=True)
+assert reloaded_labels.atoms[3].label == "L"
+end_x, end_y = label_bond_ends(reloaded_labels)[2]
+assert ((12.5 - end_x) ** 2 + (-7.2 - end_y) ** 2) ** 0.5 > 3
