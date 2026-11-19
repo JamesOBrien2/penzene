@@ -2011,6 +2011,25 @@ TEST_CASE("an aldehyde's or chain-end alkene's double bond sits toward its one n
     CHECK(doubleBondSide(ketone, ketone.bonds[1]) == 0);
 }
 
+TEST_CASE("substituted ring double bond points inside independent of direction (#733)") {
+    for (int mirror : {-1, 1}) for (bool reverse : {false, true}) for (bool reorder : {false, true}) {
+        Document doc;
+        const double h = kBondLength * std::sqrt(3.0) / 2;
+        for (QPointF p : {QPointF(0, 0), QPointF(h, -kBondLength / 2), QPointF(h, -1.5 * kBondLength),
+                          QPointF(0, -2 * kBondLength), QPointF(-h, -1.5 * kBondLength),
+                          QPointF(-h, -kBondLength / 2), QPointF(0, kBondLength), QPointF(2 * h, 0)})
+            doc.addAtom({p.x(), mirror * p.y()});
+        doc.bonds.push_back({reverse ? 1 : 0, reverse ? 0 : 1, 2});
+        for (int i = 1; i < 6; ++i) doc.bonds.push_back({i, (i + 1) % 6});
+        doc.bonds.push_back({0, 6}); doc.bonds.push_back({1, 7});
+        if (reorder) std::reverse(doc.bonds.begin() + 1, doc.bonds.end());
+        const Bond& b = doc.bonds[0];
+        const QPointF d = unit(doc.atoms[b.b].pos - doc.atoms[b.a].pos);
+        const QPointF centre(0, -mirror * kBondLength);
+        CHECK(doubleBondSide(doc, b) * cross(d, centre - doc.atoms[b.a].pos) > 0);
+    }
+}
+
 TEST_CASE("a wedge's wide end lies along the bonds beside it, not past them or into a double bond (#509)") {
     const QPointF b(14.4, 0);
     const double k = 20;
