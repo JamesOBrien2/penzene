@@ -1451,6 +1451,28 @@ TEST_CASE("CDXML export reads back: molecules, wedges, arrows and text (#29)") {
     CHECK(chem::cdxmlToCdx("<not closed").isEmpty());
 }
 
+TEST_CASE("drawing colours retain alpha when saved and embedded (#729)") {
+    for (const char* color : {"#00123456", "#4de69f00", "#fe123456", "#ff123456"}) {
+        const QByteArray json = QByteArray(R"({"format":"penzene","version":1,"atoms":[
+            {"x":0,"y":0,"z":6,"color":"COLOR"},{"x":14,"y":0,"z":6},{"x":7,"y":12,"z":6}],
+            "bonds":[{"a":0,"b":1,"order":1,"color":"COLOR"}],
+            "arrows":[{"x1":0,"y1":20,"x2":14,"y2":30,"kind":"box","color":"COLOR","fill":"COLOR"}],
+            "texts":[{"x":0,"y":40,"text":"test","color":"COLOR"}],
+            "fills":[{"atoms":[0,1,2],"color":"COLOR"}]})").replace("COLOR", color);
+        const auto doc = Document::fromJson(json);
+        REQUIRE(doc);
+        const auto saved = Document::fromJson(doc->toJson());
+        REQUIRE(saved);
+        CHECK(*saved == *doc);
+        CHECK(doc->toJson().contains(QColor(color).alpha() == 255 ? "#123456" : color));
+        for (const QByteArray& image : {renderSvg(*doc), renderPng(*doc), renderPdf(*doc)}) {
+            const auto reopened = Document::fromEmbedded(image);
+            REQUIRE(reopened);
+            CHECK(*reopened == *doc);
+        }
+    }
+}
+
 TEST_CASE("ChemDraw save and reopen keeps custom colours (#426)") {
     Document d = *chem::fromSmiles("CCO");
     const QColor red(255, 0, 0), blue(0, 0, 255), green(0, 128, 0), orange(255, 128, 0);

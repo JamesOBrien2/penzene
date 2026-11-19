@@ -112,7 +112,7 @@
     "index": {"type": "integer", "minimum": 0, "description": "An index into atoms."},
     "group": {"type": "integer", "minimum": 0, "description": "Atoms, arrows and texts sharing a group number act as one (Arrange → Group)."},
     "at": {"type": "array", "items": {"$ref": "#/$defs/index"}, "minItems": 1, "maxItems": 2},
-    "color": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"},
+    "color": {"type": "string", "pattern": "^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$", "description": "Colour as #RRGGBB or #AARRGGBB (alpha first)."},
     "atom": {
       "type": "object",
       "required": ["x", "y"],

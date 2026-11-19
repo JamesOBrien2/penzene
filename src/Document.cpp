@@ -37,13 +37,17 @@ static void setStereoGroupTag(Atom& a, const QString& tag) {  // anything else: 
     a.stereoGroupNumber = m.captured(2).toInt();
 }
 
+static QString savedColor(const QColor& color) {
+    return color.name(color.alpha() < 255 ? QColor::HexArgb : QColor::HexRgb);
+}
+
 QByteArray Document::toJson() const {
     QJsonArray as, bs;
     for (const auto& a : atoms) {
         QJsonObject o{{"x", a.pos.x()}, {"y", a.pos.y()}, {"z", a.z}};
         if (a.charge) o["charge"] = a.charge;
         if (!a.label.isEmpty()) o["label"] = a.label;
-        if (a.color.isValid()) o["color"] = a.color.name();
+        if (a.color.isValid()) o["color"] = savedColor(a.color);
         if (a.map) o["map"] = a.map;
         if (a.lonePairs) o["lonePairs"] = a.lonePairs;
         if (a.radicals) o["radicals"] = a.radicals;
@@ -64,7 +68,7 @@ QByteArray Document::toJson() const {
         QJsonObject o{{"a", b.a}, {"b", b.b}, {"order", b.order}};
         if (b.stereo != BondStereo::None) o["stereo"] = kStereo[int(b.stereo)];
         if (b.position != BondPosition::Auto) o["position"] = kPosition[int(b.position)];
-        if (b.color.isValid()) o["color"] = b.color.name();
+        if (b.color.isValid()) o["color"] = savedColor(b.color);
         bs.append(o);
     }
     QJsonObject root{{"format", "penzene"}, {"version", 1}, {"atoms", as}, {"bonds", bs}};
@@ -73,14 +77,14 @@ QByteArray Document::toJson() const {
         QJsonObject o{{"x1", a.from.x()}, {"y1", a.from.y()}, {"x2", a.to.x()}, {"y2", a.to.y()},
                       {"kind", kArrow[int(a.kind)]}};
         if (a.bend) o["bend"] = a.bend;
-        if (a.color.isValid()) o["color"] = a.color.name();
+        if (a.color.isValid()) o["color"] = savedColor(a.color);
         if (a.dashed) o["dashed"] = true;
         if (a.look != OrbitalLook::Outline) o["look"] = kLook[int(a.look)];
         if (a.behind) o["behind"] = true;
         if (a.crossed) o["crossed"] = true;
         if (a.head != 1) o["head"] = a.head;
         if (a.filled) o["filled"] = true;
-        if (a.fill.isValid()) o["fill"] = a.fill.name();
+        if (a.fill.isValid()) o["fill"] = savedColor(a.fill);
         if (a.plate) o["plate"] = true;
         if (a.group >= 0) o["group"] = a.group;
         for (auto [key, at] : {std::pair{"fromAt", a.fromAt}, std::pair{"toAt", a.toAt}})
@@ -93,7 +97,7 @@ QByteArray Document::toJson() const {
         if (!t.font.isEmpty()) o["font"] = t.font;
         if (t.bold) o["bold"] = true;
         if (t.italic) o["italic"] = true;
-        if (t.color.isValid()) o["color"] = t.color.name();
+        if (t.color.isValid()) o["color"] = savedColor(t.color);
         if (t.compound) o["compound"] = true;
         if (t.series) o["series"] = t.series;
         if (t.legend) o["legend"] = true;
@@ -108,7 +112,7 @@ QByteArray Document::toJson() const {
     for (const auto& f : fills) {
         QJsonArray ids;
         for (int i : f.atoms) ids.append(i);
-        fs.append(QJsonObject{{"atoms", ids}, {"color", f.color.name()}});
+        fs.append(QJsonObject{{"atoms", ids}, {"color", savedColor(f.color)}});
     }
     if (!fs.isEmpty()) root["fills"] = fs;
     QJsonArray bs2;

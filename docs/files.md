@@ -84,3 +84,5 @@ lines, boxes, ovals and lone-pair symbols. Pasting from ChemDraw works on macOS 
 where ChemDraw offers CDXML). The file's label size relative to its bond length comes with it, so
 crowded drawings with small labels look as drawn; choosing a drawing style goes back to that style's
 own. Penzene doesn't import ChemDraw's orbitals or TLC plates.
+
+Colours in `.penz` use `#RRGGBB` for opaque colours and `#AARRGGBB` for colours with alpha (alpha first).
