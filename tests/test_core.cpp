@@ -2227,6 +2227,46 @@ TEST_CASE("brackets enclose their atoms' δ marks (#657)") {
     CHECK(brackets.bottom() > marks.bottom());
 }
 
+TEST_CASE("brackets keep normal padding outside atom labels (#734)") {
+    for (int mirror : {-1, 1}) for (bool square : {false, true}) for (int charge : {0, -1}) {
+        Document doc;
+        doc.addAtom({0, 0}, 6);
+        doc.addAtom({mirror * kBondLength, 0}, 8);
+        doc.atoms[1].charge = charge;
+        doc.bonds.push_back({0, 1});
+        doc.brackets.push_back({{0, 1}, square});
+        std::vector<QRectF> labels;
+        auto render = [&](const Document& d, bool measure) {
+            QImage img(800, 500, QImage::Format_ARGB32);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            p.translate(400, 250);
+            p.scale(10, 10);
+            RenderStyle style;
+            if (measure) style.labels = &labels;
+            paintDocument(p, d, style);
+            return img;
+        };
+        const QImage with = render(doc, true);
+        doc.brackets.clear();
+        const QImage without = render(doc, false);
+        QRect brackets;
+        for (int y = 0; y < with.height(); ++y)
+            for (int x = 0; x < with.width(); ++x)
+                if (qGray(with.pixel(x, y)) < 128 && qGray(without.pixel(x, y)) >= 128)
+                    brackets |= QRect(x, y, 1, 1);
+        REQUIRE(brackets.isValid());
+        REQUIRE(labels.size() == 2);
+        REQUIRE_FALSE(labels[1].isEmpty());
+        // Parentheses bend inward at their tips; allow for that inset and the pen width.
+        const double clearance = square ? 7.0 : 4.0;
+        if (mirror > 0) CHECK((brackets.right() - 400) / 10.0 - labels[1].right() >= clearance);
+        else CHECK(labels[1].left() - (brackets.left() - 400) / 10.0 >= clearance);
+        CHECK(labels[1].top() - (brackets.top() - 250) / 10.0 >= 7.5);
+        CHECK((brackets.bottom() - 250) / 10.0 - labels[1].bottom() >= 7.5);
+    }
+}
+
 TEST_CASE("merging atoms keeps the dropped atom's brackets and ring overrides (#303)") {
     Document doc;
     for (int i = 0; i < 4; ++i) doc.addAtom({i * kBondLength, 0});
