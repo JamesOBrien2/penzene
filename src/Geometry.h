@@ -5,6 +5,8 @@
 #include <QPointF>
 #include <QtMath>
 #include <cmath>
+#include <algorithm>
+#include <unordered_map>
 
 inline double len(QPointF v) { return std::hypot(v.x(), v.y()); }
 inline QPointF unit(QPointF v) { double l = len(v); return l > 1e-9 ? v / l : QPointF(1, 0); }
@@ -47,6 +49,37 @@ inline int doubleBondSide(const Document& doc, const Bond& b, const BondsAt& at)
     if (isSp(doc, b.a, at) || isSp(doc, b.b, at)) return 0;
     if ((na.size() == 1 || nb.size() == 1) && (na.size() == 1 ? nb : na).size() != 2) return 0;
     const QPointF pa = doc.atoms[b.a].pos, d = unit(doc.atoms[b.b].pos - pa);
+    // The shortest alternate chemical path defines a smallest ring containing
+    // this bond. Start and visit in atom-index order so reversing a bond or
+    // changing bond storage order cannot choose a different equal-length path.
+    if (chemicalOrder(b) && len(doc.atoms[b.b].pos - pa) > 1e-9) {
+        const int start = std::min(b.a, b.b), goal = std::max(b.a, b.b);
+        std::unordered_map<int, int> previous{{start, start}};
+        std::vector<int> queue{start};
+        for (size_t i = 0; i < queue.size() && !previous.contains(goal); ++i) {
+            const int here = queue[i];
+            std::vector<int> next;
+            for (int bi : at[here]) {
+                const Bond& edge = doc.bonds[bi];
+                const int n = edge.a == here ? edge.b : edge.a;
+                if (!chemicalOrder(edge) || (std::minmax(here, n) == std::minmax(start, goal))) continue;
+                next.push_back(n);
+            }
+            std::sort(next.begin(), next.end());
+            for (int n : next) if (previous.emplace(n, here).second) queue.push_back(n);
+        }
+        if (previous.contains(goal)) {
+            QPointF centre;
+            int count = 0;
+            for (int n = goal;; n = previous[n]) {
+                centre += doc.atoms[n].pos;
+                ++count;
+                if (n == start) break;
+            }
+            const double ringSide = cross(d, centre / count - pa);
+            if (std::abs(ringSide) > 1e-6) return ringSide > 0 ? 1 : -1;
+        }
+    }
     double side = 0;
     for (const auto* list : {&na, &nb})
         for (int n : *list)
